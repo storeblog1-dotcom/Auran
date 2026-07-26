@@ -139,7 +139,13 @@ app.add_exception_handler(AppException, app_exception_handler)  # type: ignore
 # ─── Health Check ───────────────────────────────────────────
 @app.get("/health", tags=["Health"])
 async def health_check():
-    return {"status": "ok", "app": settings.app_name}
+    return {
+        "status": "ok",
+        "app": settings.app_name,
+        "version": "1.0.1-cloudrun-auto-deploy",
+        "message": "🎉 Cloud Run 자동 배포 CI/CD 성공 테스트 완료!",
+        "deployed_at": "2026-07-26"
+    }
 
 
 # ─── Routers ────────────────────────────────────────────────
