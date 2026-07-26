@@ -46,9 +46,10 @@ interface ChatRoom {
   updated_at: string;
 }
 
-export const DirectMessageScreen = ({ navigation }: any) => {
+export const DirectMessageScreen = ({ navigation, route }: any) => {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const isTabScreen = route?.name === "Messages";
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -62,7 +63,8 @@ export const DirectMessageScreen = ({ navigation }: any) => {
   const fetchRooms = useCallback(async () => {
     try {
       const response = await api.get("/direct/rooms");
-      setRooms(response.data);
+      const roomItems = response.data?.data || response.data;
+      setRooms(Array.isArray(roomItems) ? roomItems : []);
     } catch (error) {
       console.error("Failed to fetch chat rooms", error);
     } finally {
@@ -169,8 +171,10 @@ export const DirectMessageScreen = ({ navigation }: any) => {
     const avatarUrl = getFullImageUrl(target?.profile_image_url);
 
     const lastMsgText = item.last_message
-      ? item.last_message.message_type === "image"
+      ? item.last_message.message_type?.toUpperCase() === "IMAGE"
         ? "📷 사진"
+        : item.last_message.message_type?.toUpperCase() === "POST"
+          ? "게시물"
         : item.last_message.content || "메시지"
       : "대화를 시작해보세요.";
 
@@ -217,10 +221,14 @@ export const DirectMessageScreen = ({ navigation }: any) => {
     <View style={[styles.container, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.borderColor }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={26} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Direct</Text>
+        {isTabScreen ? (
+          <View style={styles.backButton} />
+        ) : (
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={26} color={colors.textPrimary} />
+          </TouchableOpacity>
+        )}
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>메시지</Text>
         <TouchableOpacity onPress={() => setModalVisible(true)} style={styles.newChatButton}>
           <Ionicons name="create-outline" size={25} color={colors.textPrimary} />
         </TouchableOpacity>

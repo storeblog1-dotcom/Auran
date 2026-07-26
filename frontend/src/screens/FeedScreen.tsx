@@ -22,7 +22,7 @@ import { StoryBar } from "../components/StoryBar";
 import { StoryViewerModal } from "../components/StoryViewerModal";
 import { CreateStoryModal } from "../components/CreateStoryModal";
 import { NotificationsModal } from "../components/NotificationsModal";
-import { ShareModal } from "../components/ShareModal";
+import { SendPostDmModal } from "../components/SendPostDmModal";
 import { MyStoriesGridModal } from "../components/MyStoriesGridModal";
 import { PostCarousel } from "../components/PostCarousel";
 import { HashtagText } from "../components/HashtagText";
@@ -46,8 +46,8 @@ export const FeedScreen = ({ navigation }: any) => {
 
   // Modal States
   const [notificationsModalVisible, setNotificationsModalVisible] = useState<boolean>(false);
-  const [shareModalPost, setShareModalPost] = useState<any | null>(null);
-  const [shareModalVisible, setShareModalVisible] = useState<boolean>(false);
+  const [dmPost, setDmPost] = useState<any | null>(null);
+  const [dmModalVisible, setDmModalVisible] = useState<boolean>(false);
   const [detailPostId, setDetailPostId] = useState<string | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState<boolean>(false);
 
@@ -200,9 +200,9 @@ export const FeedScreen = ({ navigation }: any) => {
     }
   };
 
-  const handleOpenShare = (postItem: any) => {
-    setShareModalPost(postItem);
-    setShareModalVisible(true);
+  const handleOpenDm = (postItem: any) => {
+    setDmPost(postItem);
+    setDmModalVisible(true);
   };
 
   const handleOpenComments = (postId: string) => {
@@ -554,8 +554,8 @@ export const FeedScreen = ({ navigation }: any) => {
               </Text>
             </TouchableOpacity>
 
-            {/* Share / DM */}
-            <TouchableOpacity style={styles.actionCountGroup} onPress={() => handleOpenShare(item)}>
+            {/* Send by DM */}
+            <TouchableOpacity style={styles.actionCountGroup} onPress={() => handleOpenDm(item)}>
               <Ionicons name="paper-plane-outline" size={22} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
@@ -754,13 +754,13 @@ export const FeedScreen = ({ navigation }: any) => {
         }}
       />
 
-      {/* Share Modal */}
-      <ShareModal
-        visible={shareModalVisible}
-        post={shareModalPost}
+      {/* Send Post by DM Modal */}
+      <SendPostDmModal
+        visible={dmModalVisible}
+        post={dmPost}
         onClose={() => {
-          setShareModalVisible(false);
-          setShareModalPost(null);
+          setDmModalVisible(false);
+          setDmPost(null);
         }}
       />
     </SafeAreaView>

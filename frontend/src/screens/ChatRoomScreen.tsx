@@ -20,6 +20,7 @@ import api from "../services/api";
 import { WS_BASE_URL, getFullImageUrl } from "../config";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { PostDetailModal } from "../components/PostDetailModal";
 
 interface MessageSender {
   id: string;
@@ -49,6 +50,8 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(true);
   const [sendingImage, setSendingImage] = useState(false);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [postModalVisible, setPostModalVisible] = useState(false);
 
   const ws = useRef<WebSocket | null>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -275,6 +278,39 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
               style={styles.chatImage}
               resizeMode="cover"
             />
+          ) : item.message_type === "POST" && item.shared_post_id ? (
+            <TouchableOpacity
+              style={styles.postMessage}
+              activeOpacity={0.75}
+              onPress={() => {
+                setSelectedPostId(item.shared_post_id);
+                setPostModalVisible(true);
+              }}
+            >
+              <Ionicons
+                name="images-outline"
+                size={24}
+                color={isMine ? "#ffffff" : colors.textPrimary}
+              />
+              <View style={styles.postMessageText}>
+                <Text
+                  style={[
+                    styles.postMessageTitle,
+                    { color: isMine ? "#ffffff" : colors.textPrimary },
+                  ]}
+                >
+                  게시물
+                </Text>
+                <Text
+                  style={[
+                    styles.postMessageAction,
+                    { color: isMine ? "#e0f2fe" : colors.accentBlue },
+                  ]}
+                >
+                  눌러서 보기
+                </Text>
+              </View>
+            </TouchableOpacity>
           ) : (
             <Text style={[styles.messageText, { color: isMine ? "#ffffff" : colors.textPrimary }]}>
               {item.content}
@@ -373,6 +409,15 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      <PostDetailModal
+        visible={postModalVisible}
+        postId={selectedPostId}
+        onClose={() => {
+          setPostModalVisible(false);
+          setSelectedPostId(null);
+        }}
+      />
     </View>
   );
 };
@@ -470,6 +515,22 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 12,
+  },
+  postMessage: {
+    minWidth: 170,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  postMessageText: {
+    marginLeft: 10,
+  },
+  postMessageTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  postMessageAction: {
+    fontSize: 12,
+    marginTop: 2,
   },
   inputContainer: {
     flexDirection: "row",

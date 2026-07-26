@@ -22,7 +22,7 @@ import { useTheme } from "../context/ThemeContext";
 import api from "../services/api";
 import { getFullImageUrl } from "../config";
 import { Comment, CommentNode } from "./CommentsModal";
-import { ShareModal } from "./ShareModal";
+import { SendPostDmModal } from "./SendPostDmModal";
 import { PostCarousel } from "./PostCarousel";
 import { HashtagText } from "./HashtagText";
 
@@ -48,7 +48,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
 
   const [post, setPost] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  const [shareModalVisible, setShareModalVisible] = useState<boolean>(false);
+  const [dmModalVisible, setDmModalVisible] = useState<boolean>(false);
 
   // Inline Comments State
   const [comments, setComments] = useState<Comment[]>([]);
@@ -460,7 +460,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                   <TouchableOpacity onPress={() => commentInputRef.current?.focus()}>
                     <Ionicons name="chatbubble-outline" size={22} color={colors.textPrimary} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setShareModalVisible(true)}>
+                  <TouchableOpacity onPress={() => setDmModalVisible(true)}>
                     <Ionicons name="paper-plane-outline" size={22} color={colors.textPrimary} />
                   </TouchableOpacity>
                 </View>
@@ -586,11 +586,11 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
           </KeyboardAvoidingView>
         )}
 
-        {/* Share Modal */}
-        <ShareModal
-          visible={shareModalVisible}
+        {/* Send Post by DM Modal */}
+        <SendPostDmModal
+          visible={dmModalVisible}
           post={post}
-          onClose={() => setShareModalVisible(false)}
+          onClose={() => setDmModalVisible(false)}
         />
       </SafeAreaView>
     </Modal>

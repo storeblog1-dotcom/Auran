@@ -34,8 +34,6 @@ const Tab = createBottomTabNavigator<any>();
 
 const MainTabs = () => {
   const { colors } = useTheme();
-  const { unreadCount } = useNotification();
-  const { user } = useAuth();
 
   return (
     <Tab.Navigator
@@ -119,8 +117,8 @@ const MainTabs = () => {
         }}
       />
       <Tab.Screen
-        name="Notification"
-        component={NotificationScreen}
+        name="Messages"
+        component={DirectMessageScreen}
         options={{
           tabBarIcon: ({ color, focused }) => (
             <View style={{ alignItems: "center", justifyContent: "center", width: 68, paddingTop: 4, position: "relative" }}>
@@ -128,26 +126,6 @@ const MainTabs = () => {
               <Text numberOfLines={1} style={{ fontSize: 10, lineHeight: 14, color, marginTop: 2, fontWeight: focused ? "700" : "500", textAlign: "center" }}>
                 메시지
               </Text>
-              {unreadCount > 0 && (
-                <View
-                  style={{
-                    position: "absolute",
-                    top: 1,
-                    right: 12,
-                    backgroundColor: "#ec4899",
-                    borderRadius: 7,
-                    minWidth: 14,
-                    height: 14,
-                    justifyContent: "center",
-                    alignItems: "center",
-                    paddingHorizontal: 2,
-                  }}
-                >
-                  <Text style={{ color: "#ffffff", fontSize: 8, fontWeight: "bold" }}>
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </Text>
-                </View>
-              )}
             </View>
           ),
         }}
@@ -197,12 +175,12 @@ const AppContent = () => {
         console.log("Error launching ChatRoom from toast", err);
       }
     } else if (toast.post_id) {
-      navigationRef.current.navigate("MainTabs", { 
-        screen: "Notification",
-        params: { openPostId: toast.post_id, autoOpenComments: toast.type === "COMMENT" } 
+      navigationRef.current.navigate("Notification", {
+        openPostId: toast.post_id,
+        autoOpenComments: toast.type === "COMMENT",
       });
     } else {
-      navigationRef.current.navigate("MainTabs", { screen: "Notification" });
+      navigationRef.current.navigate("Notification");
     }
   };
 
@@ -226,6 +204,7 @@ const AppContent = () => {
               <Stack.Screen name="EditProfile" component={EditProfileScreen} />
               <Stack.Screen name="DirectMessage" component={DirectMessageScreen} />
               <Stack.Screen name="ChatRoom" component={ChatRoomScreen} />
+              <Stack.Screen name="Notification" component={NotificationScreen} />
               <Stack.Screen name="Hashtag" component={HashtagScreen} />
               <Stack.Screen name="Community" component={CommunityScreen} />
               <Stack.Screen name="Admin" component={AdminScreen} />
