@@ -48,9 +48,8 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        allowsEditing: true,
-        quality: 0.85,
-        aspect: [9, 16],
+        allowsEditing: false,
+        quality: 1,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -95,6 +94,7 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({
 
         const uploadRes = await api.post("/uploads/image", formData, {
           headers: { "Content-Type": "multipart/form-data" },
+          params: { purpose: "story" },
         });
 
         if (uploadRes.data && uploadRes.data.data) {
@@ -182,7 +182,7 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({
                 <Image
                   source={{ uri: currentPreviewUri }}
                   style={styles.previewImage}
-                  resizeMode="cover"
+                  resizeMode="contain"
                 />
                 {/* Change image badge */}
                 <View style={styles.changeBadge}>

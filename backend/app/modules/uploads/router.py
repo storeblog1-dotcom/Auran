@@ -4,7 +4,7 @@ from io import BytesIO
 
 import httpx
 from PIL import Image, ImageOps
-from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 
 from app.common.exceptions import BadRequestException
 from app.common.response import ApiResponse
@@ -50,7 +50,7 @@ async def upload_to_supabase_storage(image_bytes: bytes, filename: str) -> str |
         return None
 
 
-def process_and_resize_image(file_bytes: bytes, original_filename: str) -> tuple[bytes, str]:
+def process_and_resize_image(file_bytes: bytes, original_filename: str, preserve_dimensions: bool = False) -> tuple[bytes, str]:
     ext = os.path.splitext(original_filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         ext = ".jpg"
@@ -66,12 +66,13 @@ def process_and_resize_image(file_bytes: bytes, original_filename: str) -> tuple
             image = image.convert("RGB")
 
         # 모바일용 비율 유지 다운스케일링 (1080px)
-        image.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.Resampling.LANCZOS)
+        if not preserve_dimensions:
+            image.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.Resampling.LANCZOS)
 
         filename = f"{uuid.uuid4().hex}.jpg"
         
         buffer = BytesIO()
-        image.save(buffer, format="JPEG", quality=85, optimize=True)
+        image.save(buffer, format="JPEG", quality=75 if preserve_dimensions else 85, optimize=True, progressive=True)
         compressed_bytes = buffer.getvalue()
 
         # 로컬 폴백 저장
@@ -93,6 +94,7 @@ def process_and_resize_image(file_bytes: bytes, original_filename: str) -> tuple
 async def upload_image(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_active_user),
+    purpose: str = Query("post", pattern="^(post|profile|story)$"),
 ) -> ApiResponse[dict]:
     if not file.content_type or not file.content_type.startswith("image/"):
         raise BadRequestException("이미지 파일만 업로드할 수 있습니다.")
@@ -101,7 +103,11 @@ async def upload_image(
     if len(contents) > MAX_FILE_SIZE:
         raise BadRequestException("파일 크기는 최대 10MB까지 가능합니다.")
 
-    compressed_bytes, filename = process_and_resize_image(contents, file.filename or "image.jpg")
+    compressed_bytes, filename = process_and_resize_image(
+        contents,
+        file.filename or "image.jpg",
+        preserve_dimensions=purpose == "story",
+    )
     
     # 1. Supabase Storage 업로드 시도
     supabase_public_url = await upload_to_supabase_storage(compressed_bytes, filename)
