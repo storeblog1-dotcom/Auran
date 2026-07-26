@@ -131,7 +131,7 @@ async def _build_post_responses_batch(
                 id=uuid.UUID(int=0),
                 username="익명",
                 full_name="익명 사용자",
-                profile_image_url=None,
+                profile_image_url=post.user.profile_image_url,
             )
         else:
             user_summary = PostUserSummary(
@@ -150,7 +150,7 @@ async def _build_post_responses_batch(
                     id=uuid.UUID(int=0),
                     username="익명",
                     full_name="익명 사용자",
-                    profile_image_url=None,
+                    profile_image_url=pc.user.profile_image_url,
                 )
             if current_user and pc.user.id == current_user.id:
                 pc_copy.is_mine = True
@@ -967,6 +967,5 @@ async def get_user_reposted_posts(
 
     items = await _build_post_responses_batch(db, list(posts), current_user=current_user)
     return items, total
-
 
 
