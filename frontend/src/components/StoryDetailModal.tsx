@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { getFullImageUrl } from "../config";
+import { ZoomableImage } from "./ImageDetailViewerModal";
 import { useTheme } from "../context/ThemeContext";
 
 const { width, height } = Dimensions.get("window");
@@ -62,7 +63,7 @@ export const StoryDetailModal: React.FC<StoryDetailModalProps> = ({
       <View style={styles.container}>
         <StatusBar hidden />
         {/* 풀스크린 배경 이미지 */}
-        <Image source={{ uri: imageUrl }} style={styles.backgroundImage} resizeMode="cover" />
+        <ZoomableImage uri={imageUrl} imageWidth={width} imageHeight={height} />
 
         {/* 어두운 오버레이 */}
         <View style={styles.overlay} />

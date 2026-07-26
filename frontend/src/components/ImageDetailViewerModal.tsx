@@ -34,7 +34,7 @@ interface ImageDetailViewerModalProps {
   onClose: () => void;
 }
 
-const ZoomableImage = ({ uri, imageWidth, imageHeight, onZoomChange }: { uri: string; imageWidth: number; imageHeight: number; onZoomChange: (zoomed: boolean) => void }) => {
+export const ZoomableImage = ({ uri, imageWidth, imageHeight, onZoomChange = () => {} }: { uri: string; imageWidth: number; imageHeight: number; onZoomChange?: (zoomed: boolean) => void }) => {
   const scale = useRef(new Animated.Value(1)).current;
   const currentScale = useRef(1);
   const panRef = useRef<any>(null);

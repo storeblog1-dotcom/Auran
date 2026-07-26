@@ -19,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../services/api";
 import { getFullImageUrl } from "../config";
+import { ZoomableImage } from "./ImageDetailViewerModal";
 
 const { width, height } = Dimensions.get("window");
 const STORY_DURATION = 5000; // 5초
@@ -286,10 +287,10 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
       <View style={styles.container}>
         <StatusBar hidden />
         {/* 배경 이미지 — 풀스크린 */}
-        <Image
-          source={{ uri: getFullImageUrl(currentStory.media_url) }}
-          style={styles.backgroundImage}
-          resizeMode="cover"
+        <ZoomableImage
+          uri={getFullImageUrl(currentStory.media_url)}
+          imageWidth={width}
+          imageHeight={height}
         />
 
         {/* 어두운 오버레이 */}
