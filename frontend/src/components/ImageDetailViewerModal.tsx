@@ -16,7 +16,7 @@ import {
   Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { PinchGestureHandler, State } from "react-native-gesture-handler";
+import { PanGestureHandler, PinchGestureHandler, State } from "react-native-gesture-handler";
 import { getFullImageUrl } from "../config";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -37,7 +37,13 @@ interface ImageDetailViewerModalProps {
 const ZoomableImage = ({ uri, imageWidth, imageHeight }: { uri: string; imageWidth: number; imageHeight: number }) => {
   const scale = useRef(new Animated.Value(1)).current;
   const currentScale = useRef(1);
+  const panX = useRef(new Animated.Value(0)).current;
+  const panY = useRef(new Animated.Value(0)).current;
+  const offsetX = useRef(new Animated.Value(0)).current;
+  const offsetY = useRef(new Animated.Value(0)).current;
+  const currentOffset = useRef({ x: 0, y: 0 });
   const onPinchEvent = Animated.event([{ nativeEvent: { scale } }], { useNativeDriver: true });
+  const onPanEvent = Animated.event([{ nativeEvent: { translationX: panX, translationY: panY } }], { useNativeDriver: true });
 
   const finishPinch = (event: any) => {
     if (event.nativeEvent.state !== State.END) return;
@@ -46,16 +52,32 @@ const ZoomableImage = ({ uri, imageWidth, imageHeight }: { uri: string; imageWid
     scale.setValue(nextScale);
   };
 
+  const finishPan = (event: any) => {
+    if (event.nativeEvent.state !== State.END) return;
+    currentOffset.current = {
+      x: currentOffset.current.x + event.nativeEvent.translationX,
+      y: currentOffset.current.y + event.nativeEvent.translationY,
+    };
+    offsetX.setValue(currentOffset.current.x);
+    offsetY.setValue(currentOffset.current.y);
+    panX.setValue(0);
+    panY.setValue(0);
+  };
+
   return (
-    <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={finishPinch}>
+    <PanGestureHandler onGestureEvent={onPanEvent} onHandlerStateChange={finishPan}>
       <Animated.View style={styles.zoomImageHolder}>
-        <Animated.Image source={{ uri }} style={{ width: imageWidth, height: imageHeight, transform: [{ scale }] }} resizeMode="contain" />
+        <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={finishPinch}>
+          <Animated.View style={styles.zoomImageHolder}>
+            <Animated.Image source={{ uri }} style={{ width: imageWidth, height: imageHeight, transform: [{ scale }, { translateX: Animated.add(offsetX, panX) }, { translateY: Animated.add(offsetY, panY) }] }} resizeMode="contain" />
+          </Animated.View>
+        </PinchGestureHandler>
         <View style={styles.zoomControls}>
           <TouchableOpacity style={styles.zoomButton} onPress={() => { const next = Math.min(4, currentScale.current + 0.5); currentScale.current = next; Animated.spring(scale, { toValue: next, useNativeDriver: true }).start(); }}><Text style={styles.zoomButtonText}>+</Text></TouchableOpacity>
           <TouchableOpacity style={styles.zoomButton} onPress={() => { const next = Math.max(1, currentScale.current - 0.5); currentScale.current = next; Animated.spring(scale, { toValue: next, useNativeDriver: true }).start(); }}><Text style={styles.zoomButtonText}>−</Text></TouchableOpacity>
         </View>
       </Animated.View>
-    </PinchGestureHandler>
+    </PanGestureHandler>
   );
 };
 
