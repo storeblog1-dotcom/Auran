@@ -7,6 +7,7 @@ import {
   Modal,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -50,6 +51,7 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [sendingUserId, setSendingUserId] = useState<string | null>(null);
   const [sentUserIds, setSentUserIds] = useState<Record<string, boolean>>({});
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     if (!visible || !post) return;
@@ -57,6 +59,7 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
     const fetchRecipients = async () => {
       setLoading(true);
       setSentUserIds({});
+      setMessage("");
       try {
         const [roomsResponse, followersResponse] = await Promise.all([
           api.get("/direct/rooms"),
@@ -114,6 +117,14 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
         shared_post_id: post.id,
       });
 
+      const note = message.trim();
+      if (note) {
+        await api.post(`/direct/rooms/${roomId}/messages`, {
+          content: note,
+          message_type: "TEXT",
+        });
+      }
+
       setSentUserIds((previous) => ({
         ...previous,
         [recipient.user.id]: true,
@@ -149,6 +160,23 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
               <Ionicons name="close" size={22} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
+
+          <TextInput
+            style={[
+              styles.messageInput,
+              {
+                backgroundColor: colors.bgInput,
+                borderColor: colors.borderColor,
+                color: colors.textPrimary,
+              },
+            ]}
+            placeholder="함께 보낼 메시지 입력 (선택)"
+            placeholderTextColor={colors.textMuted}
+            value={message}
+            onChangeText={setMessage}
+            maxLength={500}
+            multiline
+          />
 
           {loading ? (
             <ActivityIndicator
@@ -274,7 +302,18 @@ const styles = StyleSheet.create({
     marginVertical: 36,
   },
   list: {
-    maxHeight: 360,
+    maxHeight: 280,
+  },
+  messageInput: {
+    minHeight: 44,
+    maxHeight: 96,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    textAlignVertical: "top",
+    marginBottom: 10,
   },
   recipientRow: {
     flexDirection: "row",
