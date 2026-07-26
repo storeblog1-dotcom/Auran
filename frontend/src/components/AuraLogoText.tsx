@@ -1,12 +1,17 @@
 import React from "react";
-import { View, Text, StyleSheet, ViewStyle } from "react-native";
+import { Image, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
+import { useTheme } from "../context/ThemeContext";
 
 interface AuraLogoTextProps {
   width?: number;
   height?: number;
   fontSize?: number;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
+
+const DARK_LOGO = require("../../assets/aura-logo-dark.png");
+const LIGHT_LOGO = require("../../assets/aura-logo-light.png");
+const LOGO_ASPECT_RATIO = 839 / 180;
 
 export const AuraLogoText: React.FC<AuraLogoTextProps> = ({
   width,
@@ -14,15 +19,18 @@ export const AuraLogoText: React.FC<AuraLogoTextProps> = ({
   fontSize = 28,
   style,
 }) => {
+  const { isDark } = useTheme();
   const logoHeight = height || Math.round(fontSize * 1.35);
+  const logoWidth = width || Math.round(logoHeight * LOGO_ASPECT_RATIO);
 
   return (
-    <View style={[styles.container, style]}>
-      <Text style={[styles.logo, { fontSize, lineHeight: logoHeight }]}>
-        <Text style={styles.aura}>aura</Text>
-        <Text style={styles.plus}>+</Text>
-        <Text style={styles.n}>n</Text>
-      </Text>
+    <View style={[styles.container, { width: logoWidth, height: logoHeight }, style]}>
+      <Image
+        source={isDark ? DARK_LOGO : LIGHT_LOGO}
+        style={styles.image}
+        resizeMode="contain"
+        accessibilityLabel="aura+n"
+      />
     </View>
   );
 };
@@ -32,13 +40,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  logo: {
-    fontWeight: "700",
-    letterSpacing: -1.2,
+  image: {
+    width: "100%",
+    height: "100%",
   },
-  aura: { color: "#7652df" },
-  plus: { color: "#ec6db1" },
-  n: { color: "#42b8d4" },
 });
 
 export default AuraLogoText;
