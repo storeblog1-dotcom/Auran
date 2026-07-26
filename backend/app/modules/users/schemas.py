@@ -48,7 +48,7 @@ class UserProfileResponse(BaseModel):
     profile_image_url: str | None = None
     age: int | None = None
     gender: str | None = None
-    sexual_orientations: list[str] | None = None
+    sexual_orientation: str | None = None
     height: int | None = None
     body_type: str | None = None
     profile_visibility: str = "mutual_followers"

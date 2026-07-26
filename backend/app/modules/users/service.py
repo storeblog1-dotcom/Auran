@@ -97,7 +97,7 @@ async def get_user_profile(
         profile_image_url=target_user.profile_image_url,
         age=target_user.age if can_view_sensitive_profile else None,
         gender=target_user.gender if can_view_sensitive_profile else None,
-        sexual_orientations=target_user.sexual_orientations if can_view_sensitive_profile else None,
+        sexual_orientation=target_user.sexual_orientation if can_view_sensitive_profile else None,
         height=target_user.height if can_view_sensitive_profile else None,
         body_type=target_user.body_type if can_view_sensitive_profile else None,
         profile_visibility=target_user.profile_visibility,

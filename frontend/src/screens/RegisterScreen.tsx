@@ -27,6 +27,7 @@ const visibilityOptions = [
   { value: "private", label: "\uBE44\uACF5\uAC1C" },
 ] as const;
 type PickerType = "age" | "gender" | "orientation" | "visibility" | null;
+const DIRECT_INPUT = "\uc9c1\uc811 \uc785\ub825";
 
 // Earlier escaped Korean labels are decoded here so every mobile platform renders them correctly.
 const decode = (value: any): any => {
@@ -41,7 +42,8 @@ export const RegisterScreen = ({ navigation }: any) => {
   const [form, setForm] = useState({
     username: "", nickname: "", fullName: "", email: "", password: "", age: "", gender: "", height: "", bodyType: "", bio: "", visibility: "mutual_followers",
   });
-  const [orientationsSelected, setOrientationsSelected] = useState<string[]>([]);
+  const [orientation, setOrientation] = useState("");
+  const [customOrientation, setCustomOrientation] = useState("");
   const [picker, setPicker] = useState<PickerType>(null);
   const [image, setImage] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
@@ -62,23 +64,19 @@ export const RegisterScreen = ({ navigation }: any) => {
     if (picker === "age") setField("age", decodedValue);
     if (picker === "gender") setField("gender", decodedValue);
     if (picker === "visibility") setField("visibility", decodedValue);
+    if (picker === "orientation") setOrientation(decodedValue);
     setPicker(null);
   };
 
-  const toggleOrientation = (value: string) => {
-    const decodedValue = decode(value);
-    setOrientationsSelected((current) => current.includes(decodedValue) ? current.filter((item) => item !== decodedValue) : [...current, decodedValue]);
-  };
-
   const submit = async () => {
-    if (!form.username || !form.nickname || !form.fullName || !form.email || !form.password || !form.age || !form.gender || !orientationsSelected.length) {
+    if (!form.username || !form.nickname || !form.fullName || !form.email || !form.password || !form.age || !form.gender || !orientation || (orientation === DIRECT_INPUT && !customOrientation.trim())) {
       return Alert.alert("\uD544\uC218 \uD56D\uBAA9 \uD655\uC778", "\uD544\uC218 \uD56D\uBAA9\uC744 \uBAA8\uB450 \uC785\uB825\uD574\uC8FC\uC138\uC694.");
     }
     setLoading(true);
     try {
       await register({
         username: form.username.trim(), nickname: form.nickname.trim(), full_name: form.fullName.trim(), email: form.email.trim().toLowerCase(), password: form.password,
-        age: Number(form.age), gender: form.gender, sexual_orientations: orientationsSelected, height: form.height ? Number(form.height) : undefined,
+        age: Number(form.age), gender: form.gender, sexual_orientation: orientation === DIRECT_INPUT ? customOrientation.trim() : orientation, height: form.height ? Number(form.height) : undefined,
         body_type: form.bodyType || undefined, bio: form.bio || undefined, profile_image_url: image, profile_visibility: form.visibility,
       });
     } catch (error: any) {
@@ -101,7 +99,8 @@ export const RegisterScreen = ({ navigation }: any) => {
       <TextInput style={inputStyle} placeholder="\uBE44\uBC00\uBC88\uD638 *" placeholderTextColor={colors.textSecondary} value={form.password} onChangeText={(value) => setField("password", value)} secureTextEntry autoComplete="new-password" textContentType="newPassword" importantForAutofill="yes" />
       <Text style={[styles.section, { color: colors.textPrimary }]}>\uD504\uB85C\uD544 \uC815\uBCF4</Text>
       <View style={styles.row}><TouchableOpacity style={[selectorStyle, styles.half]} onPress={() => setPicker("age")}><Text style={{ color: form.age ? colors.textPrimary : colors.textSecondary }}>{form.age ? `${form.age}\uC138` : "\uB098\uC774 *"}</Text></TouchableOpacity><TouchableOpacity style={[selectorStyle, styles.half]} onPress={() => setPicker("gender")}><Text style={{ color: form.gender ? colors.textPrimary : colors.textSecondary }}>{form.gender || "\uC131\uBCC4 *"}</Text></TouchableOpacity></View>
-      <TouchableOpacity style={selectorStyle} onPress={() => setPicker("orientation")}><Text style={{ color: orientationsSelected.length ? colors.textPrimary : colors.textSecondary }}>{orientationsSelected.length ? orientationsSelected.join(", ") : "\uC131\uC801 \uC9C0\uD5A5 * (\uBCF5\uC218 \uC120\uD0DD \uAC00\uB2A5)"}</Text></TouchableOpacity>
+      <TouchableOpacity style={selectorStyle} onPress={() => setPicker("orientation")}><Text style={{ color: orientation ? colors.textPrimary : colors.textSecondary }}>{orientation || "\uC131\uC801 \uC9C0\uD5A5 *"}</Text></TouchableOpacity>
+      {orientation === DIRECT_INPUT ? <TextInput style={inputStyle} placeholder="\uC131\uC801 \uC9C0\uD5A5\uC744 \uC785\uB825\uD574\uC8FC\uC138\uC694 *" placeholderTextColor={colors.textSecondary} value={customOrientation} onChangeText={setCustomOrientation} /> : null}
       <Text style={[styles.privacyHint, { color: colors.textSecondary }]}>\uC131\uBCC4\uC640 \uC131\uC801 \uC9C0\uD5A5\uC740 \uAE30\uBCF8\uC73C\uB85C \uB9DE\uD314\uC778 \uC0AC\uC6A9\uC790\uC5D0\uAC8C\ub9cc \uACF5\uAC1C\ub429\ub2c8\ub2e4.</Text>
       <Text style={[styles.section, { color: colors.textPrimary }]}>\uC120\uD0DD \uC785\uB825</Text>
       <TextInput style={inputStyle} placeholder="\uD0A4 (cm)" placeholderTextColor={colors.textSecondary} value={form.height} onChangeText={(value) => setField("height", value)} keyboardType="numeric" />
@@ -112,7 +111,7 @@ export const RegisterScreen = ({ navigation }: any) => {
       <TouchableOpacity onPress={submit} disabled={loading}><LinearGradient colors={(colors.auraGradient || ["#8b5cf6", "#ec4899", "#06b6d4"]) as [string, string, ...string[]]} style={styles.submit}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>\uD68C\uC6D0\uAC00\uC785</Text>}</LinearGradient></TouchableOpacity>
       <View style={styles.footer}><Text style={{ color: colors.textSecondary }}>\uC774\uBBF8 \uACC4\uC815\uC774 \uC788\uB098\uC694? </Text><TouchableOpacity onPress={() => navigation.navigate("Login")}><Text style={styles.link}>\uB85C\uADF8\uC778</Text></TouchableOpacity></View>
     </ScrollView>
-    <Modal transparent visible={!!picker} animationType="slide" onRequestClose={() => setPicker(null)}><View style={styles.modal}><View style={[styles.options, { backgroundColor: colors.bgSecondary }]}><View style={styles.modalHeader}><Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{picker === "orientation" ? "\uC131\uC801 \uC9C0\uD5A5\uC744 \uC120\uD0DD\uD558\uC138\uC694" : "\uC120\uD0DD\uD558\uC138\uC694"}</Text><TouchableOpacity onPress={() => setPicker(null)}><Text style={styles.done}>\uC644\uB8CC</Text></TouchableOpacity></View><ScrollView style={styles.optionsList} nestedScrollEnabled>{pickerOptions.map((option) => { const selected = picker === "orientation" && orientationsSelected.includes(option); const label = picker === "age" ? `${option}\uC138` : picker === "visibility" ? visibilityOptions.find((item) => item.value === option)?.label || option : option; return <TouchableOpacity key={option} style={styles.option} onPress={() => picker === "orientation" ? toggleOrientation(option) : selectSingle(option)}><Text style={{ color: colors.textPrimary }}>{label}</Text>{selected ? <Text style={styles.done}>\u2713</Text> : null}</TouchableOpacity>; })}</ScrollView></View></View></Modal>
+    <Modal transparent visible={!!picker} animationType="slide" onRequestClose={() => setPicker(null)}><View style={styles.modal}><View style={[styles.options, { backgroundColor: colors.bgSecondary }]}><View style={styles.modalHeader}><Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{picker === "orientation" ? "\uC131\uC801 \uC9C0\uD5A5\uC744 \uC120\uD0DD\uD558\uC138\uC694" : "\uC120\uD0DD\uD558\uC138\uC694"}</Text><TouchableOpacity onPress={() => setPicker(null)}><Text style={styles.done}>\uC644\uB8CC</Text></TouchableOpacity></View><ScrollView style={styles.optionsList} nestedScrollEnabled>{pickerOptions.map((option) => { const label = picker === "age" ? `${option}\uC138` : picker === "visibility" ? visibilityOptions.find((item) => item.value === option)?.label || option : option; return <TouchableOpacity key={option} style={styles.option} onPress={() => selectSingle(option)}><Text style={{ color: colors.textPrimary }}>{label}</Text></TouchableOpacity>; })}</ScrollView></View></View></Modal>
   </SafeAreaView>;
 };
 
