@@ -22,12 +22,17 @@ import { getFullImageUrl } from "../config";
 import { CreateCommunityPostModal } from "../components/CreateCommunityPostModal";
 import { CommunityPostDetailModal } from "../components/CommunityPostDetailModal";
 import { ImageDetailViewerModal } from "../components/ImageDetailViewerModal";
+import { AuraLogoText } from "../components/AuraLogoText";
 
 const { width } = Dimensions.get("window");
+type CommunitySection = "anonymous" | "info";
+const ALL_ANONYMOUS_BOARD_ID = "__all_anonymous__";
 
-export const CommunityScreen = ({ navigation }: any) => {
+export const CommunityScreen = ({ navigation, route }: any) => {
   const { colors } = useTheme();
   const { user: currentUser } = useAuth();
+  const requestedSection: CommunitySection = route?.params?.section === "info" ? "info" : "anonymous";
+  const [section, setSection] = useState<CommunitySection>(requestedSection);
   const [boards, setBoards] = useState<any[]>([]);
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
@@ -47,20 +52,40 @@ export const CommunityScreen = ({ navigation }: any) => {
   const [viewerMedia, setViewerMedia] = useState<any[]>([]);
   const [viewerIndex, setViewerIndex] = useState<number>(0);
 
-  const selectedBoard = boards.find((board) => board.id === selectedBoardId);
-  const parentBoards = boards.filter((board) => !board.parent_id);
-  const childBoards = boards.filter((board) => board.parent_id === selectedParentId);
+  const selectedBoard = boards.find((board) => board.id === selectedBoardId)
+    || (selectedBoardId === ALL_ANONYMOUS_BOARD_ID ? boards.find((board) => board.id === selectedParentId) : undefined);
+  const isPartnerBoard = Boolean(
+    selectedBoard &&
+      (String(selectedBoard.slug || "").toLowerCase().includes("partner") ||
+        String(selectedBoard.name || "").includes("제휴업소"))
+  );
+  const sectionBoards = boards.filter((board) => {
+    const isAnonymous = Boolean(board.is_anonymous || String(board.slug || "").toLowerCase().includes("anonymous"));
+    return section === "anonymous" ? isAnonymous : !isAnonymous;
+  });
+  const parentBoards = sectionBoards.filter((board) => !board.parent_id);
+  const childBoards = sectionBoards.filter((board) => board.parent_id === selectedParentId);
+  const visibleChildBoards = section === "anonymous" && selectedParentId
+    ? [{ id: ALL_ANONYMOUS_BOARD_ID, name: "전체", is_anonymous: true }, ...childBoards]
+    : childBoards;
+
+  const selectFirstBoard = (list: any[], nextSection: CommunitySection) => {
+    const candidates = list.filter((board) => {
+      const isAnonymous = Boolean(board.is_anonymous || String(board.slug || "").toLowerCase().includes("anonymous"));
+      return nextSection === "anonymous" ? isAnonymous : !isAnonymous;
+    });
+    const first = candidates.find((board) => !board.parent_id) || candidates[0];
+    const firstChild = candidates.find((board) => board.parent_id === first?.id);
+    setSelectedParentId(first?.id || null);
+    setSelectedBoardId(nextSection === "anonymous" ? (first?.id ? ALL_ANONYMOUS_BOARD_ID : null) : (firstChild?.id || first?.id || null));
+  };
 
   const fetchBoards = async () => {
     try {
       const res = await api.get("/community/boards");
       const list = res.data?.data || [];
       setBoards(list);
-      if (!selectedParentId && list.length) {
-        const first = list.find((board: any) => board.slug === "anonymous") || list.find((board: any) => !board.parent_id);
-        setSelectedParentId(first?.id || null);
-        setSelectedBoardId(first?.id || null);
-      }
+      if (list.length) selectFirstBoard(list, requestedSection);
     } catch (err) {
       console.log("Error fetching community boards", err);
       setBoards([]);
@@ -79,9 +104,11 @@ export const CommunityScreen = ({ navigation }: any) => {
       return;
     }
     try {
+      const isAnonymousAll = boardId === ALL_ANONYMOUS_BOARD_ID;
+      const queryBoardId = isAnonymousAll ? selectedParentId : boardId;
       const [postRes, noticeRes] = await Promise.all([
-        api.get(`/posts/community?board_id=${boardId}`),
-        api.get(`/community/notices?board_id=${boardId}`),
+        api.get(isAnonymousAll ? "/posts/community?board_type=anonymous" : `/posts/community?board_id=${boardId}`),
+        api.get(`/community/notices?board_id=${queryBoardId}`),
       ]);
       if (postRes.data && postRes.data.data) {
         const list = postRes.data.data || [];
@@ -100,6 +127,17 @@ export const CommunityScreen = ({ navigation }: any) => {
     setLoading(true);
     fetchBoards();
   }, []);
+
+  useEffect(() => {
+    setSection(requestedSection);
+    if (boards.length) selectFirstBoard(boards, requestedSection);
+  }, [requestedSection]);
+
+  const changeSection = (nextSection: CommunitySection) => {
+    setSection(nextSection);
+    navigation.setParams({ section: nextSection });
+    selectFirstBoard(boards, nextSection);
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -305,18 +343,32 @@ export const CommunityScreen = ({ navigation }: any) => {
         <View style={{ width: 32 }} />
       </View>
 
+      <View style={[styles.sectionTabs, { borderBottomColor: colors.borderLight }]}>
+        <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("MainTabs", { screen: "Feed" })}>
+          <Text style={[styles.sectionTabText, { color: colors.textSecondary }]}>피드</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.sectionTab} onPress={() => changeSection("anonymous")}>
+          <Text style={[styles.sectionTabText, { color: section === "anonymous" ? colors.textPrimary : colors.textSecondary }]}>익명게시판</Text>
+          {section === "anonymous" && <LinearGradient colors={colors.auraGradient} style={styles.sectionIndicator} />}
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.sectionTab} onPress={() => changeSection("info")}>
+          <Text style={[styles.sectionTabText, { color: section === "info" ? colors.textPrimary : colors.textSecondary }]}>정보게시판</Text>
+          {section === "info" && <LinearGradient colors={colors.auraGradient} style={styles.sectionIndicator} />}
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.boardArea}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.boardScroll}>
           {parentBoards.map((board) => (
-            <TouchableOpacity key={board.id} style={[styles.boardChip, { backgroundColor: selectedParentId === board.id ? colors.accentPurple : colors.bgCard }]} onPress={() => { setSelectedParentId(board.id); const firstChild = boards.find((item) => item.parent_id === board.id); setSelectedBoardId(firstChild?.id || board.id); }}>
-              <Text style={{ color: selectedParentId === board.id ? "#fff" : colors.textPrimary, fontWeight: "700" }}>{board.name}</Text>
+            <TouchableOpacity key={board.id} style={[styles.boardChip, { backgroundColor: selectedParentId === board.id ? colors.accentPurple : colors.bgInput, borderColor: selectedParentId === board.id ? colors.accentPurple : colors.borderColor }]} onPress={() => { setSelectedParentId(board.id); const firstChild = sectionBoards.find((item) => item.parent_id === board.id); setSelectedBoardId(section === "anonymous" ? ALL_ANONYMOUS_BOARD_ID : (firstChild?.id || board.id)); }}>
+              <Text style={{ color: selectedParentId === board.id ? "#fff" : colors.textSecondary, fontWeight: "700" }}>{board.name}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
-        {childBoards.length > 0 && (
+        {visibleChildBoards.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subBoardScroll}>
-            {childBoards.map((board) => (
-              <TouchableOpacity key={board.id} style={[styles.subBoardChip, { borderColor: selectedBoardId === board.id ? colors.accentBlue : colors.borderColor }]} onPress={() => setSelectedBoardId(board.id)}>
+            {visibleChildBoards.map((board) => (
+              <TouchableOpacity key={board.id} style={[styles.subBoardChip, { backgroundColor: selectedBoardId === board.id ? colors.accentPurple + "12" : "transparent", borderColor: selectedBoardId === board.id ? colors.accentPurple : colors.borderColor }]} onPress={() => setSelectedBoardId(board.id)}>
                 <Text style={{ color: selectedBoardId === board.id ? colors.accentBlue : colors.textSecondary, fontWeight: "700" }}>{board.name}</Text>
               </TouchableOpacity>
             ))}
@@ -335,7 +387,20 @@ export const CommunityScreen = ({ navigation }: any) => {
           keyExtractor={(item) => item.id}
           renderItem={renderPostItem}
           contentContainerStyle={styles.listContent}
-          ListHeaderComponent={notices.length ? <View style={styles.noticeList}>{notices.map((notice) => <View key={notice.id} style={[styles.noticeCard, { backgroundColor: colors.bgCard, borderColor: colors.accentPurple }]}><Ionicons name="megaphone-outline" size={16} color={colors.accentPurple} /><View style={{ flex: 1 }}><Text style={[styles.noticeTitle, { color: colors.textPrimary }]}>{notice.title}</Text><Text style={[styles.noticeContent, { color: colors.textSecondary }]} numberOfLines={2}>{notice.content}</Text></View></View>)}</View> : null}
+          ListHeaderComponent={<>
+            {section === "info" && <LinearGradient colors={[colors.accentPurple + "22", colors.accentPink + "34", colors.accentCyan + "22"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.supportCard, { borderColor: colors.borderLight }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.supportTitle, { color: colors.textPrimary }]}>도움이 필요할 때</Text>
+                <Text style={[styles.supportBody, { color: colors.textSecondary }]}>혼자가 아니에요. 안전하고 익명으로 필요한 도움과 정보를 찾아보세요.</Text>
+                <TouchableOpacity style={[styles.supportButton, { backgroundColor: colors.bgCard }]} onPress={() => navigation.navigate("Community", { section: "info" })}>
+                  <Text style={[styles.supportButtonText, { color: colors.accentPurple }]}>자세히 보기</Text>
+                  <Ionicons name="arrow-forward" size={15} color={colors.accentPurple} />
+                </TouchableOpacity>
+              </View>
+              <View style={[styles.supportIcon, { backgroundColor: colors.bgCard + "aa" }]}><Ionicons name="heart-outline" size={34} color={colors.accentPink} /></View>
+            </LinearGradient>}
+            {notices.length ? <View style={styles.noticeList}>{notices.map((notice) => <View key={notice.id} style={[styles.noticeCard, { backgroundColor: colors.bgCard, borderColor: colors.accentPurple }]}><Ionicons name="megaphone-outline" size={16} color={colors.accentPurple} /><View style={{ flex: 1 }}><Text style={[styles.noticeTitle, { color: colors.textPrimary }]}>{notice.title}</Text><Text style={[styles.noticeContent, { color: colors.textSecondary }]} numberOfLines={2}>{notice.content}</Text></View></View>)}</View> : null}
+          </>}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -365,7 +430,7 @@ export const CommunityScreen = ({ navigation }: any) => {
       )}
 
       {/* Floating Action Button (FAB) */}
-      <TouchableOpacity
+      {(!isPartnerBoard || currentUser?.is_admin) && <TouchableOpacity
         style={styles.fab}
         onPress={() => {
           setEditingPost(null);
@@ -374,20 +439,20 @@ export const CommunityScreen = ({ navigation }: any) => {
         activeOpacity={0.9}
       >
         <LinearGradient
-          colors={["#8b5cf6", "#ec4899", "#06b6d4"]}
+          colors={colors.auraGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.fabGradient}
         >
           <Ionicons name="create-outline" size={24} color="#ffffff" />
         </LinearGradient>
-      </TouchableOpacity>
+      </TouchableOpacity>}
 
       {/* Modals */}
       <CreateCommunityPostModal
         visible={createModalVisible}
         initialBoardType={selectedBoard?.is_anonymous ? "anonymous" : "info"}
-        boardId={selectedBoardId}
+        boardId={selectedBoardId === ALL_ANONYMOUS_BOARD_ID ? selectedParentId : selectedBoardId}
         boardName={selectedBoard?.name}
         editPost={editingPost}
         onClose={() => {
@@ -431,6 +496,26 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.5,
   },
+  sectionTabs: {
+    height: 48,
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    paddingHorizontal: 14,
+  },
+  sectionTab: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  sectionTabText: { fontSize: 14, fontWeight: "800" },
+  sectionIndicator: {
+    position: "absolute",
+    bottom: 0,
+    width: 42,
+    height: 3,
+    borderRadius: 3,
+  },
   tabContainer: {
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -438,12 +523,42 @@ const styles = StyleSheet.create({
   boardArea: { paddingVertical: 10 },
   boardScroll: { paddingHorizontal: 16, gap: 8 },
   subBoardScroll: { paddingHorizontal: 16, paddingTop: 8, gap: 8 },
-  boardChip: { paddingHorizontal: 16, height: 38, borderRadius: 19, justifyContent: "center" },
+  boardChip: { paddingHorizontal: 16, height: 38, borderRadius: 19, borderWidth: 1, justifyContent: "center" },
   subBoardChip: { paddingHorizontal: 14, height: 34, borderRadius: 17, borderWidth: 1, justifyContent: "center" },
   noticeList: { marginBottom: 12, gap: 8 },
   noticeCard: { flexDirection: "row", gap: 8, borderWidth: 1, borderRadius: 10, padding: 10 },
   noticeTitle: { fontSize: 13, fontWeight: "800", marginBottom: 2 },
   noticeContent: { fontSize: 12, lineHeight: 17 },
+  supportCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 14,
+    overflow: "hidden",
+  },
+  supportTitle: { fontSize: 20, fontWeight: "800", marginBottom: 7 },
+  supportBody: { fontSize: 13, lineHeight: 19, maxWidth: 220 },
+  supportButton: {
+    marginTop: 14,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 18,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+  },
+  supportButtonText: { fontSize: 12, fontWeight: "800" },
+  supportIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 8,
+  },
   capsuleBackground: {
     flexDirection: "row",
     borderRadius: 25,
@@ -588,7 +703,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    shadowColor: "#8b5cf6",
+    shadowColor: "#7652df",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,

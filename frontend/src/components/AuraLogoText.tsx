@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Image, StyleSheet, ViewStyle } from "react-native";
+import { View, Text, StyleSheet, ViewStyle } from "react-native";
 
 interface AuraLogoTextProps {
   width?: number;
@@ -14,16 +14,15 @@ export const AuraLogoText: React.FC<AuraLogoTextProps> = ({
   fontSize = 28,
   style,
 }) => {
-  const logoHeight = height || Math.round(fontSize * 2.2);
-  const logoWidth = width || Math.round(logoHeight * 3.6);
+  const logoHeight = height || Math.round(fontSize * 1.35);
 
   return (
     <View style={[styles.container, style]}>
-      <Image
-        source={require("../../assets/aura_n_logo.png")}
-        style={{ width: logoWidth, height: logoHeight }}
-        resizeMode="contain"
-      />
+      <Text style={[styles.logo, { fontSize, lineHeight: logoHeight }]}>
+        <Text style={styles.aura}>aura</Text>
+        <Text style={styles.plus}>+</Text>
+        <Text style={styles.n}>n</Text>
+      </Text>
     </View>
   );
 };
@@ -33,6 +32,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  logo: {
+    fontWeight: "700",
+    letterSpacing: -1.2,
+  },
+  aura: { color: "#7652df" },
+  plus: { color: "#ec6db1" },
+  n: { color: "#42b8d4" },
 });
 
 export default AuraLogoText;

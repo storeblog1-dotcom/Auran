@@ -55,7 +55,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     let timerId: any;
     const startTime = Date.now();
-    const MINIMUM_SPLASH_TIME = 1000; // 1 second splash screen delay
+    const MINIMUM_SPLASH_TIME = 3000; // 3 second splash screen delay (testing)
 
     const initAuth = async () => {
       try {
