@@ -5,6 +5,31 @@ import { Ionicons } from "@expo/vector-icons";
 import api from "../services/api";
 import { useTheme } from "../context/ThemeContext";
 
+const TOP_LEVEL_SLUG_ORDER = ["anonymous", "info", "partner"];
+const ANONYMOUS_CHILD_SLUG_ORDER = [
+  "anonymous-worries",
+  "anonymous-relationship",
+  "anonymous-daily",
+  "anonymous-coming-out",
+];
+
+const priorityForBoard = (board: any, siblingOrder: string[]) => {
+  const slug = String(board.slug || "").toLowerCase();
+  const exactIndex = siblingOrder.indexOf(slug);
+  if (exactIndex >= 0) return exactIndex;
+  if (siblingOrder === TOP_LEVEL_SLUG_ORDER && slug.includes("partner")) return 2;
+  return 100 + Number(board.sort_order || 0);
+};
+
+const sortSiblingBoards = (items: any[], siblingOrder: string[] = []) =>
+  [...items].sort((a, b) => {
+    const priorityDifference = priorityForBoard(a, siblingOrder) - priorityForBoard(b, siblingOrder);
+    if (priorityDifference !== 0) return priorityDifference;
+    const sortDifference = Number(a.sort_order || 0) - Number(b.sort_order || 0);
+    if (sortDifference !== 0) return sortDifference;
+    return String(a.name || "").localeCompare(String(b.name || ""), "ko");
+  });
+
 export const CommunityAdminScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
   const [boards, setBoards] = useState<any[]>([]);
@@ -55,13 +80,29 @@ export const CommunityAdminScreen = ({ navigation }: any) => {
     try { await api.post("/community/admin/notices", { title: noticeTitle.trim(), content: noticeContent.trim() }); setNoticeTitle(""); setNoticeContent(""); Alert.alert("완료", "전체 공지가 모든 게시판 상단에 표시됩니다."); }
     catch { Alert.alert("오류", "공지 등록에 실패했습니다."); }
   };
-  const parents = boards.filter((board) => !board.parent_id && board.is_active);
+  const topLevelBoards = sortSiblingBoards(
+    boards.filter((board) => !board.parent_id),
+    TOP_LEVEL_SLUG_ORDER,
+  );
+  const orderedBoardIds = new Set<string>();
+  const orderedBoards = topLevelBoards.flatMap((parent) => {
+    orderedBoardIds.add(parent.id);
+    const childOrder = parent.slug === "anonymous" ? ANONYMOUS_CHILD_SLUG_ORDER : [];
+    const children = sortSiblingBoards(
+      boards.filter((board) => board.parent_id === parent.id),
+      childOrder,
+    );
+    children.forEach((child) => orderedBoardIds.add(child.id));
+    return [parent, ...children];
+  });
+  orderedBoards.push(...sortSiblingBoards(boards.filter((board) => !orderedBoardIds.has(board.id))));
+  const parents = topLevelBoards.filter((board) => board.is_active);
 
   return <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
     <View style={[styles.header, { borderBottomColor: colors.borderColor }]}><TouchableOpacity onPress={() => navigation.goBack()}><Ionicons name="chevron-back" size={26} color={colors.textPrimary} /></TouchableOpacity><Text style={[styles.title, { color: colors.textPrimary }]}>커뮤니티 관리</Text><TouchableOpacity onPress={reset}><Text style={{ color: colors.accentBlue, fontWeight: "700" }}>새 게시판</Text></TouchableOpacity></View>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={[styles.section, { color: colors.textPrimary }]}>게시판 순서</Text>
-      {boards.map((board) => <View key={board.id} style={[styles.boardRow, { borderColor: colors.borderColor, opacity: board.is_active ? 1 : .5 }]}>
+      {orderedBoards.map((board) => <View key={board.id} style={[styles.boardRow, board.parent_id && styles.childBoardRow, { borderColor: colors.borderColor, backgroundColor: board.parent_id ? colors.bgInput : colors.bgCard, opacity: board.is_active ? 1 : .5 }]}>
         <TouchableOpacity style={styles.boardInfo} onPress={() => select(board)}><Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{board.parent_id ? "└ " : ""}{board.name}</Text><Text style={{ color: colors.textSecondary, fontSize: 12 }}>{board.slug} · {board.is_anonymous ? "익명" : "일반"}</Text></TouchableOpacity>
         <View style={styles.rowActions}><TouchableOpacity accessibilityLabel="게시판 위로 이동" onPress={() => moveBoard(board, "up")} style={styles.iconButton}><Ionicons name="chevron-up" size={20} color={colors.textPrimary} /></TouchableOpacity><TouchableOpacity accessibilityLabel="게시판 아래로 이동" onPress={() => moveBoard(board, "down")} style={styles.iconButton}><Ionicons name="chevron-down" size={20} color={colors.textPrimary} /></TouchableOpacity><TouchableOpacity onPress={() => closeBoard(board)}><Text style={{ color: "#ef4444", fontWeight: "700" }}>폐쇄</Text></TouchableOpacity></View>
       </View>)}
@@ -81,4 +122,4 @@ export const CommunityAdminScreen = ({ navigation }: any) => {
   </SafeAreaView>;
 };
 
-const styles = StyleSheet.create({ container: { flex: 1 }, header: { height: 54, paddingHorizontal: 16, borderBottomWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, title: { fontSize: 17, fontWeight: "800" }, content: { padding: 16, paddingBottom: 50 }, section: { fontSize: 16, fontWeight: "800", marginTop: 12, marginBottom: 10 }, hint: { fontSize: 12, marginBottom: 8 }, boardRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 8 }, boardInfo: { flex: 1, marginRight: 8 }, rowActions: { flexDirection: "row", alignItems: "center", gap: 4 }, iconButton: { padding: 4 }, input: { borderWidth: 1, borderRadius: 10, minHeight: 46, paddingHorizontal: 12, marginBottom: 10 }, chips: { gap: 8, paddingBottom: 12 }, chip: { paddingHorizontal: 12, height: 34, justifyContent: "center", borderRadius: 17 }, switchRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }, primary: { minHeight: 46, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 8 }, primaryText: { color: "#fff", fontWeight: "800" }, noticeInput: { minHeight: 100, textAlignVertical: "top", paddingTop: 12 } });
+const styles = StyleSheet.create({ container: { flex: 1 }, header: { height: 54, paddingHorizontal: 16, borderBottomWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, title: { fontSize: 17, fontWeight: "800" }, content: { padding: 16, paddingBottom: 50 }, section: { fontSize: 16, fontWeight: "800", marginTop: 12, marginBottom: 10 }, hint: { fontSize: 12, marginBottom: 8 }, boardRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 8 }, childBoardRow: { marginLeft: 20, borderRadius: 14 }, boardInfo: { flex: 1, marginRight: 8 }, rowActions: { flexDirection: "row", alignItems: "center", gap: 4 }, iconButton: { padding: 4 }, input: { borderWidth: 1, borderRadius: 10, minHeight: 46, paddingHorizontal: 12, marginBottom: 10 }, chips: { gap: 8, paddingBottom: 12 }, chip: { paddingHorizontal: 12, height: 34, justifyContent: "center", borderRadius: 17 }, switchRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }, primary: { minHeight: 46, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 8 }, primaryText: { color: "#fff", fontWeight: "800" }, noticeInput: { minHeight: 100, textAlignVertical: "top", paddingTop: 12 } });
