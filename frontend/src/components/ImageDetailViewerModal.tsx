@@ -7,16 +7,14 @@ import {
   TouchableOpacity,
   Text,
   Dimensions,
-  ScrollView,
   SafeAreaView,
   StatusBar,
   FlatList,
   NativeSyntheticEvent,
   NativeScrollEvent,
-  Animated,
+  PanResponder,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { PanGestureHandler, PinchGestureHandler, State } from "react-native-gesture-handler";
 import { getFullImageUrl } from "../config";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -34,57 +32,164 @@ interface ImageDetailViewerModalProps {
   onClose: () => void;
 }
 
-export const ZoomableImage = ({ uri, imageWidth, imageHeight, onZoomChange = () => {} }: { uri: string; imageWidth: number; imageHeight: number; onZoomChange?: (zoomed: boolean) => void }) => {
-  const scale = useRef(new Animated.Value(1)).current;
-  const currentScale = useRef(1);
-  const panRef = useRef<any>(null);
-  const pinchRef = useRef<any>(null);
-  const panX = useRef(new Animated.Value(0)).current;
-  const panY = useRef(new Animated.Value(0)).current;
-  const offsetX = useRef(new Animated.Value(0)).current;
-  const offsetY = useRef(new Animated.Value(0)).current;
-  const currentOffset = useRef({ x: 0, y: 0 });
-  const onPinchEvent = Animated.event([{ nativeEvent: { scale } }], { useNativeDriver: true });
-  const onPanEvent = Animated.event([{ nativeEvent: { translationX: panX, translationY: panY } }], { useNativeDriver: true });
+interface ZoomableImageProps {
+  uri: string;
+  imageWidth: number;
+  imageHeight: number;
+  onZoomChange?: (zoomed: boolean) => void;
+  onSwipe?: (dx: number, dy: number) => void;
+}
 
-  const finishPinch = (event: any) => {
-    if (event.nativeEvent.state === State.BEGAN || event.nativeEvent.state === State.ACTIVE) {
-      onZoomChange(true);
-      return;
-    }
-    if (event.nativeEvent.state !== State.END) return;
-    const nextScale = Math.min(4, Math.max(1, currentScale.current * event.nativeEvent.scale));
-    currentScale.current = nextScale;
-    scale.setValue(nextScale);
-    onZoomChange(nextScale > 1);
+export const ZoomableImage = ({
+  uri,
+  imageWidth,
+  imageHeight,
+  onZoomChange = () => {},
+  onSwipe,
+}: ZoomableImageProps) => {
+  const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
+  const transformRef = useRef(transform);
+  const onZoomChangeRef = useRef(onZoomChange);
+  const onSwipeRef = useRef(onSwipe);
+  const gestureStart = useRef({
+    touchCount: 0,
+    distance: 0,
+    scale: 1,
+    x: 0,
+    y: 0,
+    pageX: 0,
+    pageY: 0,
+    didPinch: false,
+  });
+
+  useEffect(() => {
+    onZoomChangeRef.current = onZoomChange;
+    onSwipeRef.current = onSwipe;
+  }, [onZoomChange, onSwipe]);
+
+  useEffect(() => {
+    const reset = { scale: 1, x: 0, y: 0 };
+    transformRef.current = reset;
+    setTransform(reset);
+    onZoomChangeRef.current(false);
+  }, [uri, imageWidth, imageHeight]);
+
+  const updateTransform = (next: { scale: number; x: number; y: number }) => {
+    transformRef.current = next;
+    setTransform(next);
+    onZoomChangeRef.current(next.scale > 1.01);
   };
 
-  const finishPan = (event: any) => {
-    if (event.nativeEvent.state !== State.END) return;
-    currentOffset.current = {
-      x: currentOffset.current.x + event.nativeEvent.translationX,
-      y: currentOffset.current.y + event.nativeEvent.translationY,
-    };
-    offsetX.setValue(currentOffset.current.x);
-    offsetY.setValue(currentOffset.current.y);
-    panX.setValue(0);
-    panY.setValue(0);
+  const distanceBetween = (touches: any[]) => {
+    const dx = touches[0].pageX - touches[1].pageX;
+    const dy = touches[0].pageY - touches[1].pageY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const clampPosition = (x: number, y: number, scale: number) => {
+    const maxX = Math.max(0, (imageWidth * scale - SCREEN_WIDTH) / 2);
+    const maxY = Math.max(0, (imageHeight * scale - SCREEN_HEIGHT) / 2);
+    return { x: Math.max(-maxX, Math.min(maxX, x)), y: Math.max(-maxY, Math.min(maxY, y)) };
+  };
+
+  const responder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (event) => {
+      const touches = event.nativeEvent.touches;
+      const current = transformRef.current;
+      gestureStart.current = {
+        touchCount: touches.length,
+        distance: touches.length >= 2 ? distanceBetween(touches) : 0,
+        scale: current.scale,
+        x: current.x,
+        y: current.y,
+        pageX: touches[0]?.pageX || 0,
+        pageY: touches[0]?.pageY || 0,
+        didPinch: touches.length >= 2,
+      };
+    },
+    onPanResponderMove: (event) => {
+      const touches = event.nativeEvent.touches;
+      if (touches.length >= 2) {
+        gestureStart.current.didPinch = true;
+        const currentDistance = distanceBetween(touches);
+        if (gestureStart.current.touchCount < 2 || gestureStart.current.distance === 0) {
+          gestureStart.current.touchCount = touches.length;
+          gestureStart.current.distance = currentDistance;
+          gestureStart.current.scale = transformRef.current.scale;
+          gestureStart.current.x = transformRef.current.x;
+          gestureStart.current.y = transformRef.current.y;
+          gestureStart.current.didPinch = true;
+          return;
+        }
+        const nextScale = Math.max(
+          1,
+          Math.min(4, gestureStart.current.scale * currentDistance / gestureStart.current.distance)
+        );
+        const position = clampPosition(transformRef.current.x, transformRef.current.y, nextScale);
+        updateTransform({ scale: nextScale, ...position });
+      } else if (touches.length === 1) {
+        if (gestureStart.current.touchCount >= 2) {
+          gestureStart.current.touchCount = 1;
+          gestureStart.current.x = transformRef.current.x;
+          gestureStart.current.y = transformRef.current.y;
+          gestureStart.current.pageX = touches[0].pageX;
+          gestureStart.current.pageY = touches[0].pageY;
+          return;
+        }
+        if (transformRef.current.scale <= 1.01) return;
+        const x = gestureStart.current.x + touches[0].pageX - gestureStart.current.pageX;
+        const y = gestureStart.current.y + touches[0].pageY - gestureStart.current.pageY;
+        const position = clampPosition(x, y, transformRef.current.scale);
+        updateTransform({ scale: transformRef.current.scale, ...position });
+      }
+    },
+    onPanResponderRelease: (_event, gesture) => {
+      if (
+        !gestureStart.current.didPinch &&
+        transformRef.current.scale <= 1.01 &&
+        onSwipeRef.current
+      ) {
+        onSwipeRef.current(gesture.dx, gesture.dy);
+      }
+      gestureStart.current.touchCount = 0;
+    },
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderTerminate: () => {
+      gestureStart.current.touchCount = 0;
+    },
+    onShouldBlockNativeResponder: () => true,
+  })).current;
+
+  const changeScale = (delta: number) => {
+    const nextScale = Math.max(1, Math.min(4, transformRef.current.scale + delta));
+    const position = nextScale === 1 ? { x: 0, y: 0 } : clampPosition(transformRef.current.x, transformRef.current.y, nextScale);
+    updateTransform({ scale: nextScale, ...position });
   };
 
   return (
-    <PanGestureHandler ref={panRef} minPointers={1} maxPointers={1} shouldCancelWhenOutside={false} simultaneousHandlers={pinchRef} onGestureEvent={onPanEvent} onHandlerStateChange={finishPan}>
-      <Animated.View style={styles.zoomImageHolder}>
-        <PinchGestureHandler ref={pinchRef} simultaneousHandlers={panRef} onGestureEvent={onPinchEvent} onHandlerStateChange={finishPinch}>
-          <Animated.View style={styles.zoomImageHolder}>
-            <Animated.Image source={{ uri }} style={{ width: imageWidth, height: imageHeight, transform: [{ scale }, { translateX: Animated.add(offsetX, panX) }, { translateY: Animated.add(offsetY, panY) }] }} resizeMode="contain" />
-          </Animated.View>
-        </PinchGestureHandler>
-        <View style={styles.zoomControls}>
-          <TouchableOpacity style={styles.zoomButton} onPress={() => { const next = Math.min(4, currentScale.current + 0.5); currentScale.current = next; onZoomChange(true); Animated.spring(scale, { toValue: next, useNativeDriver: true }).start(); }}><Text style={styles.zoomButtonText}>+</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.zoomButton} onPress={() => { const next = Math.max(1, currentScale.current - 0.5); currentScale.current = next; onZoomChange(next > 1); Animated.spring(scale, { toValue: next, useNativeDriver: true }).start(); }}><Text style={styles.zoomButtonText}>−</Text></TouchableOpacity>
-        </View>
-      </Animated.View>
-    </PanGestureHandler>
+    <View style={styles.zoomImageHolder}>
+      <View style={styles.zoomGestureSurface} {...responder.panHandlers}>
+        <Image
+          source={{ uri }}
+          style={{
+            width: imageWidth,
+            height: imageHeight,
+            transform: [
+              { translateX: transform.x },
+              { translateY: transform.y },
+              { scale: transform.scale },
+            ],
+          }}
+          resizeMode="contain"
+        />
+      </View>
+      <View style={styles.zoomControls}>
+        <TouchableOpacity style={styles.zoomButton} onPress={() => changeScale(0.5)}><Text style={styles.zoomButtonText}>+</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.zoomButton} onPress={() => changeScale(-0.5)}><Text style={styles.zoomButtonText}>−</Text></TouchableOpacity>
+      </View>
+    </View>
   );
 };
 
@@ -95,13 +200,12 @@ export const ImageDetailViewerModal: React.FC<ImageDetailViewerModalProps> = ({
   onClose,
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [isZoomed, setIsZoomed] = useState(false);
   const [imageRatios, setImageRatios] = useState<{ [key: number]: number }>({});
+  const listRef = useRef<FlatList<MediaItem>>(null);
 
   useEffect(() => {
     if (visible) {
       setCurrentIndex(initialIndex);
-      setIsZoomed(false);
       // Fetch natural dimensions for each image to compute accurate aspect ratio
       media.forEach((item, index) => {
         const fullUri = getFullImageUrl(item.media_url);
@@ -130,6 +234,16 @@ export const ImageDetailViewerModal: React.FC<ImageDetailViewerModalProps> = ({
     }
   };
 
+  const handleMediaSwipe = (dx: number) => {
+    if (Math.abs(dx) < 60) return;
+    const nextIndex = dx < 0
+      ? Math.min(media.length - 1, currentIndex + 1)
+      : Math.max(0, currentIndex - 1);
+    if (nextIndex === currentIndex) return;
+    setCurrentIndex(nextIndex);
+    listRef.current?.scrollToIndex({ index: nextIndex, animated: true });
+  };
+
   const renderZoomableImage = (item: MediaItem, index: number) => {
     const fullUri = getFullImageUrl(item.media_url);
     const ratio = imageRatios[index] || 1.0;
@@ -146,7 +260,12 @@ export const ImageDetailViewerModal: React.FC<ImageDetailViewerModalProps> = ({
 
     return (
       <View key={item.id || `view-${index}`} style={styles.slideContainer}>
-        <ZoomableImage uri={fullUri} imageWidth={imgWidth} imageHeight={imgHeight} onZoomChange={setIsZoomed} />
+        <ZoomableImage
+          uri={fullUri}
+          imageWidth={imgWidth}
+          imageHeight={imgHeight}
+          onSwipe={(dx) => handleMediaSwipe(dx)}
+        />
       </View>
     );
   };
@@ -176,10 +295,11 @@ export const ImageDetailViewerModal: React.FC<ImageDetailViewerModalProps> = ({
 
         {/* Swipable & Zoomable Image Slider */}
         <FlatList
+          ref={listRef}
           data={media}
           keyExtractor={(item, index) => item.id || `media-${index}`}
           horizontal
-          scrollEnabled={!isZoomed}
+          scrollEnabled={false}
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           onScroll={handleScroll}
@@ -254,6 +374,11 @@ const styles = StyleSheet.create({
   zoomImageHolder: {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  zoomGestureSurface: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
   },

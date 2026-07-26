@@ -10,7 +10,6 @@ import {
   Animated,
   Alert,
   Platform,
-  PanResponder,
   FlatList,
   ScrollView,
   StatusBar,
@@ -102,51 +101,38 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   // 스와이프 제스처
   // 좌우 스와이프 → 다른 유저 그룹 이동
   // 상하 스와이프 → 같은 유저의 다음/이전 스토리 이동
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => {
-        return Math.abs(gs.dx) > 12 || Math.abs(gs.dy) > 12;
-      },
-      onPanResponderRelease: (_, gs) => {
-        const absX = Math.abs(gs.dx);
-        const absY = Math.abs(gs.dy);
-        const groups = storyGroupsRef.current;
-        const gIdx = groupIndexRef.current;
-        const sIdx = storyIndexRef.current;
+  const handleImageSwipe = useCallback((dx: number, dy: number) => {
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    const groups = storyGroupsRef.current;
+    const gIdx = groupIndexRef.current;
+    const sIdx = storyIndexRef.current;
 
-        if (absX > absY && absX > SWIPE_THRESHOLD) {
-          if (gs.dx < 0) {
-            // 왼쪽 → 다음 그룹
-            if (gIdx + 1 < groups.length) {
-              setStoryIndex(0);
-              setGroupIndex(gIdx + 1);
-            }
-          } else {
-            // 오른쪽 → 이전 그룹
-            if (gIdx - 1 >= 0) {
-              setStoryIndex(0);
-              setGroupIndex(gIdx - 1);
-            }
-          }
-        } else if (absY > absX && absY > SWIPE_THRESHOLD) {
-          const group = groups[gIdx];
-          if (!group) return;
-          if (gs.dy < 0) {
-            // 위 → 다음 스토리
-            if (sIdx < group.stories.length - 1) setStoryIndex(sIdx + 1);
-          } else {
-            // 아래 → 이전 스토리
-            if (sIdx > 0) setStoryIndex(sIdx - 1);
-          }
-        }
-      },
-    })
-  ).current;
+    if (absX > absY && absX > SWIPE_THRESHOLD) {
+      if (dx < 0 && gIdx + 1 < groups.length) {
+        setStoryIndex(0);
+        setGroupIndex(gIdx + 1);
+      } else if (dx > 0 && gIdx - 1 >= 0) {
+        setStoryIndex(0);
+        setGroupIndex(gIdx - 1);
+      }
+      return;
+    }
+
+    if (absY > absX && absY > SWIPE_THRESHOLD) {
+      const group = groups[gIdx];
+      if (!group) return;
+      if (dy < 0 && sIdx < group.stories.length - 1) {
+        setStoryIndex(sIdx + 1);
+      } else if (dy > 0 && sIdx > 0) {
+        setStoryIndex(sIdx - 1);
+      }
+    }
+  }, []);
 
   // 스토리 변경 시 타이머 + 읽음 처리
   useEffect(() => {
-    if (!visible || !currentStory || gridVisible) return;
+    if (!visible || !currentStory || gridVisible || isZoomed) return;
 
     const markViewed = async () => {
       try {
@@ -177,7 +163,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     return () => {
       animation.stop();
     };
-  }, [visible, groupIndex, storyIndex, handleNextStory, gridVisible]);
+  }, [visible, groupIndex, storyIndex, handleNextStory, gridVisible, isZoomed]);
 
   const handleDeleteStory = useCallback(async () => {
     if (!currentStory) return;
@@ -293,12 +279,13 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
           imageWidth={width}
           imageHeight={height}
           onZoomChange={setIsZoomed}
+          onSwipe={handleImageSwipe}
         />
 
         {/* 어두운 오버레이 */}
         <View pointerEvents="none" style={styles.overlay} />
 
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView pointerEvents="box-none" style={styles.safeArea}>
           {/* 프로그래스 바 */}
           <View style={styles.progressContainer}>
             {currentGroup.stories.map((s: any, idx: number) => {
@@ -370,9 +357,6 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
               </TouchableOpacity>
             </View>
           </View>
-
-          {/* 제스처 레이어 — 헤더/푸터 아래, 배경 위 */}
-          {!isZoomed && <View style={styles.gestureLayer} {...panResponder.panHandlers} />}
 
           {/* 하단 영역 */}
           <View style={styles.footer}>
@@ -505,14 +489,6 @@ const styles = StyleSheet.create({
   },
   iconBtn: {
     padding: 8,
-  },
-  gestureLayer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 6,
   },
   footer: {
     position: "absolute",

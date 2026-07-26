@@ -68,7 +68,7 @@ export const StoryDetailModal: React.FC<StoryDetailModalProps> = ({
         {/* 어두운 오버레이 */}
         <View pointerEvents="none" style={styles.overlay} />
 
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView pointerEvents="box-none" style={styles.safeArea}>
           {/* 헤더: 아이디 + 닫기/삭제 버튼 */}
           <View style={styles.header}>
             <View style={styles.userInfo}>
