@@ -36,6 +36,7 @@ class Post(Base):
     # ─── 필드 ─────────────────────────────────────────────────
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     board_type: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    board_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("community_boards.id", ondelete="SET NULL"), nullable=True, index=True)
     caption: Mapped[str | None] = mapped_column(Text, nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     visibility: Mapped[str] = mapped_column(
@@ -381,5 +382,4 @@ class PostRepost(Base):
 
     def __repr__(self) -> str:
         return f"<PostRepost user_id={self.user_id} post_id={self.post_id}>"
-
 

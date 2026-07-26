@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Alert,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -27,7 +28,10 @@ const { width } = Dimensions.get("window");
 export const CommunityScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
   const { user: currentUser } = useAuth();
-  const [boardType, setBoardType] = useState<"anonymous" | "info">("anonymous");
+  const [boards, setBoards] = useState<any[]>([]);
+  const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
+  const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
+  const [notices, setNotices] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -43,13 +47,35 @@ export const CommunityScreen = ({ navigation }: any) => {
   const [viewerMedia, setViewerMedia] = useState<any[]>([]);
   const [viewerIndex, setViewerIndex] = useState<number>(0);
 
-  const fetchCommunityPosts = async (type: "anonymous" | "info") => {
+  const selectedBoard = boards.find((board) => board.id === selectedBoardId);
+  const parentBoards = boards.filter((board) => !board.parent_id);
+  const childBoards = boards.filter((board) => board.parent_id === selectedParentId);
+
+  const fetchBoards = async () => {
     try {
-      const res = await api.get(`/posts/community?board_type=${type}`);
-      if (res.data && res.data.data) {
-        const list = res.data.data || [];
+      const res = await api.get("/community/boards");
+      const list = res.data?.data || [];
+      setBoards(list);
+      if (!selectedParentId && list.length) {
+        const first = list.find((board: any) => board.slug === "anonymous") || list.find((board: any) => !board.parent_id);
+        setSelectedParentId(first?.id || null);
+        setSelectedBoardId(first?.id || null);
+      }
+    } catch (err) { console.log("Error fetching community boards", err); }
+  };
+
+  const fetchCommunityPosts = async (boardId: string | null) => {
+    if (!boardId) return;
+    try {
+      const [postRes, noticeRes] = await Promise.all([
+        api.get(`/posts/community?board_id=${boardId}`),
+        api.get(`/community/notices?board_id=${boardId}`),
+      ]);
+      if (postRes.data && postRes.data.data) {
+        const list = postRes.data.data || [];
         setPosts(list);
       }
+      setNotices(noticeRes.data?.data || []);
     } catch (err) {
       console.log("Error fetching community posts", err);
     } finally {
@@ -60,12 +86,18 @@ export const CommunityScreen = ({ navigation }: any) => {
 
   useEffect(() => {
     setLoading(true);
-    fetchCommunityPosts(boardType);
-  }, [boardType]);
+    fetchBoards();
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchCommunityPosts(selectedBoardId);
+  }, [selectedBoardId]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchCommunityPosts(boardType);
+    fetchBoards();
+    fetchCommunityPosts(selectedBoardId);
   };
 
   const handleToggleLike = async (postId: string) => {
@@ -261,74 +293,23 @@ export const CommunityScreen = ({ navigation }: any) => {
         <View style={{ width: 32 }} />
       </View>
 
-      {/* Segmented Capsule Control */}
-      <View style={styles.tabContainer}>
-        <View style={[styles.capsuleBackground, { backgroundColor: colors.bgCard || "#18181b" }]}>
-          <TouchableOpacity
-            style={styles.tabButton}
-            onPress={() => setBoardType("anonymous")}
-            activeOpacity={0.85}
-          >
-            {boardType === "anonymous" ? (
-              <LinearGradient
-                colors={["#8b5cf6", "#ec4899"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.activeGradientTab}
-              >
-                <Ionicons name="eye-off-outline" size={16} color="#ffffff" style={{ marginRight: 6 }} />
-                <Text style={styles.activeTabText}>익명게시판</Text>
-              </LinearGradient>
-            ) : (
-              <View style={styles.inactiveTab}>
-                <Ionicons
-                  name="eye-off-outline"
-                  size={16}
-                  color={colors.textSecondary}
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={[styles.inactiveTabText, { color: colors.textSecondary }]}>
-                  익명게시판
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.tabButton}
-            onPress={() => setBoardType("info")}
-            activeOpacity={0.85}
-          >
-            {boardType === "info" ? (
-              <LinearGradient
-                colors={["#8b5cf6", "#ec4899"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.activeGradientTab}
-              >
-                <Ionicons
-                  name="information-circle-outline"
-                  size={16}
-                  color="#ffffff"
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={styles.activeTabText}>정보게시판</Text>
-              </LinearGradient>
-            ) : (
-              <View style={styles.inactiveTab}>
-                <Ionicons
-                  name="information-circle-outline"
-                  size={16}
-                  color={colors.textSecondary}
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={[styles.inactiveTabText, { color: colors.textSecondary }]}>
-                  정보게시판
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
+      <View style={styles.boardArea}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.boardScroll}>
+          {parentBoards.map((board) => (
+            <TouchableOpacity key={board.id} style={[styles.boardChip, { backgroundColor: selectedParentId === board.id ? colors.accentPurple : colors.bgCard }]} onPress={() => { setSelectedParentId(board.id); const firstChild = boards.find((item) => item.parent_id === board.id); setSelectedBoardId(firstChild?.id || board.id); }}>
+              <Text style={{ color: selectedParentId === board.id ? "#fff" : colors.textPrimary, fontWeight: "700" }}>{board.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        {childBoards.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subBoardScroll}>
+            {childBoards.map((board) => (
+              <TouchableOpacity key={board.id} style={[styles.subBoardChip, { borderColor: selectedBoardId === board.id ? colors.accentBlue : colors.borderColor }]} onPress={() => setSelectedBoardId(board.id)}>
+                <Text style={{ color: selectedBoardId === board.id ? colors.accentBlue : colors.textSecondary, fontWeight: "700" }}>{board.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
       </View>
 
       {/* Post List */}
@@ -342,6 +323,7 @@ export const CommunityScreen = ({ navigation }: any) => {
           keyExtractor={(item) => item.id}
           renderItem={renderPostItem}
           contentContainerStyle={styles.listContent}
+          ListHeaderComponent={notices.length ? <View style={styles.noticeList}>{notices.map((notice) => <View key={notice.id} style={[styles.noticeCard, { backgroundColor: colors.bgCard, borderColor: colors.accentPurple }]}><Ionicons name="megaphone-outline" size={16} color={colors.accentPurple} /><View style={{ flex: 1 }}><Text style={[styles.noticeTitle, { color: colors.textPrimary }]}>{notice.title}</Text><Text style={[styles.noticeContent, { color: colors.textSecondary }]} numberOfLines={2}>{notice.content}</Text></View></View>)}</View> : null}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -352,7 +334,7 @@ export const CommunityScreen = ({ navigation }: any) => {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons
-                name={boardType === "anonymous" ? "eye-off-outline" : "information-circle-outline"}
+                name={selectedBoard?.is_anonymous ? "eye-off-outline" : "information-circle-outline"}
                 size={48}
                 color={colors.textSecondary}
                 style={{ marginBottom: 12 }}
@@ -361,7 +343,7 @@ export const CommunityScreen = ({ navigation }: any) => {
                 등록된 게시글이 없습니다.
               </Text>
               <Text style={[styles.emptySubText, { color: colors.textSecondary }]}>
-                {boardType === "anonymous"
+                {selectedBoard?.is_anonymous
                   ? "익명으로 자유롭게 이야기 나누어보세요!"
                   : "유용한 정보와 궁금한 점을 공유해보세요!"}
               </Text>
@@ -392,20 +374,22 @@ export const CommunityScreen = ({ navigation }: any) => {
       {/* Modals */}
       <CreateCommunityPostModal
         visible={createModalVisible}
-        initialBoardType={boardType}
+        initialBoardType={selectedBoard?.is_anonymous ? "anonymous" : "info"}
+        boardId={selectedBoardId}
+        boardName={selectedBoard?.name}
         editPost={editingPost}
         onClose={() => {
           setCreateModalVisible(false);
           setEditingPost(null);
         }}
-        onPostCreated={() => fetchCommunityPosts(boardType)}
+        onPostCreated={() => fetchCommunityPosts(selectedBoardId)}
       />
 
       <CommunityPostDetailModal
         visible={detailModalVisible}
         postId={selectedPostId}
         onClose={() => setDetailModalVisible(false)}
-        onPostUpdated={() => fetchCommunityPosts(boardType)}
+        onPostUpdated={() => fetchCommunityPosts(selectedBoardId)}
       />
 
       <ImageDetailViewerModal
@@ -439,6 +423,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
+  boardArea: { paddingVertical: 10 },
+  boardScroll: { paddingHorizontal: 16, gap: 8 },
+  subBoardScroll: { paddingHorizontal: 16, paddingTop: 8, gap: 8 },
+  boardChip: { paddingHorizontal: 16, height: 38, borderRadius: 19, justifyContent: "center" },
+  subBoardChip: { paddingHorizontal: 14, height: 34, borderRadius: 17, borderWidth: 1, justifyContent: "center" },
+  noticeList: { marginBottom: 12, gap: 8 },
+  noticeCard: { flexDirection: "row", gap: 8, borderWidth: 1, borderRadius: 10, padding: 10 },
+  noticeTitle: { fontSize: 13, fontWeight: "800", marginBottom: 2 },
+  noticeContent: { fontSize: 12, lineHeight: 17 },
   capsuleBackground: {
     flexDirection: "row",
     borderRadius: 25,

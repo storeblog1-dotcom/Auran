@@ -228,6 +228,7 @@ async def _build_post_responses_batch(
                 user=user_summary,
                 title=post.title,
                 board_type=post.board_type,
+                board_id=post.board_id,
                 caption=post.caption,
                 location=post.location,
                 visibility=post.visibility,
@@ -265,6 +266,7 @@ async def create_post(
         user_id=current_user.id,
         title=data.title,
         board_type=data.board_type,
+        board_id=data.board_id,
         caption=data.caption,
         location=data.location,
         visibility=data.visibility or "public",
@@ -355,7 +357,8 @@ async def get_feed_posts(
 
 async def get_community_posts(
     db: AsyncSession,
-    board_type: str,
+    board_type: str | None = None,
+    board_id: uuid.UUID | None = None,
     current_user: Optional[User] = None,
     limit: int = 30,
     offset: int = 0,
@@ -365,7 +368,7 @@ async def get_community_posts(
     count_res = await db.execute(
         select(func.count(Post.id))
         .join(User, Post.user_id == User.id)
-        .where(Post.board_type == board_type, visibility_clause)
+        .where((Post.board_id == board_id) if board_id else (Post.board_type == board_type), visibility_clause)
     )
     total = count_res.scalar() or 0
 
@@ -373,7 +376,7 @@ async def get_community_posts(
         select(Post)
         .join(User, Post.user_id == User.id)
         .options(selectinload(Post.user), selectinload(Post.media))
-        .where(Post.board_type == board_type, visibility_clause)
+        .where((Post.board_id == board_id) if board_id else (Post.board_type == board_type), visibility_clause)
         .order_by(Post.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -452,6 +455,8 @@ async def update_post(
         post.title = data.title
     if data.board_type is not None:
         post.board_type = data.board_type
+    if data.board_id is not None:
+        post.board_id = data.board_id
     if data.caption is not None:
         post.caption = data.caption
     if data.location is not None:

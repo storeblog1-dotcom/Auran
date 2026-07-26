@@ -23,6 +23,8 @@ import { useTheme } from "../context/ThemeContext";
 interface CreateCommunityPostModalProps {
   visible: boolean;
   initialBoardType?: "anonymous" | "info";
+  boardId?: string | null;
+  boardName?: string;
   editPost?: any;
   onClose: () => void;
   onPostCreated: () => void;
@@ -31,6 +33,8 @@ interface CreateCommunityPostModalProps {
 export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> = ({
   visible,
   initialBoardType = "anonymous",
+  boardId,
+  boardName,
   editPost,
   onClose,
   onPostCreated,
@@ -146,6 +150,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
         await api.patch(`/posts/${editPost.id}`, {
           title: title.trim(),
           board_type: boardType,
+          board_id: boardId,
           caption: caption.trim(),
           media: mediaList,
         });
@@ -155,6 +160,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
           title: title.trim(),
           caption: caption.trim(),
           board_type: boardType,
+          board_id: boardId,
           media: mediaList,
         });
 
@@ -205,58 +211,9 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
           </View>
 
           <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-            {/* Board Selector Capsule */}
-            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>게시판 선택</Text>
-            <View style={[styles.segmentedContainer, { backgroundColor: colors.bgCard || "#18181b" }]}>
-              <TouchableOpacity
-                style={styles.segmentedTab}
-                onPress={() => setBoardType("anonymous")}
-                activeOpacity={0.8}
-              >
-                {boardType === "anonymous" ? (
-                  <LinearGradient
-                    colors={["#8b5cf6", "#ec4899"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.segmentedTabGradient}
-                  >
-                    <Ionicons name="eye-off-outline" size={16} color="#ffffff" style={{ marginRight: 6 }} />
-                    <Text style={styles.segmentedTextActive}>익명게시판</Text>
-                  </LinearGradient>
-                ) : (
-                  <View style={styles.segmentedTabInactive}>
-                    <Ionicons name="eye-off-outline" size={16} color={colors.textSecondary} style={{ marginRight: 6 }} />
-                    <Text style={[styles.segmentedTextInactive, { color: colors.textSecondary }]}>
-                      익명게시판
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.segmentedTab}
-                onPress={() => setBoardType("info")}
-                activeOpacity={0.8}
-              >
-                {boardType === "info" ? (
-                  <LinearGradient
-                    colors={["#8b5cf6", "#ec4899"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.segmentedTabGradient}
-                  >
-                    <Ionicons name="information-circle-outline" size={16} color="#ffffff" style={{ marginRight: 6 }} />
-                    <Text style={styles.segmentedTextActive}>정보게시판</Text>
-                  </LinearGradient>
-                ) : (
-                  <View style={styles.segmentedTabInactive}>
-                    <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} style={{ marginRight: 6 }} />
-                    <Text style={[styles.segmentedTextInactive, { color: colors.textSecondary }]}>
-                      정보게시판
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>게시판</Text>
+            <View style={[styles.selectedBoard, { backgroundColor: colors.bgCard || "#18181b" }]}>
+              <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{boardName || "게시판"}</Text>
             </View>
 
             {/* Title Input */}
@@ -380,6 +337,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderRadius: 25,
     padding: 4,
+    marginBottom: 20,
+  },
+  selectedBoard: {
+    minHeight: 46,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    justifyContent: "center",
     marginBottom: 20,
   },
   segmentedTab: {

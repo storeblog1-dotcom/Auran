@@ -173,6 +173,9 @@ export const AdminScreen = ({ navigation }: any) => {
         <TouchableOpacity style={styles.refreshBtn} onPress={handleRefresh} activeOpacity={0.7}>
           <Ionicons name="refresh" size={20} color={primaryAccent} />
         </TouchableOpacity>
+        <TouchableOpacity style={styles.refreshBtn} onPress={() => navigation.navigate("CommunityAdmin")} activeOpacity={0.7}>
+          <Ionicons name="list-outline" size={20} color={primaryAccent} />
+        </TouchableOpacity>
       </View>
 
       {/* Segmented Tab Bar */}

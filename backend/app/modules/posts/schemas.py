@@ -29,6 +29,7 @@ class PostCreateRequest(BaseModel):
 
     title: Optional[str] = Field(None, max_length=255, description="게시글 제목")
     board_type: Optional[str] = Field(None, description="게시판 구분 (anonymous/info)")
+    board_id: Optional[UUID] = Field(None, description="커뮤니티 게시판 ID")
     caption: Optional[str] = Field(None, description="게시물 문구")
     location: Optional[str] = Field(None, max_length=255, description="위치")
     visibility: Optional[str] = Field(
@@ -46,6 +47,7 @@ class PostUpdateRequest(BaseModel):
 
     title: Optional[str] = Field(None, max_length=255, description="게시글 제목")
     board_type: Optional[str] = Field(None, description="게시판 구분 (anonymous/info)")
+    board_id: Optional[UUID] = Field(None, description="커뮤니티 게시판 ID")
     caption: Optional[str] = Field(None, description="게시물 문구")
     location: Optional[str] = Field(None, max_length=255, description="위치")
     visibility: Optional[str] = Field(None, pattern=r"^(public|followers|private)$")
@@ -115,6 +117,7 @@ class PostResponse(BaseModel):
     user: PostUserSummary
     title: Optional[str] = None
     board_type: Optional[str] = None
+    board_id: Optional[UUID] = None
     caption: Optional[str] = None
     location: Optional[str] = None
     visibility: str = "public"
