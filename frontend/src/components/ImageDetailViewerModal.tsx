@@ -34,9 +34,11 @@ interface ImageDetailViewerModalProps {
   onClose: () => void;
 }
 
-const ZoomableImage = ({ uri, imageWidth, imageHeight }: { uri: string; imageWidth: number; imageHeight: number }) => {
+const ZoomableImage = ({ uri, imageWidth, imageHeight, onZoomChange }: { uri: string; imageWidth: number; imageHeight: number; onZoomChange: (zoomed: boolean) => void }) => {
   const scale = useRef(new Animated.Value(1)).current;
   const currentScale = useRef(1);
+  const panRef = useRef<any>(null);
+  const pinchRef = useRef<any>(null);
   const panX = useRef(new Animated.Value(0)).current;
   const panY = useRef(new Animated.Value(0)).current;
   const offsetX = useRef(new Animated.Value(0)).current;
@@ -46,10 +48,15 @@ const ZoomableImage = ({ uri, imageWidth, imageHeight }: { uri: string; imageWid
   const onPanEvent = Animated.event([{ nativeEvent: { translationX: panX, translationY: panY } }], { useNativeDriver: true });
 
   const finishPinch = (event: any) => {
+    if (event.nativeEvent.state === State.BEGAN || event.nativeEvent.state === State.ACTIVE) {
+      onZoomChange(true);
+      return;
+    }
     if (event.nativeEvent.state !== State.END) return;
     const nextScale = Math.min(4, Math.max(1, currentScale.current * event.nativeEvent.scale));
     currentScale.current = nextScale;
     scale.setValue(nextScale);
+    onZoomChange(nextScale > 1);
   };
 
   const finishPan = (event: any) => {
@@ -65,16 +72,16 @@ const ZoomableImage = ({ uri, imageWidth, imageHeight }: { uri: string; imageWid
   };
 
   return (
-    <PanGestureHandler onGestureEvent={onPanEvent} onHandlerStateChange={finishPan}>
+    <PanGestureHandler ref={panRef} simultaneousHandlers={pinchRef} onGestureEvent={onPanEvent} onHandlerStateChange={finishPan}>
       <Animated.View style={styles.zoomImageHolder}>
-        <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={finishPinch}>
+        <PinchGestureHandler ref={pinchRef} simultaneousHandlers={panRef} onGestureEvent={onPinchEvent} onHandlerStateChange={finishPinch}>
           <Animated.View style={styles.zoomImageHolder}>
             <Animated.Image source={{ uri }} style={{ width: imageWidth, height: imageHeight, transform: [{ scale }, { translateX: Animated.add(offsetX, panX) }, { translateY: Animated.add(offsetY, panY) }] }} resizeMode="contain" />
           </Animated.View>
         </PinchGestureHandler>
         <View style={styles.zoomControls}>
-          <TouchableOpacity style={styles.zoomButton} onPress={() => { const next = Math.min(4, currentScale.current + 0.5); currentScale.current = next; Animated.spring(scale, { toValue: next, useNativeDriver: true }).start(); }}><Text style={styles.zoomButtonText}>+</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.zoomButton} onPress={() => { const next = Math.max(1, currentScale.current - 0.5); currentScale.current = next; Animated.spring(scale, { toValue: next, useNativeDriver: true }).start(); }}><Text style={styles.zoomButtonText}>−</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.zoomButton} onPress={() => { const next = Math.min(4, currentScale.current + 0.5); currentScale.current = next; onZoomChange(true); Animated.spring(scale, { toValue: next, useNativeDriver: true }).start(); }}><Text style={styles.zoomButtonText}>+</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.zoomButton} onPress={() => { const next = Math.max(1, currentScale.current - 0.5); currentScale.current = next; onZoomChange(next > 1); Animated.spring(scale, { toValue: next, useNativeDriver: true }).start(); }}><Text style={styles.zoomButtonText}>−</Text></TouchableOpacity>
         </View>
       </Animated.View>
     </PanGestureHandler>
@@ -88,11 +95,13 @@ export const ImageDetailViewerModal: React.FC<ImageDetailViewerModalProps> = ({
   onClose,
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [isZoomed, setIsZoomed] = useState(false);
   const [imageRatios, setImageRatios] = useState<{ [key: number]: number }>({});
 
   useEffect(() => {
     if (visible) {
       setCurrentIndex(initialIndex);
+      setIsZoomed(false);
       // Fetch natural dimensions for each image to compute accurate aspect ratio
       media.forEach((item, index) => {
         const fullUri = getFullImageUrl(item.media_url);
@@ -137,7 +146,7 @@ export const ImageDetailViewerModal: React.FC<ImageDetailViewerModalProps> = ({
 
     return (
       <View key={item.id || `view-${index}`} style={styles.slideContainer}>
-        <ZoomableImage uri={fullUri} imageWidth={imgWidth} imageHeight={imgHeight} />
+        <ZoomableImage uri={fullUri} imageWidth={imgWidth} imageHeight={imgHeight} onZoomChange={setIsZoomed} />
       </View>
     );
   };
@@ -170,6 +179,7 @@ export const ImageDetailViewerModal: React.FC<ImageDetailViewerModalProps> = ({
           data={media}
           keyExtractor={(item, index) => item.id || `media-${index}`}
           horizontal
+          scrollEnabled={!isZoomed}
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           onScroll={handleScroll}
