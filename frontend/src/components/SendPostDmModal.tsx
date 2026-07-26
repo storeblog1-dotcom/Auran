@@ -98,7 +98,8 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
   }, [chatRooms, mutualFollowers]);
 
   const handleSendDm = async (recipient: Recipient) => {
-    if (!post || sendingUserId || sentUserIds[recipient.user.id]) return;
+    const note = message.trim();
+    if (!post || !note || sendingUserId || sentUserIds[recipient.user.id]) return;
 
     setSendingUserId(recipient.user.id);
     try {
@@ -112,18 +113,9 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
       }
 
       await api.post(`/direct/rooms/${roomId}/messages`, {
-        content: `@${post.user?.username || "사용자"}님의 게시물을 보냈습니다.`,
-        message_type: "POST",
-        shared_post_id: post.id,
+        content: note,
+        message_type: "TEXT",
       });
-
-      const note = message.trim();
-      if (note) {
-        await api.post(`/direct/rooms/${roomId}/messages`, {
-          content: note,
-          message_type: "TEXT",
-        });
-      }
 
       setSentUserIds((previous) => ({
         ...previous,
@@ -154,7 +146,7 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
           <View style={styles.handleBar} />
           <View style={styles.header}>
             <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-              메시지로 보내기
+              메시지 보내기
             </Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={22} color={colors.textSecondary} />
@@ -170,7 +162,7 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
                 color: colors.textPrimary,
               },
             ]}
-            placeholder="함께 보낼 메시지 입력 (선택)"
+            placeholder="보낼 메시지를 입력하세요"
             placeholderTextColor={colors.textMuted}
             value={message}
             onChangeText={setMessage}
@@ -232,10 +224,12 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
                         {
                           backgroundColor: isSent
                             ? colors.bgInput
-                            : colors.accentBlue,
+                            : message.trim()
+                              ? colors.accentBlue
+                              : colors.bgInput,
                         },
                       ]}
-                      disabled={isSending || isSent}
+                      disabled={isSending || isSent || !message.trim()}
                       onPress={() => handleSendDm(item)}
                     >
                       {isSending ? (
@@ -244,7 +238,7 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
                         <Text
                           style={[
                             styles.sendButtonText,
-                            isSent && { color: colors.textMuted },
+                            (isSent || !message.trim()) && { color: colors.textMuted },
                           ]}
                         >
                           {isSent ? "보냄" : "보내기"}
