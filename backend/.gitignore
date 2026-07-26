@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.env
+gcp-sa-key.json
+*.key.json
+
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Alembic
+# (alembic/versions는 커밋 대상)
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
