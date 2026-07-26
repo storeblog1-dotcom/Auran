@@ -50,6 +50,10 @@ const ZoomableImage = ({ uri, imageWidth, imageHeight }: { uri: string; imageWid
     <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={finishPinch}>
       <Animated.View style={styles.zoomImageHolder}>
         <Animated.Image source={{ uri }} style={{ width: imageWidth, height: imageHeight, transform: [{ scale }] }} resizeMode="contain" />
+        <View style={styles.zoomControls}>
+          <TouchableOpacity style={styles.zoomButton} onPress={() => { const next = Math.min(4, currentScale.current + 0.5); currentScale.current = next; Animated.spring(scale, { toValue: next, useNativeDriver: true }).start(); }}><Text style={styles.zoomButtonText}>+</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.zoomButton} onPress={() => { const next = Math.max(1, currentScale.current - 0.5); currentScale.current = next; Animated.spring(scale, { toValue: next, useNativeDriver: true }).start(); }}><Text style={styles.zoomButtonText}>−</Text></TouchableOpacity>
+        </View>
       </Animated.View>
     </PinchGestureHandler>
   );
@@ -220,6 +224,26 @@ const styles = StyleSheet.create({
     height: SCREEN_HEIGHT,
     justifyContent: "center",
     alignItems: "center",
+  },
+  zoomControls: {
+    position: "absolute",
+    right: 18,
+    bottom: 28,
+    gap: 10,
+  },
+  zoomButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.6)",
+  },
+  zoomButtonText: {
+    color: "#fff",
+    fontSize: 28,
+    lineHeight: 30,
+    fontWeight: "600",
   },
 });
 
