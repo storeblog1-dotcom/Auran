@@ -20,6 +20,10 @@ class BoardUpdateRequest(BaseModel):
     sort_order: int | None = None
 
 
+class BoardReorderRequest(BaseModel):
+    direction: str = Field(pattern=r"^(up|down)$")
+
+
 class BoardResponse(BaseModel):
     id: UUID
     name: str

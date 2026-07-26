@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.modules.auth.dependencies import get_current_active_user
 from app.modules.auth.models import User
 from app.modules.community.models import CommunityBoard, CommunityNotice
-from app.modules.community.schemas import BoardCreateRequest, BoardResponse, BoardUpdateRequest, NoticeCreateRequest, NoticeResponse
+from app.modules.community.schemas import BoardCreateRequest, BoardReorderRequest, BoardResponse, BoardUpdateRequest, NoticeCreateRequest, NoticeResponse
 
 router = APIRouter(prefix="/community", tags=["Community"])
 
@@ -64,6 +64,27 @@ async def update_board(board_id: UUID, body: BoardUpdateRequest, current_user: U
     await db.commit()
     await db.refresh(board)
     return ApiResponse.ok(board)
+
+
+@router.post("/admin/boards/{board_id}/reorder", response_model=ApiResponse[list[BoardResponse]])
+async def reorder_board(board_id: UUID, body: BoardReorderRequest, current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
+    require_admin(current_user)
+    board = (await db.execute(select(CommunityBoard).where(CommunityBoard.id == board_id))).scalar_one_or_none()
+    if not board:
+        raise NotFoundException("게시판")
+    siblings = (await db.execute(select(CommunityBoard).where(CommunityBoard.parent_id == board.parent_id).order_by(CommunityBoard.sort_order, CommunityBoard.name, CommunityBoard.created_at))).scalars().all()
+    index = next((i for i, item in enumerate(siblings) if item.id == board.id), -1)
+    target_index = index - 1 if body.direction == "up" else index + 1
+    if index < 0 or target_index < 0 or target_index >= len(siblings):
+        return ApiResponse.ok(siblings)
+    siblings[index], siblings[target_index] = siblings[target_index], siblings[index]
+    # Normalize positions so boards created before ordering was added (all 0)
+    # can also be reliably rearranged.
+    for position, sibling in enumerate(siblings):
+        sibling.sort_order = position
+    await db.commit()
+    result = await db.execute(select(CommunityBoard).order_by(CommunityBoard.parent_id.nullsfirst(), CommunityBoard.sort_order, CommunityBoard.name))
+    return ApiResponse.ok(result.scalars().all())
 
 
 @router.delete("/admin/boards/{board_id}", response_model=ApiResponse[dict])
