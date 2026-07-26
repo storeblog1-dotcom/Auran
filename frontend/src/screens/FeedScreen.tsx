@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Alert,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -617,7 +618,12 @@ export const FeedScreen = ({ navigation }: any) => {
         </View>
       </View>
 
-      <View style={[styles.sectionTabs, { borderBottomColor: colors.borderLight }]}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={[styles.sectionTabs, { borderBottomColor: colors.borderLight }]}
+        contentContainerStyle={styles.sectionTabsContent}
+      >
         <TouchableOpacity style={styles.sectionTab}>
           <Text style={[styles.sectionTabText, { color: colors.textPrimary }]}>피드</Text>
           <LinearGradient colors={colors.auraGradient} style={styles.sectionIndicator} />
@@ -628,7 +634,10 @@ export const FeedScreen = ({ navigation }: any) => {
         <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("Community", { section: "info" })}>
           <Text style={[styles.sectionTabText, { color: colors.textSecondary }]}>정보게시판</Text>
         </TouchableOpacity>
-      </View>
+        <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("Community", { section: "partner" })}>
+          <Text style={[styles.sectionTabText, { color: colors.textSecondary }]}>제휴업소</Text>
+        </TouchableOpacity>
+      </ScrollView>
 
       {loading ? (
         <View style={styles.center}>
@@ -789,13 +798,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   sectionTabs: {
-    height: 48,
-    flexDirection: "row",
-    paddingHorizontal: 14,
+    maxHeight: 48,
     borderBottomWidth: 1,
   },
+  sectionTabsContent: {
+    minHeight: 48,
+    alignItems: "center",
+    paddingHorizontal: 12,
+    gap: 6,
+  },
   sectionTab: {
-    flex: 1,
+    minWidth: 88,
+    height: 48,
+    paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
