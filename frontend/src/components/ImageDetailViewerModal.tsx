@@ -162,12 +162,6 @@ export const ZoomableImage = ({
     onShouldBlockNativeResponder: () => true,
   })).current;
 
-  const changeScale = (delta: number) => {
-    const nextScale = Math.max(1, Math.min(4, transformRef.current.scale + delta));
-    const position = nextScale === 1 ? { x: 0, y: 0 } : clampPosition(transformRef.current.x, transformRef.current.y, nextScale);
-    updateTransform({ scale: nextScale, ...position });
-  };
-
   return (
     <View style={styles.zoomImageHolder}>
       <View style={styles.zoomGestureSurface} {...responder.panHandlers}>
@@ -184,10 +178,6 @@ export const ZoomableImage = ({
           }}
           resizeMode="contain"
         />
-      </View>
-      <View style={styles.zoomControls}>
-        <TouchableOpacity style={styles.zoomButton} onPress={() => changeScale(0.5)}><Text style={styles.zoomButtonText}>+</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.zoomButton} onPress={() => changeScale(-0.5)}><Text style={styles.zoomButtonText}>−</Text></TouchableOpacity>
       </View>
     </View>
   );
@@ -381,26 +371,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
-  },
-  zoomControls: {
-    position: "absolute",
-    right: 18,
-    bottom: 28,
-    gap: 10,
-  },
-  zoomButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.6)",
-  },
-  zoomButtonText: {
-    color: "#fff",
-    fontSize: 28,
-    lineHeight: 30,
-    fontWeight: "600",
   },
 });
 
