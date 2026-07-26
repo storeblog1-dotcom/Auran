@@ -9,6 +9,7 @@ import {
   Dimensions,
   Alert,
   Platform,
+  StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -59,6 +60,7 @@ export const StoryDetailModal: React.FC<StoryDetailModalProps> = ({
       onRequestClose={onClose}
     >
       <View style={styles.container}>
+        <StatusBar hidden />
         {/* 풀스크린 배경 이미지 */}
         <Image source={{ uri: imageUrl }} style={styles.backgroundImage} resizeMode="cover" />
 

@@ -13,6 +13,7 @@ import {
   PanResponder,
   FlatList,
   ScrollView,
+  StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -283,6 +284,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
       onRequestClose={onClose}
     >
       <View style={styles.container}>
+        <StatusBar hidden />
         {/* 배경 이미지 — 풀스크린 */}
         <Image
           source={{ uri: getFullImageUrl(currentStory.media_url) }}
