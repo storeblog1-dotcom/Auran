@@ -53,7 +53,7 @@ async def create_post(
 async def get_feed_posts(
     page: int = Query(1, ge=1, description="페이지 번호"),
     size: int = Query(20, ge=1, le=100, description="페이지당 개수"),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User | None = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[list[PostResponse]]:
     offset = (page - 1) * size
@@ -403,5 +403,3 @@ async def report_post(
     db.add(report)
     await db.commit()
     return ApiResponse.ok({"message": "post reported successfully"})
-
-

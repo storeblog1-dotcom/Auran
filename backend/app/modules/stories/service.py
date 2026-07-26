@@ -18,6 +18,20 @@ from app.modules.stories.schemas import (
 from app.modules.users.models import Follow
 
 
+async def _can_view_story(
+    db: AsyncSession, story: Story, current_user: User
+) -> bool:
+    if story.user_id == current_user.id:
+        return True
+    follower_res = await db.execute(
+        select(Follow.id).where(
+            Follow.follower_id == current_user.id,
+            Follow.following_id == story.user_id,
+        )
+    )
+    return follower_res.scalar_one_or_none() is not None
+
+
 async def create_story(
     db: AsyncSession, current_user: User, data: StoryCreateRequest
 ) -> StoryResponse:
@@ -145,6 +159,12 @@ async def record_story_view(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="스토리를 찾을 수 없습니다.",
+        )
+
+    if not await _can_view_story(db, story, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Story is not available to this user.",
         )
 
     # 이미 보았는지 확인

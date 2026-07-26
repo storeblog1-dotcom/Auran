@@ -1,7 +1,7 @@
 import uuid
 from typing import List, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -23,6 +23,63 @@ from app.modules.posts.schemas import (
     PostUserSummary,
 )
 from app.modules.users.models import Follow
+
+
+def _post_visibility_clause(current_user_id: Optional[uuid.UUID]):
+    """계정 공개 설정과 게시물 공개 범위를 함께 적용한다."""
+    public_author = User.is_private.is_(False)
+
+    if current_user_id is None:
+        return and_(public_author, Post.visibility == "public")
+
+    is_follower = exists(
+        select(Follow.id).where(
+            Follow.follower_id == current_user_id,
+            Follow.following_id == Post.user_id,
+        )
+    )
+    author_visible = or_(
+        Post.user_id == current_user_id,
+        and_(public_author, Post.user_id != current_user_id),
+        is_follower,
+    )
+    post_visible = or_(
+        Post.visibility == "public",
+        and_(Post.visibility == "followers", is_follower),
+        and_(Post.visibility == "private", Post.user_id == current_user_id),
+    )
+    return and_(author_visible, post_visible)
+
+
+async def _can_view_post(
+    db: AsyncSession, post: Post, current_user: Optional[User]
+) -> bool:
+    if current_user and post.user_id == current_user.id:
+        return True
+    if post.user.is_private:
+        if not current_user:
+            return False
+        follower_res = await db.execute(
+            select(Follow.id).where(
+                Follow.follower_id == current_user.id,
+                Follow.following_id == post.user_id,
+            )
+        )
+        if follower_res.scalar_one_or_none() is None:
+            return False
+    if post.visibility == "private":
+        return False
+    if post.visibility == "followers":
+        if not current_user:
+            return False
+        follower_res = await db.execute(
+            select(Follow.id).where(
+                Follow.follower_id == current_user.id,
+                Follow.following_id == post.user_id,
+            )
+        )
+        return follower_res.scalar_one_or_none() is not None
+    return True
 
 
 async def _build_post_responses_batch(
@@ -245,37 +302,36 @@ async def get_post_by_id(
     post = result.scalar_one_or_none()
     if not post:
         raise NotFoundException("Post")
+    if not await _can_view_post(db, post, current_user):
+        raise NotFoundException("Post")
 
     return await _build_post_response(db, post, current_user=current_user)
 
 
 async def get_feed_posts(
     db: AsyncSession,
-    current_user: User,
+    current_user: Optional[User] = None,
     limit: int = 20,
     offset: int = 0,
 ) -> tuple[List[PostResponse], int]:
     """로그인한 사용자가 팔로우하는 사람들과 본인의 피드 게시물을 최신순으로 조회합니다 (게시판 글 제외)."""
-    follow_res = await db.execute(
-        select(Follow.following_id).where(Follow.follower_id == current_user.id)
-    )
-    following_ids = [row[0] for row in follow_res.fetchall()]
-    target_user_ids = following_ids + [current_user.id]
-
     count_res = await db.execute(
-        select(func.count(Post.id)).where(
-            Post.user_id.in_(target_user_ids),
+        select(func.count(Post.id))
+        .join(User, Post.user_id == User.id)
+        .where(
             Post.board_type.is_(None),
+            _post_visibility_clause(current_user.id if current_user else None),
         )
     )
     total = count_res.scalar() or 0
 
     result = await db.execute(
         select(Post)
+        .join(User, Post.user_id == User.id)
         .options(selectinload(Post.user), selectinload(Post.media))
         .where(
-            Post.user_id.in_(target_user_ids),
             Post.board_type.is_(None),
+            _post_visibility_clause(current_user.id if current_user else None),
         )
         .order_by(Post.created_at.desc())
         .offset(offset)
@@ -331,15 +387,24 @@ async def get_user_posts(
 
     # 총 게시물 수
     count_res = await db.execute(
-        select(func.count(Post.id)).where(Post.user_id == target_user.id)
+        select(func.count(Post.id))
+        .join(User, Post.user_id == User.id)
+        .where(
+            Post.user_id == target_user.id,
+            _post_visibility_clause(current_user.id if current_user else None),
+        )
     )
     total = count_res.scalar() or 0
 
     # 게시물 목록
     result = await db.execute(
         select(Post)
+        .join(User, Post.user_id == User.id)
         .options(selectinload(Post.user), selectinload(Post.media))
-        .where(Post.user_id == target_user.id)
+        .where(
+            Post.user_id == target_user.id,
+            _post_visibility_clause(current_user.id if current_user else None),
+        )
         .order_by(Post.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -856,12 +921,19 @@ async def get_explore_posts(
     offset: int = 0,
 ) -> tuple[List[PostResponse], int]:
     """전체 사용자의 게시물을 최신순으로 조회하여 탐색(Explore) 피드에 제공합니다."""
-    count_res = await db.execute(select(func.count(Post.id)))
+    visibility_clause = _post_visibility_clause(current_user.id if current_user else None)
+    count_res = await db.execute(
+        select(func.count(Post.id))
+        .join(User, Post.user_id == User.id)
+        .where(visibility_clause)
+    )
     total = count_res.scalar() or 0
 
     result = await db.execute(
         select(Post)
+        .join(User, Post.user_id == User.id)
         .options(selectinload(Post.user), selectinload(Post.media))
+        .where(visibility_clause)
         .order_by(Post.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -967,5 +1039,3 @@ async def get_user_reposted_posts(
 
     items = await _build_post_responses_batch(db, list(posts), current_user=current_user)
     return items, total
-
-
