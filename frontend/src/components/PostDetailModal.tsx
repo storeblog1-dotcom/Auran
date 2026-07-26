@@ -111,13 +111,24 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
     );
 
     try {
+      let response;
       if (currentIsFollowing) {
-        await api.delete(`/users/${username}/follow`);
+        response = await api.delete(`/users/${username}/follow`);
         Alert.alert("알림", `@${username} 님을 언팔로우했습니다.`);
       } else {
-        await api.post(`/users/${username}/follow`);
+        response = await api.post(`/users/${username}/follow`);
         Alert.alert("알림", `@${username} 님을 팔로우했습니다.`);
       }
+      const confirmedIsFollowing =
+        response.data?.data?.is_following ?? !currentIsFollowing;
+      setPost((prev: any) =>
+        prev?.user
+          ? {
+              ...prev,
+              user: { ...prev.user, is_following: confirmedIsFollowing },
+            }
+          : prev
+      );
       if (onPostUpdated) onPostUpdated();
     } catch (err) {
       console.log("Error toggling follow in detail modal", err);
@@ -143,12 +154,23 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
             },
           },
           {
-            text: post.is_public === false ? "공개로 변경" : "비공개로 변경",
+            text: post.visibility === "private" ? "전체 공개로 변경" : "비공개로 변경",
             onPress: async () => {
               try {
-                await api.patch(`/posts/${post.id}`, { is_public: post.is_public === false });
-                setPost((prev: any) => (prev ? { ...prev, is_public: post.is_public === false } : null));
-                Alert.alert("완료", post.is_public === false ? "게시물이 공개 전환되었습니다." : "게시물이 비공개 전환되었습니다.");
+                const nextVisibility =
+                  post.visibility === "private" ? "public" : "private";
+                await api.patch(`/posts/${post.id}`, {
+                  visibility: nextVisibility,
+                });
+                setPost((prev: any) =>
+                  prev ? { ...prev, visibility: nextVisibility } : null
+                );
+                Alert.alert(
+                  "완료",
+                  nextVisibility === "public"
+                    ? "게시물이 전체 공개로 변경되었습니다."
+                    : "게시물이 비공개로 변경되었습니다."
+                );
                 if (onPostUpdated) onPostUpdated();
               } catch (e) {
                 Alert.alert("오류", "공개 여부 변경에 실패했습니다.");

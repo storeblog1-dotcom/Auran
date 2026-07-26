@@ -97,11 +97,22 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
     });
 
     try {
+      let response;
       if (currentIsFollowing) {
-        await api.delete(`/users/${username}/follow`);
+        response = await api.delete(`/users/${username}/follow`);
       } else {
-        await api.post(`/users/${username}/follow`);
+        response = await api.post(`/users/${username}/follow`);
       }
+      const result = response.data?.data;
+      setProfile((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              is_following: result?.is_following ?? nextIsFollowing,
+              followers_count: result?.followers_count ?? nextFollowersCount,
+            }
+          : prev
+      );
     } catch (err) {
       console.log("Error toggling follow in UserProfileScreen", err);
       fetchProfileData();

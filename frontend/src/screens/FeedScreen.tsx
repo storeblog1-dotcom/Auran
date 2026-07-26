@@ -287,13 +287,26 @@ export const FeedScreen = ({ navigation }: any) => {
     );
 
     try {
+      let response;
       if (currentIsFollowing) {
-        await api.delete(`/users/${username}/follow`);
+        response = await api.delete(`/users/${username}/follow`);
         Alert.alert("알림", `@${username} 님을 언팔로우했습니다.`);
       } else {
-        await api.post(`/users/${username}/follow`);
+        response = await api.post(`/users/${username}/follow`);
         Alert.alert("알림", `@${username} 님을 팔로우했습니다.`);
       }
+      const confirmedIsFollowing =
+        response.data?.data?.is_following ?? !currentIsFollowing;
+      setPosts((prevPosts) =>
+        prevPosts.map((p) =>
+          p.user?.username === username
+            ? {
+                ...p,
+                user: { ...p.user, is_following: confirmedIsFollowing },
+              }
+            : p
+        )
+      );
     } catch (err) {
       console.log("Error toggling follow from feed options", err);
       fetchFeed();
@@ -316,16 +329,27 @@ export const FeedScreen = ({ navigation }: any) => {
             onPress: () => navigation.navigate("CreatePost", { editPost: item }),
           },
           {
-            text: item.is_public === false ? "공개로 변경" : "비공개로 변경",
+            text: item.visibility === "private" ? "전체 공개로 변경" : "비공개로 변경",
             onPress: async () => {
               try {
-                await api.patch(`/posts/${item.id}`, { is_public: item.is_public === false });
+                const nextVisibility =
+                  item.visibility === "private" ? "public" : "private";
+                await api.patch(`/posts/${item.id}`, {
+                  visibility: nextVisibility,
+                });
                 setPosts((prev: any[]) =>
                   prev.map((p) =>
-                    p.id === item.id ? { ...p, is_public: item.is_public === false } : p
+                    p.id === item.id
+                      ? { ...p, visibility: nextVisibility }
+                      : p
                   )
                 );
-                Alert.alert("완료", item.is_public === false ? "게시물이 공개 전환되었습니다." : "게시물이 비공개 전환되었습니다.");
+                Alert.alert(
+                  "완료",
+                  nextVisibility === "public"
+                    ? "게시물이 전체 공개로 변경되었습니다."
+                    : "게시물이 비공개로 변경되었습니다."
+                );
               } catch (e) {
                 Alert.alert("오류", "공개 여부 변경에 실패했습니다.");
               }

@@ -63,11 +63,21 @@ export const UserListModal: React.FC<UserListModalProps> = ({
     );
 
     try {
+      let response;
       if (isFollowing) {
-        await api.delete(`/users/${targetUsername}/follow`);
+        response = await api.delete(`/users/${targetUsername}/follow`);
       } else {
-        await api.post(`/users/${targetUsername}/follow`);
+        response = await api.post(`/users/${targetUsername}/follow`);
       }
+      const confirmedIsFollowing =
+        response.data?.data?.is_following ?? !isFollowing;
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.username === targetUsername
+            ? { ...u, is_following: confirmedIsFollowing }
+            : u
+        )
+      );
     } catch (err) {
       console.log("Error toggling follow in modal", err);
       fetchUserList();

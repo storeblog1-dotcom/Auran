@@ -230,6 +230,7 @@ async def _build_post_responses_batch(
                 board_type=post.board_type,
                 caption=post.caption,
                 location=post.location,
+                visibility=post.visibility,
                 media=media_responses,
                 likes_count=likes_map.get(post.id, 0),
                 comments_count=comments_map.get(post.id, 0),
@@ -455,6 +456,8 @@ async def update_post(
         post.caption = data.caption
     if data.location is not None:
         post.location = data.location
+    if data.visibility is not None:
+        post.visibility = data.visibility
 
     if data.media is not None:
         for old_m in list(post.media):

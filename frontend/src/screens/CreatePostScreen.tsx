@@ -26,6 +26,18 @@ interface MediaPickItem {
   asset?: any;
 }
 
+type PostVisibility = "public" | "followers" | "private";
+
+const VISIBILITY_OPTIONS: Array<{
+  value: PostVisibility;
+  label: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+}> = [
+  { value: "public", label: "전체 공개", icon: "earth-outline" },
+  { value: "followers", label: "팔로워 공개", icon: "people-outline" },
+  { value: "private", label: "비공개", icon: "lock-closed-outline" },
+];
+
 export const CreatePostScreen = ({ route, navigation }: any) => {
   const { colors } = useTheme();
 
@@ -39,6 +51,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
   const [caption, setCaption] = useState("");
   const [hashtags, setHashtags] = useState("");
   const [locationName, setLocationName] = useState("");
+  const [visibility, setVisibility] = useState<PostVisibility>("public");
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -81,6 +94,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
       setCaption(captionText);
       setHashtags(hashtagsText);
       setLocationName(editPost.location || "");
+      setVisibility(editPost.visibility || "public");
 
       if (editPost.media && Array.isArray(editPost.media)) {
         const loaded: MediaPickItem[] = editPost.media.map((m: any, idx: number) => ({
@@ -94,6 +108,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
       setCaption("");
       setHashtags("");
       setLocationName("");
+      setVisibility("public");
       fetchCurrentGPSLocation();
     }
   }, [editPost]);
@@ -218,6 +233,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
         await api.patch(`/posts/${editPost.id}`, {
           caption: finalCaption,
           location: locationName || null,
+          visibility,
         });
 
         Alert.alert("성공", "게시물이 수정되었습니다.");
@@ -262,6 +278,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
         await api.post("/posts", {
           caption: finalCaption,
           location: locationName || null,
+          visibility,
           media: uploadedMediaList,
         });
 
@@ -421,7 +438,44 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
           </View>
         </View>
 
-        {/* ── 5. 맨 아래 대형 버튼 ── */}
+        <View style={styles.inputSection}>
+          <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>공개 범위</Text>
+          <View style={styles.visibilityRow}>
+            {VISIBILITY_OPTIONS.map((option) => {
+              const selected = visibility === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.visibilityOption,
+                    {
+                      backgroundColor: selected ? colors.accentBlue : colors.bgInput,
+                      borderColor: selected ? colors.accentBlue : colors.borderColor,
+                    },
+                  ]}
+                  onPress={() => setVisibility(option.value)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons
+                    name={option.icon}
+                    size={18}
+                    color={selected ? "#fff" : colors.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.visibilityText,
+                      { color: selected ? "#fff" : colors.textPrimary },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* ── 6. 맨 아래 대형 버튼 ── */}
         <TouchableOpacity
           style={[
             styles.shareBtn,
@@ -604,6 +658,25 @@ const styles = StyleSheet.create({
   locationInput: {
     flex: 1,
     fontSize: 14,
+  },
+  visibilityRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  visibilityOption: {
+    flex: 1,
+    minHeight: 64,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingHorizontal: 4,
+  },
+  visibilityText: {
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center",
   },
 
   /* 맨 아래 공유하기 버튼 */

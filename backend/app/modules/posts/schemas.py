@@ -32,7 +32,9 @@ class PostCreateRequest(BaseModel):
     caption: Optional[str] = Field(None, description="게시물 문구")
     location: Optional[str] = Field(None, max_length=255, description="위치")
     visibility: Optional[str] = Field(
-        "public", description="공개 범위 (public: 전체공개, followers: 팔로워 공개, private: 비공개)"
+        "public",
+        pattern=r"^(public|followers|private)$",
+        description="공개 범위 (public: 전체공개, followers: 팔로워 공개, private: 비공개)",
     )
     media: List[PostMediaCreate] = Field(
         default=[], description="미디어 목록"
@@ -46,6 +48,7 @@ class PostUpdateRequest(BaseModel):
     board_type: Optional[str] = Field(None, description="게시판 구분 (anonymous/info)")
     caption: Optional[str] = Field(None, description="게시물 문구")
     location: Optional[str] = Field(None, max_length=255, description="위치")
+    visibility: Optional[str] = Field(None, pattern=r"^(public|followers|private)$")
     media: Optional[List[PostMediaCreate]] = Field(None, description="수정할 미디어 목록")
 
 
@@ -114,6 +117,7 @@ class PostResponse(BaseModel):
     board_type: Optional[str] = None
     caption: Optional[str] = None
     location: Optional[str] = None
+    visibility: str = "public"
     media: List[PostMediaResponse]
     likes_count: int = 0
     comments_count: int = 0
@@ -159,5 +163,3 @@ class PostRepostToggleResponse(BaseModel):
     post_id: UUID
     is_reposted: bool
     reposts_count: int
-
-

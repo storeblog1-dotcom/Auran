@@ -116,11 +116,21 @@ export const SearchScreen = ({ navigation }: any) => {
     );
 
     try {
+      let response;
       if (currentIsFollowing) {
-        await api.delete(`/users/${username}/follow`);
+        response = await api.delete(`/users/${username}/follow`);
       } else {
-        await api.post(`/users/${username}/follow`);
+        response = await api.post(`/users/${username}/follow`);
       }
+      const confirmedIsFollowing =
+        response.data?.data?.is_following ?? !currentIsFollowing;
+      setSearchResults((prev) =>
+        prev.map((u) =>
+          u.username === username
+            ? { ...u, is_following: confirmedIsFollowing }
+            : u
+        )
+      );
     } catch (err) {
       console.log("Error toggling follow", err);
       searchUsers(query);
