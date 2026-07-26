@@ -25,19 +25,27 @@ import { ImageDetailViewerModal } from "../components/ImageDetailViewerModal";
 import { AuraLogoText } from "../components/AuraLogoText";
 
 const { width } = Dimensions.get("window");
-type CommunitySection = "anonymous" | "info";
+type CommunitySection = "anonymous" | "info" | "partner";
 const ALL_ANONYMOUS_BOARD_ID = "__all_anonymous__";
+const PARTNER_BOARD_NAME = "\uC81C\uD734\uC5C5\uC18C";
 const ANONYMOUS_CATEGORY_ORDER = [
   { slug: "anonymous-worries", name: "고민상담" },
   { slug: "anonymous-relationship", name: "연애·관계" },
   { slug: "anonymous-daily", name: "일상" },
   { slug: "anonymous-coming-out", name: "커밍아웃" },
 ];
+const isPartnerBoardRecord = (board: any) =>
+  String(board?.slug || "").toLowerCase().includes("partner")
+  || String(board?.name || "").includes(PARTNER_BOARD_NAME);
 
 export const CommunityScreen = ({ navigation, route }: any) => {
   const { colors } = useTheme();
   const { user: currentUser } = useAuth();
-  const requestedSection: CommunitySection = route?.params?.section === "info" ? "info" : "anonymous";
+  const requestedSection: CommunitySection = route?.params?.section === "partner"
+    ? "partner"
+    : route?.params?.section === "info"
+      ? "info"
+      : "anonymous";
   const [section, setSection] = useState<CommunitySection>(requestedSection);
   const [boards, setBoards] = useState<any[]>([]);
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
@@ -65,9 +73,13 @@ export const CommunityScreen = ({ navigation, route }: any) => {
       (String(selectedBoard.slug || "").toLowerCase().includes("partner") ||
         String(selectedBoard.name || "").includes("제휴업소"))
   );
+  const selectedIsPartnerBoard = Boolean(selectedBoard && isPartnerBoardRecord(selectedBoard));
   const sectionBoards = boards.filter((board) => {
     const isAnonymous = Boolean(board.is_anonymous || String(board.slug || "").toLowerCase().includes("anonymous"));
-    return section === "anonymous" ? isAnonymous : !isAnonymous;
+    const isPartner = isPartnerBoardRecord(board);
+    if (section === "anonymous") return isAnonymous;
+    if (section === "partner") return !isAnonymous && isPartner;
+    return !isAnonymous && !isPartner;
   });
   const parentBoards = sectionBoards.filter((board) => !board.parent_id);
   const childBoards = sectionBoards.filter((board) => board.parent_id === selectedParentId);
@@ -84,7 +96,10 @@ export const CommunityScreen = ({ navigation, route }: any) => {
   const selectFirstBoard = (list: any[], nextSection: CommunitySection) => {
     const candidates = list.filter((board) => {
       const isAnonymous = Boolean(board.is_anonymous || String(board.slug || "").toLowerCase().includes("anonymous"));
-      return nextSection === "anonymous" ? isAnonymous : !isAnonymous;
+      const isPartner = isPartnerBoardRecord(board);
+      if (nextSection === "anonymous") return isAnonymous;
+      if (nextSection === "partner") return !isAnonymous && isPartner;
+      return !isAnonymous && !isPartner;
     });
     const first = candidates.find((board) => !board.parent_id) || candidates[0];
     const firstChild = candidates.find((board) => board.parent_id === first?.id);
@@ -360,7 +375,12 @@ export const CommunityScreen = ({ navigation, route }: any) => {
         </View>
       </View>
 
-      <View style={[styles.sectionTabs, { borderBottomColor: colors.borderLight }]}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={[styles.sectionTabs, { borderBottomColor: colors.borderLight }]}
+        contentContainerStyle={styles.sectionTabsContent}
+      >
         <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("MainTabs", { screen: "Feed" })}>
           <Text style={[styles.sectionTabText, { color: colors.textSecondary }]}>피드</Text>
         </TouchableOpacity>
@@ -372,16 +392,13 @@ export const CommunityScreen = ({ navigation, route }: any) => {
           <Text style={[styles.sectionTabText, { color: section === "info" ? colors.textPrimary : colors.textSecondary }]}>정보게시판</Text>
           {section === "info" && <LinearGradient colors={colors.auraGradient} style={styles.sectionIndicator} />}
         </TouchableOpacity>
-      </View>
+        <TouchableOpacity style={styles.sectionTab} onPress={() => changeSection("partner")}>
+          <Text style={[styles.sectionTabText, { color: section === "partner" ? colors.textPrimary : colors.textSecondary }]}>제휴업소</Text>
+          {section === "partner" && <LinearGradient colors={colors.auraGradient} style={styles.sectionIndicator} />}
+        </TouchableOpacity>
+      </ScrollView>
 
       <View style={styles.boardArea}>
-        {section !== "anonymous" && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.boardScroll}>
-          {parentBoards.map((board) => (
-            <TouchableOpacity key={board.id} style={[styles.boardChip, { backgroundColor: selectedParentId === board.id ? colors.accentPurple : colors.bgInput, borderColor: selectedParentId === board.id ? colors.accentPurple : colors.borderColor }]} onPress={() => { setSelectedParentId(board.id); const firstChild = sectionBoards.find((item) => item.parent_id === board.id); setSelectedBoardId(firstChild?.id || board.id); }}>
-              <Text style={{ color: selectedParentId === board.id ? "#fff" : colors.textSecondary, fontWeight: "700" }}>{board.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>}
         {visibleChildBoards.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subBoardScroll}>
             {visibleChildBoards.map((board) => (
@@ -447,7 +464,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
       )}
 
       {/* Floating Action Button (FAB) */}
-      {(!isPartnerBoard || currentUser?.is_admin) && <TouchableOpacity
+      {(!selectedIsPartnerBoard || currentUser?.is_admin) && <TouchableOpacity
         style={styles.fab}
         onPress={() => {
           setEditingPost(null);
@@ -523,13 +540,19 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   sectionTabs: {
-    height: 48,
-    flexDirection: "row",
+    maxHeight: 48,
     borderBottomWidth: 1,
-    paddingHorizontal: 14,
+  },
+  sectionTabsContent: {
+    minHeight: 48,
+    alignItems: "center",
+    paddingHorizontal: 12,
+    gap: 6,
   },
   sectionTab: {
-    flex: 1,
+    minWidth: 88,
+    height: 48,
+    paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
