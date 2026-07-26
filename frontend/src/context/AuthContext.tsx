@@ -10,6 +10,7 @@ export interface User {
   bio?: string;
   website?: string;
   is_private?: boolean;
+  allow_message_requests?: boolean;
   is_admin?: boolean;
   profile_image_url?: string;
   posts_count?: number;

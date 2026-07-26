@@ -27,6 +27,9 @@ export const EditProfileScreen = ({ navigation }: any) => {
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
   const [profileImageUrl, setProfileImageUrl] = useState(user?.profile_image_url || "");
   const [isPrivate, setIsPrivate] = useState(user?.is_private || false);
+  const [allowMessageRequests, setAllowMessageRequests] = useState(
+    user?.allow_message_requests !== false
+  );
   const [saving, setSaving] = useState(false);
 
   // Password section
@@ -41,6 +44,7 @@ export const EditProfileScreen = ({ navigation }: any) => {
       setBio(user.bio || "");
       setProfileImageUrl(user.profile_image_url || "");
       setIsPrivate(user.is_private || false);
+      setAllowMessageRequests(user.allow_message_requests !== false);
     }
   }, [user]);
 
@@ -52,6 +56,20 @@ export const EditProfileScreen = ({ navigation }: any) => {
     } catch (error) {
       console.error("Failed to toggle privacy", error);
       setIsPrivate(!value);
+    }
+  };
+
+  const handleToggleMessageRequests = async (value: boolean) => {
+    setAllowMessageRequests(value);
+    try {
+      await api.patch("/users/me/message-settings", {
+        allow_message_requests: value,
+      });
+      await refreshProfile();
+    } catch (error) {
+      console.error("Failed to update message request setting", error);
+      setAllowMessageRequests(!value);
+      Alert.alert("오류", "메시지 요청 설정을 변경하지 못했습니다.");
     }
   };
 
@@ -220,6 +238,24 @@ export const EditProfileScreen = ({ navigation }: any) => {
           <Switch
             value={isPrivate}
             onValueChange={handleTogglePrivacy}
+            trackColor={{ false: "#3a3a3c", true: "#0095f6" }}
+            thumbColor="#fff"
+          />
+        </View>
+
+        <View style={styles.privacyRow}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+              <Ionicons name="chatbubble-ellipses-outline" size={16} color="#fff" />
+              <Text style={styles.privacyTitle}>비팔로워 메시지 요청</Text>
+            </View>
+            <Text style={styles.privacySub}>
+              끄면 서로 팔로우하지 않은 사용자가 새 메시지 요청을 보낼 수 없습니다.
+            </Text>
+          </View>
+          <Switch
+            value={allowMessageRequests}
+            onValueChange={handleToggleMessageRequests}
             trackColor={{ false: "#3a3a3c", true: "#0095f6" }}
             thumbColor="#fff"
           />

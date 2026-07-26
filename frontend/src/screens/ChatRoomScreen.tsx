@@ -11,6 +11,7 @@ import {
   Platform,
   ActivityIndicator,
   StatusBar,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -42,7 +43,12 @@ interface ChatMessage {
 
 export const ChatRoomScreen = ({ route, navigation }: any) => {
   const insets = useSafeAreaInsets();
-  const { roomId, targetUser } = route.params;
+  const {
+    roomId,
+    targetUser,
+    requestStatus = "ACCEPTED",
+    isOutgoingRequest = false,
+  } = route.params;
   const { user: currentUser } = useAuth();
   const { colors } = useTheme();
 
@@ -52,18 +58,21 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
   const [sendingImage, setSendingImage] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [postModalVisible, setPostModalVisible] = useState(false);
+  const [roomRequestStatus, setRoomRequestStatus] = useState(requestStatus);
+  const [hasSentRequestMessage, setHasSentRequestMessage] = useState(false);
 
   const ws = useRef<WebSocket | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
+    if (requestStatus !== "ACCEPTED") return;
     // Focus message input automatically when entering from deep link
     const focusTimer = setTimeout(() => {
       inputRef.current?.focus();
     }, 500);
     return () => clearTimeout(focusTimer);
-  }, []);
+  }, [requestStatus]);
 
   useEffect(() => {
     let isMounted = true;
@@ -73,7 +82,12 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
       try {
         const response = await api.get(`/direct/rooms/${roomId}/messages`);
         if (isMounted) {
-          setMessages(response.data);
+          const messageItems = response.data?.data || response.data;
+          const normalizedMessages = Array.isArray(messageItems)
+            ? messageItems
+            : [];
+          setMessages(normalizedMessages);
+          setHasSentRequestMessage(normalizedMessages.length > 0);
         }
       } catch (error) {
         console.error("Failed to load room messages", error);
@@ -99,6 +113,11 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
       socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          if (data.type === "error") {
+            setMessages((prev) => prev.filter((message) => !message.id.startsWith("temp-")));
+            Alert.alert("전송 제한", data.message || "메시지를 보낼 수 없습니다.");
+            return;
+          }
           const newMsg = data.message || (data.id ? data : null);
           if (newMsg && newMsg.id) {
             setMessages((prev) => {
@@ -138,6 +157,16 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
 
   const handleSendText = async () => {
     if (!inputText.trim()) return;
+    if (
+      roomRequestStatus === "PENDING" &&
+      (!isOutgoingRequest || hasSentRequestMessage)
+    ) {
+      Alert.alert(
+        "요청 승인 대기 중",
+        "상대방이 메시지 요청을 승인할 때까지 추가 메시지를 보낼 수 없습니다."
+      );
+      return;
+    }
     const contentToSend = inputText.trim();
     setInputText("");
 
@@ -162,7 +191,19 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
 
     try {
-      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      if (roomRequestStatus === "PENDING") {
+        const res = await api.post(`/direct/rooms/${roomId}/messages`, {
+          content: contentToSend,
+          message_type: "TEXT",
+        });
+        const savedMessage = res.data?.data || res.data;
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === tempId ? savedMessage : message
+          )
+        );
+        setHasSentRequestMessage(true);
+      } else if (ws.current && ws.current.readyState === WebSocket.OPEN) {
         ws.current.send(
           JSON.stringify({
             action: "send_message",
@@ -179,10 +220,24 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
       }
     } catch (error) {
       console.error("Failed to send message", error);
+      setMessages((prev) => prev.filter((message) => message.id !== tempId));
+      Alert.alert(
+        "전송 실패",
+        (error as any)?.response?.data?.error?.message ||
+          (error as any)?.response?.data?.detail ||
+          "메시지를 보내지 못했습니다."
+      );
     }
   };
 
   const handlePickAndSendImage = async () => {
+    if (roomRequestStatus !== "ACCEPTED") {
+      Alert.alert(
+        "전송 제한",
+        "상대방이 요청을 승인하기 전에는 사진을 보낼 수 없습니다."
+      );
+      return;
+    }
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
@@ -245,6 +300,34 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
       alert("이미지 전송에 실패했습니다.");
     } finally {
       setSendingImage(false);
+    }
+  };
+
+  const handleAcceptRequest = async () => {
+    try {
+      await api.post(`/direct/rooms/${roomId}/accept`);
+      setRoomRequestStatus("ACCEPTED");
+    } catch (error: any) {
+      Alert.alert(
+        "오류",
+        error.response?.data?.error?.message ||
+          error.response?.data?.detail ||
+          "메시지 요청을 승인하지 못했습니다."
+      );
+    }
+  };
+
+  const handleRejectRequest = async () => {
+    try {
+      await api.post(`/direct/rooms/${roomId}/reject`);
+      navigation.goBack();
+    } catch (error: any) {
+      Alert.alert(
+        "오류",
+        error.response?.data?.error?.message ||
+          error.response?.data?.detail ||
+          "메시지 요청을 거절하지 못했습니다."
+      );
     }
   };
 
@@ -321,6 +404,12 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
     );
   };
 
+  const canCompose =
+    roomRequestStatus === "ACCEPTED" ||
+    (roomRequestStatus === "PENDING" &&
+      isOutgoingRequest &&
+      !hasSentRequestMessage);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}>
       {/* Header */}
@@ -344,6 +433,36 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
         </View>
         <View style={{ width: 30 }} />
       </View>
+
+      {roomRequestStatus === "PENDING" && (
+        <View style={[styles.requestBanner, { backgroundColor: colors.bgInput }]}>
+          <Text style={[styles.requestBannerText, { color: colors.textSecondary }]}>
+            {isOutgoingRequest
+              ? hasSentRequestMessage
+                ? "메시지 요청을 보냈습니다. 상대방의 승인을 기다리고 있습니다."
+                : "비팔로워에게는 첫 텍스트 메시지 1개만 보낼 수 있습니다."
+              : "이 메시지 요청을 승인해야 대화를 계속할 수 있습니다."}
+          </Text>
+          {!isOutgoingRequest && (
+            <View style={styles.requestBannerActions}>
+              <TouchableOpacity
+                style={[styles.requestActionButton, { backgroundColor: colors.accentBlue }]}
+                onPress={handleAcceptRequest}
+              >
+                <Text style={styles.requestActionPrimaryText}>승인</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.requestActionButton, { backgroundColor: colors.bgCard }]}
+                onPress={handleRejectRequest}
+              >
+                <Text style={[styles.requestActionSecondaryText, { color: colors.textPrimary }]}>
+                  거절
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Messages List */}
       <KeyboardAvoidingView
@@ -371,37 +490,50 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
           <TouchableOpacity
             style={styles.imagePickerBtn}
             onPress={handlePickAndSendImage}
-            disabled={sendingImage}
+            disabled={sendingImage || roomRequestStatus !== "ACCEPTED"}
           >
             {sendingImage ? (
               <ActivityIndicator size="small" color={colors.accentBlue} />
             ) : (
-              <Ionicons name="camera-outline" size={24} color={colors.accentBlue} />
+              <Ionicons
+                name="camera-outline"
+                size={24}
+                color={
+                  roomRequestStatus === "ACCEPTED"
+                    ? colors.accentBlue
+                    : colors.textMuted
+                }
+              />
             )}
           </TouchableOpacity>
 
           <TextInput
             ref={inputRef}
             style={[styles.input, { backgroundColor: colors.bgInput, borderColor: colors.borderColor, color: colors.textPrimary }]}
-            placeholder="메시지 보내기..."
+            placeholder={
+              canCompose
+                ? "메시지 보내기..."
+                : "요청 승인 대기 중"
+            }
             placeholderTextColor={colors.textSecondary}
             value={inputText}
             onChangeText={setInputText}
             multiline
+            editable={canCompose}
           />
 
           <TouchableOpacity
             style={[
               styles.sendBtn,
-              !inputText.trim() && styles.sendBtnDisabled,
+              (!inputText.trim() || !canCompose) && styles.sendBtnDisabled,
             ]}
             onPress={handleSendText}
-            disabled={!inputText.trim()}
+            disabled={!inputText.trim() || !canCompose}
           >
             <Text
               style={[
                 styles.sendBtnText,
-                !inputText.trim() && styles.sendBtnTextDisabled,
+                (!inputText.trim() || !canCompose) && styles.sendBtnTextDisabled,
               ]}
             >
               보내기
@@ -460,6 +592,37 @@ const styles = StyleSheet.create({
   headerFullName: {
     color: "#8e8e8e",
     fontSize: 12,
+  },
+  requestBanner: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  requestBannerText: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    textAlign: "center",
+  },
+  requestBannerActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+  },
+  requestActionButton: {
+    minWidth: 82,
+    minHeight: 34,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  requestActionPrimaryText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  requestActionSecondaryText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   loadingContainer: {
     flex: 1,

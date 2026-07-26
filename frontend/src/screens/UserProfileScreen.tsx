@@ -125,9 +125,11 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
       const res = await api.post("/direct/rooms", {
         target_user_id: profile.id,
       });
-      const room = res.data;
+      const room = res.data?.data || res.data;
       navigation.navigate("ChatRoom", {
         roomId: room.id,
+        requestStatus: room.request_status,
+        isOutgoingRequest: room.is_outgoing_request,
         targetUser: {
           id: profile.id,
           username: profile.username,
@@ -135,8 +137,14 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
           profile_image_url: profile.profile_image_url,
         },
       });
-    } catch (err) {
+    } catch (err: any) {
       console.log("Error starting chat from UserProfileScreen", err);
+      Alert.alert(
+        "메시지를 보낼 수 없음",
+        err.response?.data?.error?.message ||
+          err.response?.data?.detail ||
+          "메시지를 보낼 수 없습니다."
+      );
     }
   };
 

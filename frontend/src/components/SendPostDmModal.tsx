@@ -25,6 +25,7 @@ interface UserInfo {
 interface ChatRoom {
   id: string;
   target_user?: UserInfo | null;
+  request_status?: string;
 }
 
 interface Recipient {
@@ -83,7 +84,7 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
       recipientMap.set(user.id, { user });
     });
     chatRooms.forEach((room) => {
-      if (!room.target_user) return;
+      if (!room.target_user || room.request_status === "PENDING") return;
       recipientMap.set(room.target_user.id, {
         user: room.target_user,
         roomId: room.id,

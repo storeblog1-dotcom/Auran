@@ -26,6 +26,15 @@ class ChatRoom(Base):
     )
     is_group: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    request_status: Mapped[str] = mapped_column(
+        String(20), default="ACCEPTED", nullable=False, index=True
+    )
+    request_sender_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

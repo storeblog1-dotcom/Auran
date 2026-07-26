@@ -45,6 +45,8 @@ class ChatRoomResponse(BaseModel):
     members: list[SenderResponse] = []
     last_message: ChatMessageResponse | None = None
     unread_count: int = 0
+    request_status: str = "ACCEPTED"
+    is_outgoing_request: bool = False
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

@@ -50,6 +50,7 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_private: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    allow_message_requests: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # ─── 타임스탬프 ───────────────────────────────────────────

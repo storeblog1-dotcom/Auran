@@ -161,9 +161,11 @@ const AppContent = () => {
     } else if (toast.type === "DIRECT_MESSAGE") {
       try {
         const res = await api.post("/direct/rooms", { target_user_id: toast.sender.id });
-        const room = res.data;
+        const room = res.data?.data || res.data;
         navigationRef.current.navigate("ChatRoom", {
           roomId: room.id,
+          requestStatus: room.request_status,
+          isOutgoingRequest: room.is_outgoing_request,
           targetUser: {
             id: toast.sender.id,
             username: toast.sender.username,

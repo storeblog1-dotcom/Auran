@@ -85,6 +85,8 @@ class UserMe(BaseModel):
     profile_image_url: str | None
     is_active: bool
     is_verified: bool
+    is_private: bool = False
+    allow_message_requests: bool = True
     is_admin: bool = False
     created_at: datetime
 

@@ -193,6 +193,9 @@ from app.modules.users.models import FollowRequest, UserBlock, Follow
 class PrivacyToggleRequest(BaseModel):
     is_private: bool
 
+class MessageRequestSettingRequest(BaseModel):
+    allow_message_requests: bool
+
 @router.patch("/me/privacy", summary="프로필 공개/비공개 설정 변경")
 async def toggle_privacy(
     body: PrivacyToggleRequest,
@@ -202,6 +205,19 @@ async def toggle_privacy(
     current_user.is_private = body.is_private
     await db.commit()
     return ApiResponse.ok({"is_private": current_user.is_private})
+
+
+@router.patch("/me/message-settings", summary="비팔로워 메시지 요청 수신 설정")
+async def update_message_request_setting(
+    body: MessageRequestSettingRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    current_user.allow_message_requests = body.allow_message_requests
+    await db.commit()
+    return ApiResponse.ok({
+        "allow_message_requests": current_user.allow_message_requests,
+    })
 
 
 @router.get("/me/follow-requests", summary="대기 중인 팔로우 요청 목록 조회")
@@ -301,4 +317,3 @@ async def block_user(
 
     await db.commit()
     return ApiResponse.ok({"message": f"@{username} 님을 차단했습니다."})
-

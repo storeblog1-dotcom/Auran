@@ -3,11 +3,17 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from jose import JWTError
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.common.exceptions import BadRequestException, NotFoundException, UnauthorizedException
+from app.common.exceptions import (
+    AppException,
+    BadRequestException,
+    ForbiddenException,
+    NotFoundException,
+    UnauthorizedException,
+)
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.security import decode_token
 from app.modules.auth.dependencies import get_current_active_user
@@ -22,8 +28,13 @@ from app.modules.direct.schemas import (
     SenderResponse,
 )
 from app.modules.direct.websocket_manager import manager
+from app.modules.users.models import Follow, UserBlock
 
 router = APIRouter(prefix="/direct", tags=["Direct Messages"])
+
+REQUEST_ACCEPTED = "ACCEPTED"
+REQUEST_PENDING = "PENDING"
+REQUEST_REJECTED = "REJECTED"
 
 
 @router.post("/rooms", response_model=ChatRoomResponse, status_code=status.HTTP_201_CREATED)
@@ -41,6 +52,16 @@ async def create_or_get_direct_room(
     # 상대방 존재 여부 확인
     target_user = await get_user_by_id(db, target_user_id)
 
+    if await _users_are_blocked(db, current_user.id, target_user_id):
+        raise ForbiddenException("차단된 사용자와는 메시지를 주고받을 수 없습니다.")
+
+    is_mutual = await _users_are_mutual_followers(
+        db, current_user.id, target_user_id
+    )
+    sender_follows_target = await _user_follows(
+        db, current_user.id, target_user_id
+    )
+
     # 기존 1:1 방 탐색
     query = (
         select(ChatRoom)
@@ -55,10 +76,29 @@ async def create_or_get_direct_room(
     existing_room = result.scalars().first()
 
     if existing_room:
+        if is_mutual and existing_room.request_status != REQUEST_ACCEPTED:
+            existing_room.request_status = REQUEST_ACCEPTED
+            existing_room.request_sender_id = None
+            await db.commit()
+        elif existing_room.request_status == REQUEST_REJECTED:
+            raise ForbiddenException("거절된 메시지 요청입니다.")
         room_id = existing_room.id
     else:
+        if (
+            not is_mutual
+            and not sender_follows_target
+            and not target_user.allow_message_requests
+        ):
+            raise ForbiddenException(
+                "상대방이 팔로워가 아닌 사람의 메시지 요청을 받지 않습니다."
+            )
+
         # 새로 생성
-        new_room = ChatRoom(is_group=False)
+        new_room = ChatRoom(
+            is_group=False,
+            request_status=REQUEST_ACCEPTED if is_mutual else REQUEST_PENDING,
+            request_sender_id=None if is_mutual else current_user.id,
+        )
         db.add(new_room)
         await db.flush()
 
@@ -93,11 +133,142 @@ async def list_user_rooms(
     rooms = result.scalars().all()
 
     response_list = []
+    changed = False
     for r in rooms:
+        if await _users_are_blocked_in_room(db, r, current_user.id):
+            continue
+        if (
+            r.request_status == REQUEST_PENDING
+            and await _room_members_are_mutual(db, r.id)
+        ):
+            r.request_status = REQUEST_ACCEPTED
+            r.request_sender_id = None
+            changed = True
+        if r.request_status == REQUEST_REJECTED:
+            continue
+        if (
+            r.request_status == REQUEST_PENDING
+            and r.request_sender_id != current_user.id
+        ):
+            continue
         formatted = await _format_room_response(db, r.id, current_user.id)
         response_list.append(formatted)
 
+    if changed:
+        await db.commit()
     return response_list
+
+
+@router.get("/requests", response_model=List[ChatRoomResponse])
+async def list_message_requests(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """내가 받은 미승인 메시지 요청 목록"""
+    subquery = (
+        select(ChatRoomMember.room_id)
+        .where(ChatRoomMember.user_id == current_user.id)
+        .scalar_subquery()
+    )
+    result = await db.execute(
+        select(ChatRoom)
+        .where(
+            ChatRoom.id.in_(subquery),
+            ChatRoom.request_status == REQUEST_PENDING,
+            ChatRoom.request_sender_id != current_user.id,
+        )
+        .order_by(ChatRoom.updated_at.desc())
+    )
+
+    response_list = []
+    changed = False
+    for room in result.scalars().all():
+        if await _users_are_blocked_in_room(db, room, current_user.id):
+            continue
+        if await _room_members_are_mutual(db, room.id):
+            room.request_status = REQUEST_ACCEPTED
+            room.request_sender_id = None
+            changed = True
+            continue
+        formatted = await _format_room_response(
+            db, room.id, current_user.id
+        )
+        if formatted.last_message is not None:
+            response_list.append(formatted)
+
+    if changed:
+        await db.commit()
+    return response_list
+
+
+@router.post("/rooms/{room_id}/accept", response_model=ChatRoomResponse)
+async def accept_message_request(
+    room_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    room = await _get_request_room_for_recipient(db, room_id, current_user.id)
+    if await _users_are_blocked_in_room(db, room, current_user.id):
+        raise ForbiddenException("차단된 사용자의 메시지 요청입니다.")
+
+    room.request_status = REQUEST_ACCEPTED
+    room.request_sender_id = None
+    await db.commit()
+    return await _format_room_response(db, room.id, current_user.id)
+
+
+@router.post("/rooms/{room_id}/reject", status_code=status.HTTP_200_OK)
+async def reject_message_request(
+    room_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    room = await _get_request_room_for_recipient(db, room_id, current_user.id)
+    room.request_status = REQUEST_REJECTED
+    await db.commit()
+    return {"message": "메시지 요청을 거절했습니다."}
+
+
+@router.post("/rooms/{room_id}/block", status_code=status.HTTP_200_OK)
+async def block_message_request_sender(
+    room_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    room = await _get_request_room_for_recipient(db, room_id, current_user.id)
+    sender_id = room.request_sender_id
+    if sender_id is None:
+        raise BadRequestException("차단할 요청 발신자를 찾을 수 없습니다.")
+
+    existing_block = await db.execute(
+        select(UserBlock).where(
+            UserBlock.blocker_id == current_user.id,
+            UserBlock.blocked_id == sender_id,
+        )
+    )
+    if existing_block.scalar_one_or_none() is None:
+        db.add(UserBlock(blocker_id=current_user.id, blocked_id=sender_id))
+
+    follows_result = await db.execute(
+        select(Follow).where(
+            or_(
+                and_(
+                    Follow.follower_id == current_user.id,
+                    Follow.following_id == sender_id,
+                ),
+                and_(
+                    Follow.follower_id == sender_id,
+                    Follow.following_id == current_user.id,
+                ),
+            )
+        )
+    )
+    for follow in follows_result.scalars().all():
+        await db.delete(follow)
+
+    room.request_status = REQUEST_REJECTED
+    await db.commit()
+    return {"message": "사용자를 차단하고 메시지 요청을 삭제했습니다."}
 
 
 @router.get("/rooms/{room_id}/messages", response_model=List[ChatMessageResponse])
@@ -109,6 +280,7 @@ async def get_room_messages(
 ):
     """대화방 메시지 내역 조회 & 읽음 상태 갱신"""
     await _verify_room_member(db, room_id, current_user.id)
+    room = await _get_room(db, room_id)
 
     # 메시지 조회
     stmt = (
@@ -126,7 +298,7 @@ async def get_room_messages(
     )
     m_res = await db.execute(member_stmt)
     member = m_res.scalars().first()
-    if member:
+    if member and room.request_status == REQUEST_ACCEPTED:
         member.last_read_at = func.now()
         await db.commit()
 
@@ -142,6 +314,9 @@ async def send_message_rest(
 ):
     """HTTP REST를 통한 메시지 전송"""
     await _verify_room_member(db, room_id, current_user.id)
+    room = await _authorize_message_send(
+        db, room_id, current_user.id, body
+    )
 
     new_msg = ChatMessage(
         room_id=room_id,
@@ -154,11 +329,7 @@ async def send_message_rest(
     db.add(new_msg)
 
     # 방 updated_at 갱신
-    room_stmt = select(ChatRoom).where(ChatRoom.id == room_id)
-    r_res = await db.execute(room_stmt)
-    room = r_res.scalars().first()
-    if room:
-        room.updated_at = func.now()
+    room.updated_at = func.now()
 
     await db.commit()
     await db.refresh(new_msg)
@@ -190,16 +361,17 @@ async def send_message_rest(
     from app.modules.notifications.models import NotificationType
     from app.modules.notifications.service import create_notification
 
-    for recipient_id in other_members_res.scalars().all():
-        msg_text = body.content if body.content else ("사진 메시지" if body.media_url else "메시지")
-        await create_notification(
-            db,
-            recipient_id=recipient_id,
-            sender_id=current_user.id,
-            type=NotificationType.DIRECT_MESSAGE.value,
-            message=f"{current_user.username}님의 메시지: {msg_text}",
-            direct_message_id=str(new_msg.id),
-        )
+    if room.request_status == REQUEST_ACCEPTED:
+        for recipient_id in other_members_res.scalars().all():
+            msg_text = body.content if body.content else ("사진 메시지" if body.media_url else "메시지")
+            await create_notification(
+                db,
+                recipient_id=recipient_id,
+                sender_id=current_user.id,
+                type=NotificationType.DIRECT_MESSAGE.value,
+                message=f"{current_user.username}님의 메시지: {msg_text}",
+                direct_message_id=str(new_msg.id),
+            )
 
     return new_msg
 
@@ -219,8 +391,10 @@ async def mark_room_as_read(
     if not member:
         raise NotFoundException("대화방 참여자가 아닙니다")
 
-    member.last_read_at = func.now()
-    await db.commit()
+    room = await _get_room(db, room_id)
+    if room.request_status == REQUEST_ACCEPTED:
+        member.last_read_at = func.now()
+        await db.commit()
     return {"message": "read status updated"}
 
 
@@ -250,6 +424,11 @@ async def websocket_endpoint(
         try:
             user = await get_user_by_id(db, user_id)
             await _verify_room_member(db, room_uuid, user.id)
+            room = await _get_room(db, room_uuid)
+            if await _users_are_blocked_in_room(db, room, user.id):
+                raise ForbiddenException(
+                    "차단된 사용자와는 메시지를 주고받을 수 없습니다."
+                )
             sender_info = {
                 "id": str(user.id),
                 "username": user.username,
@@ -272,6 +451,23 @@ async def websocket_endpoint(
             shared_post_id = uuid.UUID(shared_post_id_str) if shared_post_id_str else None
 
             async with AsyncSessionLocal() as db:
+                try:
+                    message_body = ChatMessageCreate(
+                        content=content,
+                        message_type=message_type,
+                        media_url=media_url,
+                        shared_post_id=shared_post_id,
+                    )
+                    room = await _authorize_message_send(
+                        db, room_uuid, user_id, message_body
+                    )
+                except AppException as exc:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": exc.message,
+                    })
+                    continue
+
                 new_msg = ChatMessage(
                     room_id=room_uuid,
                     sender_id=uuid.UUID(sender_info["id"]),
@@ -282,11 +478,7 @@ async def websocket_endpoint(
                 )
                 db.add(new_msg)
 
-                r_stmt = select(ChatRoom).where(ChatRoom.id == room_uuid)
-                r_res = await db.execute(r_stmt)
-                room = r_res.scalars().first()
-                if room:
-                    room.updated_at = func.now()
+                room.updated_at = func.now()
 
                 await db.commit()
                 await db.refresh(new_msg)
@@ -300,16 +492,17 @@ async def websocket_endpoint(
                 from app.modules.notifications.models import NotificationType
                 from app.modules.notifications.service import create_notification
 
-                for recipient_id in other_members_res.scalars().all():
-                    msg_text = content[:30] if content else ("사진 메시지" if media_url else "메시지")
-                    await create_notification(
-                        db,
-                        recipient_id=recipient_id,
-                        sender_id=user_id,
-                        type=NotificationType.DIRECT_MESSAGE.value,
-                        message=f"{sender_info['username']}님의 메시지: {msg_text}",
-                        direct_message_id=str(new_msg.id),
-                    )
+                if room.request_status == REQUEST_ACCEPTED:
+                    for recipient_id in other_members_res.scalars().all():
+                        msg_text = content[:30] if content else ("사진 메시지" if media_url else "메시지")
+                        await create_notification(
+                            db,
+                            recipient_id=recipient_id,
+                            sender_id=user_id,
+                            type=NotificationType.DIRECT_MESSAGE.value,
+                            message=f"{sender_info['username']}님의 메시지: {msg_text}",
+                            direct_message_id=str(new_msg.id),
+                        )
 
                 msg_payload = {
                     "id": str(new_msg.id),
@@ -332,6 +525,168 @@ async def websocket_endpoint(
 
 
 # ─── Helper Functions ─────────────────────────────────────────
+async def _get_room(db: AsyncSession, room_id: uuid.UUID) -> ChatRoom:
+    result = await db.execute(select(ChatRoom).where(ChatRoom.id == room_id))
+    room = result.scalars().first()
+    if not room:
+        raise NotFoundException("대화방")
+    return room
+
+
+async def _room_member_ids(
+    db: AsyncSession, room_id: uuid.UUID
+) -> list[uuid.UUID]:
+    result = await db.execute(
+        select(ChatRoomMember.user_id).where(
+            ChatRoomMember.room_id == room_id
+        )
+    )
+    return list(result.scalars().all())
+
+
+async def _users_are_mutual_followers(
+    db: AsyncSession, first_user_id: uuid.UUID, second_user_id: uuid.UUID
+) -> bool:
+    result = await db.execute(
+        select(func.count(Follow.id)).where(
+            or_(
+                and_(
+                    Follow.follower_id == first_user_id,
+                    Follow.following_id == second_user_id,
+                ),
+                and_(
+                    Follow.follower_id == second_user_id,
+                    Follow.following_id == first_user_id,
+                ),
+            )
+        )
+    )
+    return (result.scalar() or 0) == 2
+
+
+async def _user_follows(
+    db: AsyncSession,
+    follower_id: uuid.UUID,
+    following_id: uuid.UUID,
+) -> bool:
+    result = await db.execute(
+        select(func.count(Follow.id)).where(
+            Follow.follower_id == follower_id,
+            Follow.following_id == following_id,
+        )
+    )
+    return (result.scalar() or 0) > 0
+
+
+async def _users_are_blocked(
+    db: AsyncSession, first_user_id: uuid.UUID, second_user_id: uuid.UUID
+) -> bool:
+    result = await db.execute(
+        select(func.count(UserBlock.id)).where(
+            or_(
+                and_(
+                    UserBlock.blocker_id == first_user_id,
+                    UserBlock.blocked_id == second_user_id,
+                ),
+                and_(
+                    UserBlock.blocker_id == second_user_id,
+                    UserBlock.blocked_id == first_user_id,
+                ),
+            )
+        )
+    )
+    return (result.scalar() or 0) > 0
+
+
+async def _room_members_are_mutual(
+    db: AsyncSession, room_id: uuid.UUID
+) -> bool:
+    member_ids = await _room_member_ids(db, room_id)
+    if len(member_ids) != 2:
+        return False
+    return await _users_are_mutual_followers(
+        db, member_ids[0], member_ids[1]
+    )
+
+
+async def _users_are_blocked_in_room(
+    db: AsyncSession, room: ChatRoom, current_user_id: uuid.UUID
+) -> bool:
+    member_ids = await _room_member_ids(db, room.id)
+    target_user_id = next(
+        (member_id for member_id in member_ids if member_id != current_user_id),
+        None,
+    )
+    if target_user_id is None:
+        return False
+    return await _users_are_blocked(
+        db, current_user_id, target_user_id
+    )
+
+
+async def _get_request_room_for_recipient(
+    db: AsyncSession, room_id: uuid.UUID, current_user_id: uuid.UUID
+) -> ChatRoom:
+    await _verify_room_member(db, room_id, current_user_id)
+    room = await _get_room(db, room_id)
+    if (
+        room.request_status != REQUEST_PENDING
+        or room.request_sender_id == current_user_id
+    ):
+        raise BadRequestException("처리할 수 있는 메시지 요청이 아닙니다.")
+    return room
+
+
+async def _authorize_message_send(
+    db: AsyncSession,
+    room_id: uuid.UUID,
+    sender_id: uuid.UUID,
+    body: ChatMessageCreate,
+) -> ChatRoom:
+    room = await _get_room(db, room_id)
+    if await _users_are_blocked_in_room(db, room, sender_id):
+        raise ForbiddenException(
+            "차단된 사용자와는 메시지를 주고받을 수 없습니다."
+        )
+
+    if room.request_status == REQUEST_ACCEPTED:
+        return room
+    if room.request_status == REQUEST_REJECTED:
+        raise ForbiddenException("거절된 메시지 요청입니다.")
+
+    if await _room_members_are_mutual(db, room.id):
+        room.request_status = REQUEST_ACCEPTED
+        room.request_sender_id = None
+        return room
+
+    if room.request_sender_id != sender_id:
+        raise ForbiddenException(
+            "메시지 요청을 승인한 후 답장할 수 있습니다."
+        )
+
+    if (
+        body.message_type.upper() != "TEXT"
+        or not body.content
+        or not body.content.strip()
+        or body.media_url is not None
+        or body.shared_post_id is not None
+    ):
+        raise ForbiddenException(
+            "상대방이 요청을 승인하기 전에는 텍스트 메시지 1개만 보낼 수 있습니다."
+        )
+
+    count_result = await db.execute(
+        select(func.count(ChatMessage.id)).where(
+            ChatMessage.room_id == room.id
+        )
+    )
+    if (count_result.scalar() or 0) >= 1:
+        raise ForbiddenException(
+            "상대방이 메시지 요청을 승인할 때까지 추가 메시지를 보낼 수 없습니다."
+        )
+    return room
+
+
 async def _verify_room_member(db: AsyncSession, room_id: uuid.UUID, user_id: uuid.UUID):
     stmt = select(ChatRoomMember).where(
         and_(ChatRoomMember.room_id == room_id, ChatRoomMember.user_id == user_id)
@@ -432,5 +787,7 @@ async def _format_room_response(db: AsyncSession, room_id: uuid.UUID, current_us
         members=members_resp,
         last_message=last_msg_resp,
         unread_count=unread_count,
+        request_status=room.request_status,
+        is_outgoing_request=room.request_sender_id == current_user_id,
         updated_at=room.updated_at,
     )
