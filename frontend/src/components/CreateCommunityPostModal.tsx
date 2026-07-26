@@ -199,7 +199,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
                 <LinearGradient
-                  colors={["#8b5cf6", "#ec4899"]}
+                  colors={[colors.accentPurple, colors.accentPink]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.gradientButton}

@@ -593,32 +593,20 @@ export const FeedScreen = ({ navigation }: any) => {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
       {/* Aura+n Top Header */}
       <View style={[styles.header, { backgroundColor: colors.headerBg }]}>
-        <TouchableOpacity style={styles.headerBadgeTouchable} onPress={() => setMyStoriesGridVisible(true)}>
-          <LinearGradient
-            colors={["#8b5cf6", "#ec4899", "#06b6d4"]}
-            style={styles.headerBadgeGradient}
-          >
-            <View style={[styles.headerBadgeInner, { backgroundColor: colors.bgPrimary }]}>
-              <Text style={[styles.headerBadgeText, { color: colors.textPrimary }]}>A+</Text>
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
-
         <AuraLogoText fontSize={26} />
-
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-          <TouchableOpacity onPress={() => navigation.navigate("Community")}>
-            <Ionicons name="people-outline" size={25} color={colors.textPrimary} />
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: colors.bgInput }]} onPress={() => navigation.navigate("Search")}>
+            <Ionicons name="search-outline" size={21} color={colors.textPrimary} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setNotificationsModalVisible(true)} style={{ position: "relative" }}>
-            <Ionicons name="notifications-outline" size={24} color={colors.textPrimary} />
+          <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: colors.bgInput, position: "relative" }]} onPress={() => setNotificationsModalVisible(true)}>
+            <Ionicons name="notifications-outline" size={20} color={colors.textPrimary} />
             {unreadCount > 0 && (
               <View
                 style={{
                   position: "absolute",
                   top: -1,
                   right: -2,
-                  backgroundColor: "#ec4899",
+                  backgroundColor: colors.accentPink,
                   borderRadius: 4,
                   width: 8,
                   height: 8,
@@ -627,6 +615,19 @@ export const FeedScreen = ({ navigation }: any) => {
             )}
           </TouchableOpacity>
         </View>
+      </View>
+
+      <View style={[styles.sectionTabs, { borderBottomColor: colors.borderLight }]}>
+        <TouchableOpacity style={styles.sectionTab}>
+          <Text style={[styles.sectionTabText, { color: colors.textPrimary }]}>피드</Text>
+          <LinearGradient colors={colors.auraGradient} style={styles.sectionIndicator} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("Community", { section: "anonymous" })}>
+          <Text style={[styles.sectionTabText, { color: colors.textSecondary }]}>익명게시판</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("Community", { section: "info" })}>
+          <Text style={[styles.sectionTabText, { color: colors.textSecondary }]}>정보게시판</Text>
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -779,6 +780,34 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 16,
   },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  headerIconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sectionTabs: {
+    height: 48,
+    flexDirection: "row",
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+  },
+  sectionTab: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  sectionTabText: { fontSize: 14, fontWeight: "800" },
+  sectionIndicator: {
+    position: "absolute",
+    bottom: 0,
+    width: 32,
+    height: 3,
+    borderRadius: 3,
+  },
   headerBadgeTouchable: {
     padding: 2,
   },
@@ -823,7 +852,7 @@ const styles = StyleSheet.create({
     padding: 1.5,
     marginHorizontal: 12,
     marginVertical: 10,
-    shadowColor: "#8b5cf6",
+    shadowColor: "#7652df",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.45,
     shadowRadius: 16,
