@@ -61,11 +61,23 @@ export const CommunityScreen = ({ navigation }: any) => {
         setSelectedParentId(first?.id || null);
         setSelectedBoardId(first?.id || null);
       }
-    } catch (err) { console.log("Error fetching community boards", err); }
+    } catch (err) {
+      console.log("Error fetching community boards", err);
+      setBoards([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
 
   const fetchCommunityPosts = async (boardId: string | null) => {
-    if (!boardId) return;
+    if (!boardId) {
+      setPosts([]);
+      setNotices([]);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
       const [postRes, noticeRes] = await Promise.all([
         api.get(`/posts/community?board_id=${boardId}`),
