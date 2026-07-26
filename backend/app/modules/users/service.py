@@ -82,6 +82,7 @@ async def get_user_profile(
 
     can_view_sensitive_profile = (
         is_me
+        or (current_user is not None and current_user.is_admin)
         or target_user.profile_visibility == "public"
         or (
             target_user.profile_visibility == "mutual_followers"

@@ -25,12 +25,16 @@ from app.modules.posts.schemas import (
 from app.modules.users.models import Follow
 
 
-def _post_visibility_clause(current_user_id: Optional[uuid.UUID]):
+def _post_visibility_clause(current_user: Optional[User]):
     """계정 공개 설정과 게시물 공개 범위를 함께 적용한다."""
     public_author = User.is_private.is_(False)
 
-    if current_user_id is None:
+    if current_user is None:
         return and_(public_author, Post.visibility == "public")
+    if current_user.is_admin:
+        return True
+
+    current_user_id = current_user.id
 
     is_follower = exists(
         select(Follow.id).where(
@@ -54,19 +58,10 @@ def _post_visibility_clause(current_user_id: Optional[uuid.UUID]):
 async def _can_view_post(
     db: AsyncSession, post: Post, current_user: Optional[User]
 ) -> bool:
-    if current_user and post.user_id == current_user.id:
+    if current_user and (current_user.is_admin or post.user_id == current_user.id):
         return True
     if post.user.is_private:
-        if not current_user:
-            return False
-        follower_res = await db.execute(
-            select(Follow.id).where(
-                Follow.follower_id == current_user.id,
-                Follow.following_id == post.user_id,
-            )
-        )
-        if follower_res.scalar_one_or_none() is None:
-            return False
+        return False
     if post.visibility == "private":
         return False
     if post.visibility == "followers":
@@ -182,7 +177,9 @@ async def _build_post_responses_batch(
             )
             for m in sorted(post.media, key=lambda x: x.order)
         ]
-        is_mine = (current_user is not None) and (post.user_id == current_user.id)
+        is_mine = current_user is not None and (
+            current_user.is_admin or post.user_id == current_user.id
+        )
         if post.board_type == "anonymous":
             user_summary = PostUserSummary(
                 id=uuid.UUID(int=0),
@@ -209,7 +206,7 @@ async def _build_post_responses_batch(
                     full_name="익명 사용자",
                     profile_image_url=pc.user.profile_image_url,
                 )
-            if current_user and pc.user.id == current_user.id:
+            if current_user and (current_user.is_admin or pc.user.id == current_user.id):
                 pc_copy.is_mine = True
             final_previews.append(pc_copy)
 
@@ -320,7 +317,7 @@ async def get_feed_posts(
         .join(User, Post.user_id == User.id)
         .where(
             Post.board_type.is_(None),
-            _post_visibility_clause(current_user.id if current_user else None),
+            _post_visibility_clause(current_user),
         )
     )
     total = count_res.scalar() or 0
@@ -331,7 +328,7 @@ async def get_feed_posts(
         .options(selectinload(Post.user), selectinload(Post.media))
         .where(
             Post.board_type.is_(None),
-            _post_visibility_clause(current_user.id if current_user else None),
+            _post_visibility_clause(current_user),
         )
         .order_by(Post.created_at.desc())
         .offset(offset)
@@ -351,15 +348,19 @@ async def get_community_posts(
     offset: int = 0,
 ) -> tuple[List[PostResponse], int]:
     """커뮤니티 게시판(익명게시판 / 정보게시판) 게시물 목록 조회"""
+    visibility_clause = _post_visibility_clause(current_user)
     count_res = await db.execute(
-        select(func.count(Post.id)).where(Post.board_type == board_type)
+        select(func.count(Post.id))
+        .join(User, Post.user_id == User.id)
+        .where(Post.board_type == board_type, visibility_clause)
     )
     total = count_res.scalar() or 0
 
     query = (
         select(Post)
+        .join(User, Post.user_id == User.id)
         .options(selectinload(Post.user), selectinload(Post.media))
-        .where(Post.board_type == board_type)
+        .where(Post.board_type == board_type, visibility_clause)
         .order_by(Post.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -391,7 +392,7 @@ async def get_user_posts(
         .join(User, Post.user_id == User.id)
         .where(
             Post.user_id == target_user.id,
-            _post_visibility_clause(current_user.id if current_user else None),
+            _post_visibility_clause(current_user),
         )
     )
     total = count_res.scalar() or 0
@@ -403,7 +404,7 @@ async def get_user_posts(
         .options(selectinload(Post.user), selectinload(Post.media))
         .where(
             Post.user_id == target_user.id,
-            _post_visibility_clause(current_user.id if current_user else None),
+            _post_visibility_clause(current_user),
         )
         .order_by(Post.created_at.desc())
         .offset(offset)
@@ -431,7 +432,7 @@ async def update_post(
     if not post:
         raise NotFoundException("Post")
 
-    if post.user_id != current_user.id:
+    if post.user_id != current_user.id and not current_user.is_admin:
         raise ForbiddenException("You can only edit your own posts")
 
     if data.title is not None:
@@ -483,7 +484,7 @@ async def delete_post(
     if not post:
         raise NotFoundException("Post")
 
-    if post.user_id != current_user.id:
+    if post.user_id != current_user.id and not current_user.is_admin:
         raise ForbiddenException("You can only delete your own posts")
 
     await db.delete(post)
@@ -672,9 +673,15 @@ async def get_post_comments(
     offset: int = 0,
 ) -> List[CommentResponse]:
     """특정 게시물의 무제한 깊이 대댓글 트리를 생성일 순으로 조회합니다."""
-    post_res = await db.execute(select(Post).where(Post.id == post_id))
+    post_res = await db.execute(
+        select(Post)
+        .options(selectinload(Post.user))
+        .where(Post.id == post_id)
+    )
     post_obj = post_res.scalar_one_or_none()
     if not post_obj:
+        raise NotFoundException("Post")
+    if not await _can_view_post(db, post_obj, current_user):
         raise NotFoundException("Post")
     is_anon = post_obj.board_type == "anonymous"
 
@@ -710,7 +717,9 @@ async def get_post_comments(
         child_comments = replies_by_parent.get(cid_str, [])
         child_responses = [_build_tree(child) for child in child_comments]
         viewer_liked = any(lk.user_id == viewer_id for lk in c.likes) if viewer_id else False
-        is_mine = (viewer_id is not None and c.user_id == viewer_id)
+        is_mine = current_user is not None and (
+            current_user.is_admin or c.user_id == current_user.id
+        )
 
         if is_anon:
             c_user = PostUserSummary(
@@ -796,7 +805,7 @@ async def update_comment(
     if not comment:
         raise NotFoundException("Comment")
 
-    if comment.user_id != current_user.id:
+    if comment.user_id != current_user.id and not current_user.is_admin:
         raise ForbiddenException("댓글 작성자만 수정할 수 있습니다.")
 
     comment.content = data.content
@@ -847,7 +856,11 @@ async def delete_comment(
     if not comment:
         raise NotFoundException("Comment")
 
-    if comment.user_id != current_user.id and comment.post.user_id != current_user.id:
+    if (
+        comment.user_id != current_user.id
+        and comment.post.user_id != current_user.id
+        and not current_user.is_admin
+    ):
         raise ForbiddenException("You can only delete your own comments or comments on your post")
 
     await db.delete(comment)
@@ -894,16 +907,21 @@ async def get_saved_posts(
     offset: int = 0,
 ) -> tuple[List[PostResponse], int]:
     """현재 로그인한 사용자가 저장(북마크)한 게시물 목록을 최신 저장순으로 조회합니다."""
+    visibility_clause = _post_visibility_clause(current_user)
     count_res = await db.execute(
-        select(func.count(PostBookmark.id)).where(PostBookmark.user_id == current_user.id)
+        select(func.count(PostBookmark.id))
+        .join(Post, Post.id == PostBookmark.post_id)
+        .join(User, Post.user_id == User.id)
+        .where(PostBookmark.user_id == current_user.id, visibility_clause)
     )
     total = count_res.scalar() or 0
 
     result = await db.execute(
         select(Post)
         .join(PostBookmark, Post.id == PostBookmark.post_id)
+        .join(User, Post.user_id == User.id)
         .options(selectinload(Post.user), selectinload(Post.media))
-        .where(PostBookmark.user_id == current_user.id)
+        .where(PostBookmark.user_id == current_user.id, visibility_clause)
         .order_by(PostBookmark.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -921,7 +939,7 @@ async def get_explore_posts(
     offset: int = 0,
 ) -> tuple[List[PostResponse], int]:
     """전체 사용자의 게시물을 최신순으로 조회하여 탐색(Explore) 피드에 제공합니다."""
-    visibility_clause = _post_visibility_clause(current_user.id if current_user else None)
+    visibility_clause = _post_visibility_clause(current_user)
     count_res = await db.execute(
         select(func.count(Post.id))
         .join(User, Post.user_id == User.id)
@@ -988,16 +1006,21 @@ async def get_reposted_posts(
     offset: int = 0,
 ) -> tuple[List[PostResponse], int]:
     """현재 로그인한 사용자가 리포스트한 게시물 목록을 최신 리포스트순으로 조회합니다."""
+    visibility_clause = _post_visibility_clause(current_user)
     count_res = await db.execute(
-        select(func.count(PostRepost.id)).where(PostRepost.user_id == current_user.id)
+        select(func.count(PostRepost.id))
+        .join(Post, Post.id == PostRepost.post_id)
+        .join(User, Post.user_id == User.id)
+        .where(PostRepost.user_id == current_user.id, visibility_clause)
     )
     total = count_res.scalar() or 0
 
     result = await db.execute(
         select(Post)
         .join(PostRepost, Post.id == PostRepost.post_id)
+        .join(User, Post.user_id == User.id)
         .options(selectinload(Post.user), selectinload(Post.media))
-        .where(PostRepost.user_id == current_user.id)
+        .where(PostRepost.user_id == current_user.id, visibility_clause)
         .order_by(PostRepost.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -1021,16 +1044,21 @@ async def get_user_reposted_posts(
     if not target_user_id:
         raise NotFoundException("User")
 
+    visibility_clause = _post_visibility_clause(current_user)
     count_res = await db.execute(
-        select(func.count(PostRepost.id)).where(PostRepost.user_id == target_user_id)
+        select(func.count(PostRepost.id))
+        .join(Post, Post.id == PostRepost.post_id)
+        .join(User, Post.user_id == User.id)
+        .where(PostRepost.user_id == target_user_id, visibility_clause)
     )
     total = count_res.scalar() or 0
 
     result = await db.execute(
         select(Post)
         .join(PostRepost, Post.id == PostRepost.post_id)
+        .join(User, Post.user_id == User.id)
         .options(selectinload(Post.user), selectinload(Post.media))
-        .where(PostRepost.user_id == target_user_id)
+        .where(PostRepost.user_id == target_user_id, visibility_clause)
         .order_by(PostRepost.created_at.desc())
         .offset(offset)
         .limit(limit)

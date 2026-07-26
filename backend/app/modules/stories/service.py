@@ -21,15 +21,9 @@ from app.modules.users.models import Follow
 async def _can_view_story(
     db: AsyncSession, story: Story, current_user: User
 ) -> bool:
-    if story.user_id == current_user.id:
+    if current_user.is_admin or story.user_id == current_user.id:
         return True
-    follower_res = await db.execute(
-        select(Follow.id).where(
-            Follow.follower_id == current_user.id,
-            Follow.following_id == story.user_id,
-        )
-    )
-    return follower_res.scalar_one_or_none() is not None
+    return False
 
 
 async def create_story(
@@ -78,7 +72,18 @@ async def get_stories_feed(
     following_ids = list(res.scalars().all())
 
     # 내 ID도 포함
-    target_user_ids = list(set([current_user.id] + following_ids))
+    if current_user.is_admin:
+        all_users_res = await db.execute(select(User.id).where(User.is_active.is_(True)))
+        target_user_ids = list(all_users_res.scalars().all())
+    else:
+        candidate_ids = list(set([current_user.id] + following_ids))
+        visible_users_res = await db.execute(
+            select(User.id).where(
+                User.id.in_(candidate_ids),
+                (User.id == current_user.id) | User.is_private.is_(False),
+            )
+        )
+        target_user_ids = list(visible_users_res.scalars().all())
 
     # 2. 만료되지 않은 스토리 조회
     stmt = (
@@ -126,7 +131,7 @@ async def get_stories_feed(
     groups: List[UserStoryGroupResponse] = []
     for uid, data in user_stories_map.items():
         st_list = data["stories"]
-        is_self = uid == current_user.id
+        is_self = current_user.is_admin or uid == current_user.id
         has_unviewed = any(not s.has_viewed for s in st_list)
 
         group = UserStoryGroupResponse(
@@ -191,7 +196,7 @@ async def delete_story(db: AsyncSession, story_id: UUID, current_user: User) -> 
             detail="스토리를 찾을 수 없습니다.",
         )
 
-    if story.user_id != current_user.id:
+    if story.user_id != current_user.id and not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="본인의 스토리만 삭제할 수 있습니다.",
