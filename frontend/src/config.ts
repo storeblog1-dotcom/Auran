@@ -40,14 +40,14 @@ const getHostIp = (): string => {
 };
 
 const HOST_IP = getHostIp();
-
-export const API_BASE_URL = `https://instagram-backend-110122614099.asia-northeast3.run.app/api/v1`;
-export const WS_BASE_URL = `wss://instagram-backend-110122614099.asia-northeast3.run.app/api/v1`;
+export const API_ORIGIN = "https://instagram-backend-110122614099.asia-northeast3.run.app";
+export const API_BASE_URL = `${API_ORIGIN}/api/v1`;
+export const WS_BASE_URL = "wss://instagram-backend-110122614099.asia-northeast3.run.app/api/v1";
 
 export const getFullImageUrl = (url?: string | null): string => {
   if (!url || !url.trim()) return "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500";
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `http://${HOST_IP}:8000${url.startsWith("/") ? "" : "/"}${url}`;
+  if (url.startsWith("/")) return `${API_ORIGIN}${url}`;
+  return `${API_ORIGIN}/${url}`;
 };
-
 
