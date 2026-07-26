@@ -66,7 +66,7 @@ export const StoryDetailModal: React.FC<StoryDetailModalProps> = ({
         <ZoomableImage uri={imageUrl} imageWidth={width} imageHeight={height} />
 
         {/* 어두운 오버레이 */}
-        <View style={styles.overlay} />
+        <View pointerEvents="none" style={styles.overlay} />
 
         <SafeAreaView style={styles.safeArea}>
           {/* 헤더: 아이디 + 닫기/삭제 버튼 */}

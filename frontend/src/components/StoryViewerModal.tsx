@@ -45,6 +45,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const [groupIndex, setGroupIndex] = useState(initialGroupIndex);
   const [storyIndex, setStoryIndex] = useState(0);
   const [gridVisible, setGridVisible] = useState(false);
+  const [isZoomed, setIsZoomed] = useState(false);
 
   // stale closure 방지용 refs
   const groupIndexRef = useRef(initialGroupIndex);
@@ -291,10 +292,11 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
           uri={getFullImageUrl(currentStory.media_url)}
           imageWidth={width}
           imageHeight={height}
+          onZoomChange={setIsZoomed}
         />
 
         {/* 어두운 오버레이 */}
-        <View style={styles.overlay} />
+        <View pointerEvents="none" style={styles.overlay} />
 
         <SafeAreaView style={styles.safeArea}>
           {/* 프로그래스 바 */}
@@ -370,10 +372,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
           </View>
 
           {/* 제스처 레이어 — 헤더/푸터 아래, 배경 위 */}
-          <View
-            style={styles.gestureLayer}
-            {...panResponder.panHandlers}
-          />
+          {!isZoomed && <View style={styles.gestureLayer} {...panResponder.panHandlers} />}
 
           {/* 하단 영역 */}
           <View style={styles.footer}>
