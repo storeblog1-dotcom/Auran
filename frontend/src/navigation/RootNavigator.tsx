@@ -43,22 +43,22 @@ const MainTabs = () => {
         headerShown: false,
         tabBarShowLabel: false,
         tabBarStyle: {
-          backgroundColor: colors.bgPrimary,
-          borderTopColor: "transparent",
-          borderTopWidth: 0,
-          height: 68,
-          paddingBottom: 4,
-          paddingTop: 4,
+          backgroundColor: colors.tabBarBg,
+          borderTopColor: colors.borderLight,
+          borderTopWidth: 1,
+          height: 72,
+          paddingBottom: 6,
+          paddingTop: 6,
           justifyContent: "center",
           alignItems: "center",
-          elevation: 0,
-          shadowColor: "transparent",
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0,
-          shadowRadius: 0,
+          elevation: 12,
+          shadowColor: "#17152e",
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.07,
+          shadowRadius: 14,
         },
-        tabBarActiveTintColor: colors.accentPurple || "#a855f7",
-        tabBarInactiveTintColor: "#a1a1aa",
+        tabBarActiveTintColor: colors.accentPurple,
+        tabBarInactiveTintColor: colors.textMuted,
       }}
     >
       <Tab.Screen
@@ -66,7 +66,7 @@ const MainTabs = () => {
         component={FeedScreen}
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <View style={{ alignItems: "center", justifyContent: "center", width: 68, paddingTop: 4 }}>
+            <View style={{ alignItems: "center", justifyContent: "center", width: 64, height: 52, borderRadius: 18, paddingTop: 4, backgroundColor: focused ? colors.accentPurple + "12" : "transparent" }}>
               <Ionicons name={focused ? "home" : "home-outline"} size={22} color={color} />
               <Text numberOfLines={1} style={{ fontSize: 10, lineHeight: 14, color, marginTop: 2, fontWeight: focused ? "700" : "500", textAlign: "center" }}>
                 홈
@@ -80,7 +80,7 @@ const MainTabs = () => {
         component={SearchScreen}
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <View style={{ alignItems: "center", justifyContent: "center", width: 68, paddingTop: 4 }}>
+            <View style={{ alignItems: "center", justifyContent: "center", width: 64, height: 52, borderRadius: 18, paddingTop: 4, backgroundColor: focused ? colors.accentPurple + "12" : "transparent" }}>
               <Ionicons name={focused ? "compass" : "compass-outline"} size={23} color={color} />
               <Text numberOfLines={1} style={{ fontSize: 10, lineHeight: 14, color, marginTop: 2, fontWeight: focused ? "700" : "500", textAlign: "center" }}>
                 탐색
@@ -95,7 +95,7 @@ const MainTabs = () => {
         options={{
           tabBarIcon: () => (
             <LinearGradient
-              colors={["#8b5cf6", "#ec4899", "#06b6d4"]}
+              colors={colors.auraGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={{
@@ -104,7 +104,7 @@ const MainTabs = () => {
                 borderRadius: 16,
                 justifyContent: "center",
                 alignItems: "center",
-                shadowColor: "#06b6d4",
+                shadowColor: colors.accentPurple,
                 shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: 0.8,
                 shadowRadius: 10,
@@ -122,7 +122,7 @@ const MainTabs = () => {
         component={DirectMessageScreen}
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <View style={{ alignItems: "center", justifyContent: "center", width: 68, paddingTop: 4, position: "relative" }}>
+            <View style={{ alignItems: "center", justifyContent: "center", width: 64, height: 52, borderRadius: 18, paddingTop: 4, position: "relative", backgroundColor: focused ? colors.accentPurple + "12" : "transparent" }}>
               <Ionicons name={focused ? "chatbubble" : "chatbubble-outline"} size={22} color={color} />
               <Text numberOfLines={1} style={{ fontSize: 10, lineHeight: 14, color, marginTop: 2, fontWeight: focused ? "700" : "500", textAlign: "center" }}>
                 메시지
@@ -136,7 +136,7 @@ const MainTabs = () => {
         component={ProfileScreen}
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <View style={{ alignItems: "center", justifyContent: "center", width: 68, paddingTop: 4 }}>
+            <View style={{ alignItems: "center", justifyContent: "center", width: 64, height: 52, borderRadius: 18, paddingTop: 4, backgroundColor: focused ? colors.accentPurple + "12" : "transparent" }}>
               <Ionicons name={focused ? "person" : "person-outline"} size={22} color={color} />
               <Text numberOfLines={1} style={{ fontSize: 10, lineHeight: 14, color, marginTop: 2, fontWeight: focused ? "700" : "500", textAlign: "center" }}>
                 프로필
@@ -202,14 +202,14 @@ const AppContent = () => {
         <Stack.Navigator id="root-stack" screenOptions={{ headerShown: false }}>
           {token ? (
             <>
-              <Stack.Screen name="MainTabs" component={MainTabs} />
+              <Stack.Screen name="MainTabs" component={MainTabs} options={{ animation: "none" }} />
               <Stack.Screen name="UserProfile" component={UserProfileScreen} />
               <Stack.Screen name="EditProfile" component={EditProfileScreen} />
               <Stack.Screen name="DirectMessage" component={DirectMessageScreen} />
               <Stack.Screen name="ChatRoom" component={ChatRoomScreen} />
               <Stack.Screen name="Notification" component={NotificationScreen} />
               <Stack.Screen name="Hashtag" component={HashtagScreen} />
-              <Stack.Screen name="Community" component={CommunityScreen} />
+              <Stack.Screen name="Community" component={CommunityScreen} options={{ animation: "none" }} />
               <Stack.Screen name="Admin" component={AdminScreen} />
               <Stack.Screen name="CommunityAdmin" component={CommunityAdminScreen} />
             </>

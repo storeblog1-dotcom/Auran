@@ -593,25 +593,13 @@ export const FeedScreen = ({ navigation }: any) => {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
       {/* Aura+n Top Header */}
       <View style={[styles.header, { backgroundColor: colors.headerBg }]}>
-        <TouchableOpacity style={styles.headerBadgeTouchable} onPress={() => setMyStoriesGridVisible(true)}>
-          <LinearGradient
-            colors={colors.auraGradient}
-            style={styles.headerBadgeGradient}
-          >
-            <View style={[styles.headerBadgeInner, { backgroundColor: colors.bgPrimary }]}>
-              <Text style={[styles.headerBadgeText, { color: colors.textPrimary }]}>A+</Text>
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
-
         <AuraLogoText fontSize={26} />
-
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-          <TouchableOpacity onPress={() => navigation.navigate("Community")}>
-            <Ionicons name="people-outline" size={25} color={colors.textPrimary} />
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: colors.bgInput }]} onPress={() => navigation.navigate("Search")}>
+            <Ionicons name="search-outline" size={21} color={colors.textPrimary} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setNotificationsModalVisible(true)} style={{ position: "relative" }}>
-            <Ionicons name="notifications-outline" size={24} color={colors.textPrimary} />
+          <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: colors.bgInput, position: "relative" }]} onPress={() => setNotificationsModalVisible(true)}>
+            <Ionicons name="notifications-outline" size={20} color={colors.textPrimary} />
             {unreadCount > 0 && (
               <View
                 style={{
@@ -791,6 +779,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
+  },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  headerIconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: "center",
+    alignItems: "center",
   },
   sectionTabs: {
     height: 48,

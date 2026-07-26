@@ -27,6 +27,12 @@ import { AuraLogoText } from "../components/AuraLogoText";
 const { width } = Dimensions.get("window");
 type CommunitySection = "anonymous" | "info";
 const ALL_ANONYMOUS_BOARD_ID = "__all_anonymous__";
+const ANONYMOUS_CATEGORY_ORDER = [
+  { slug: "anonymous-worries", name: "고민상담" },
+  { slug: "anonymous-relationship", name: "연애·관계" },
+  { slug: "anonymous-daily", name: "일상" },
+  { slug: "anonymous-coming-out", name: "커밍아웃" },
+];
 
 export const CommunityScreen = ({ navigation, route }: any) => {
   const { colors } = useTheme();
@@ -65,8 +71,14 @@ export const CommunityScreen = ({ navigation, route }: any) => {
   });
   const parentBoards = sectionBoards.filter((board) => !board.parent_id);
   const childBoards = sectionBoards.filter((board) => board.parent_id === selectedParentId);
+  const orderedAnonymousChildBoards = ANONYMOUS_CATEGORY_ORDER
+    .map((category) => {
+      const board = childBoards.find((item) => item.slug === category.slug);
+      return board ? { ...board, name: category.name } : null;
+    })
+    .filter(Boolean) as any[];
   const visibleChildBoards = section === "anonymous" && selectedParentId
-    ? [{ id: ALL_ANONYMOUS_BOARD_ID, name: "전체", is_anonymous: true }, ...childBoards]
+    ? [{ id: ALL_ANONYMOUS_BOARD_ID, name: "전체", is_anonymous: true }, ...orderedAnonymousChildBoards]
     : childBoards;
 
   const selectFirstBoard = (list: any[], nextSection: CommunitySection) => {
@@ -335,12 +347,17 @@ export const CommunityScreen = ({ navigation, route }: any) => {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary || "#09090b" }]}>
       {/* Top Header */}
-      <View style={[styles.header, { borderBottomColor: colors.borderColor || "#27272a" }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 6 }}>
-          <Ionicons name="chevron-back" size={26} color={colors.textPrimary} />
-        </TouchableOpacity>
+      <View style={[styles.header, { backgroundColor: colors.headerBg, borderBottomColor: colors.borderLight }]}>
+        <AuraLogoText fontSize={26} />
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>커뮤니티</Text>
-        <View style={{ width: 32 }} />
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: colors.bgInput }]} onPress={() => navigation.navigate("Search")}>
+            <Ionicons name="search-outline" size={21} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: colors.bgInput }]} onPress={() => navigation.navigate("Notification")}>
+            <Ionicons name="notifications-outline" size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={[styles.sectionTabs, { borderBottomColor: colors.borderLight }]}>
@@ -358,13 +375,13 @@ export const CommunityScreen = ({ navigation, route }: any) => {
       </View>
 
       <View style={styles.boardArea}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.boardScroll}>
+        {section !== "anonymous" && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.boardScroll}>
           {parentBoards.map((board) => (
-            <TouchableOpacity key={board.id} style={[styles.boardChip, { backgroundColor: selectedParentId === board.id ? colors.accentPurple : colors.bgInput, borderColor: selectedParentId === board.id ? colors.accentPurple : colors.borderColor }]} onPress={() => { setSelectedParentId(board.id); const firstChild = sectionBoards.find((item) => item.parent_id === board.id); setSelectedBoardId(section === "anonymous" ? ALL_ANONYMOUS_BOARD_ID : (firstChild?.id || board.id)); }}>
+            <TouchableOpacity key={board.id} style={[styles.boardChip, { backgroundColor: selectedParentId === board.id ? colors.accentPurple : colors.bgInput, borderColor: selectedParentId === board.id ? colors.accentPurple : colors.borderColor }]} onPress={() => { setSelectedParentId(board.id); const firstChild = sectionBoards.find((item) => item.parent_id === board.id); setSelectedBoardId(firstChild?.id || board.id); }}>
               <Text style={{ color: selectedParentId === board.id ? "#fff" : colors.textSecondary, fontWeight: "700" }}>{board.name}</Text>
             </TouchableOpacity>
           ))}
-        </ScrollView>
+        </ScrollView>}
         {visibleChildBoards.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subBoardScroll}>
             {visibleChildBoards.map((board) => (
@@ -484,14 +501,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    height: 54,
+    height: 60,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
   },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  headerIconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   headerTitle: {
+    display: "none",
     fontSize: 18,
     fontWeight: "800",
     letterSpacing: 0.5,

@@ -14,7 +14,7 @@ depends_on = None
 
 CHILD_BOARDS = [
     ("anonymous-worries", "고민상담", 1),
-    ("anonymous-relationship", "연애/관계", 2),
+    ("anonymous-relationship", "연애·관계", 2),
     ("anonymous-daily", "일상", 3),
     ("anonymous-coming-out", "커밍아웃", 4),
 ]
@@ -54,6 +54,20 @@ def upgrade() -> None:
                     "is_active": True,
                     "sort_order": sort_order,
                 }],
+            )
+        else:
+            bind.execute(
+                sa.text(
+                    "UPDATE community_boards "
+                    "SET name = :name, parent_id = :parent_id, is_anonymous = true, "
+                    "is_active = true, sort_order = :sort_order WHERE slug = :slug"
+                ),
+                {
+                    "name": name,
+                    "parent_id": anonymous_id,
+                    "sort_order": sort_order,
+                    "slug": slug,
+                },
             )
 
 
