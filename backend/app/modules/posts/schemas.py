@@ -57,6 +57,7 @@ class PostUserSummary(BaseModel):
     username: str
     full_name: str
     profile_image_url: Optional[str] = None
+    is_following: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -158,6 +159,5 @@ class PostRepostToggleResponse(BaseModel):
     post_id: UUID
     is_reposted: bool
     reposts_count: int
-
 
 

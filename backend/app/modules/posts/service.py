@@ -86,6 +86,17 @@ async def _build_post_responses_batch(
 
     post_ids = [p.id for p in posts]
 
+    following_user_ids: set[uuid.UUID] = set()
+    if current_user:
+        author_ids = {p.user_id for p in posts}
+        following_res = await db.execute(
+            select(Follow.following_id).where(
+                Follow.follower_id == current_user.id,
+                Follow.following_id.in_(author_ids),
+            )
+        )
+        following_user_ids = set(following_res.scalars().all())
+
     # 1. 게시물별 좋아요 개수
     likes_res = await db.execute(
         select(PostLike.post_id, func.count(PostLike.id))
@@ -193,6 +204,7 @@ async def _build_post_responses_batch(
                 username=post.user.username,
                 full_name=post.user.full_name,
                 profile_image_url=post.user.profile_image_url,
+                is_following=post.user.id in following_user_ids,
             )
         
         raw_previews = preview_comments_map.get(post.id, [])
