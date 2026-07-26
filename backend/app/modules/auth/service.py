@@ -65,6 +65,13 @@ async def register(db: AsyncSession, data: RegisterRequest) -> User:
         username=clean_username,
         email=clean_email,
         full_name=clean_fullname,
+        age=data.age,
+        gender=data.gender,
+        sexual_orientation=data.sexual_orientation,
+        height=data.height,
+        body_type=data.body_type,
+        bio=data.bio,
+        profile_image_url=data.profile_image_url,
         hashed_password=hash_password(data.password),
     )
     db.add(user)

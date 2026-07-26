@@ -17,6 +17,13 @@ class RegisterRequest(BaseModel):
     email: EmailStr = Field(..., examples=["john@example.com"])
     password: str = Field(..., min_length=4, max_length=128, examples=["password123"])
     full_name: str = Field(..., min_length=1, max_length=100, examples=["John Doe"])
+    age: int | None = Field(None, ge=18, le=120)
+    gender: str | None = Field(None, max_length=30)
+    sexual_orientation: str | None = Field(None, max_length=30)
+    height: int | None = Field(None, ge=50, le=250)
+    body_type: str | None = Field(None, max_length=50)
+    bio: str | None = Field(None, max_length=500)
+    profile_image_url: str | None = Field(None, max_length=500)
 
     @field_validator("password")
     @classmethod
@@ -63,6 +70,11 @@ class UserMe(BaseModel):
     username: str
     email: str
     full_name: str
+    age: int | None = None
+    gender: str | None = None
+    sexual_orientation: str | None = None
+    height: int | None = None
+    body_type: str | None = None
     bio: str | None
     profile_image_url: str | None
     is_active: bool

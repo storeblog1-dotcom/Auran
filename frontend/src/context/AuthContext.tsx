@@ -22,13 +22,6 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   login: (data: any) => Promise<void>;
-  googleLogin: (googleData: {
-    token?: string;
-    email?: string;
-    full_name?: string;
-    google_id?: string;
-    profile_image_url?: string;
-  }) => Promise<void>;
   register: (data: any) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -127,24 +120,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await fetchCurrentUser();
   };
 
-  const googleLogin = async (googleData: {
-    token?: string;
-    email?: string;
-    full_name?: string;
-    google_id?: string;
-    profile_image_url?: string;
-  }) => {
-    const res = await api.post("/auth/google", googleData);
-    const tokenData = res.data.data;
-    const accessToken = tokenData.access_token;
-    await AsyncStorage.setItem("access_token", accessToken);
-    if (tokenData.refresh_token) {
-      await AsyncStorage.setItem("refresh_token", tokenData.refresh_token);
-    }
-    setToken(accessToken);
-    await fetchCurrentUser();
-  };
-
   const register = async (regData: any) => {
     await api.post("/auth/register", regData);
     // Automatic login after register
@@ -165,7 +140,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         isLoading,
         login,
-        googleLogin,
         register,
         logout,
         refreshProfile: async () => {
@@ -179,4 +153,3 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 };
 
 export const useAuth = () => useContext(AuthContext);
-

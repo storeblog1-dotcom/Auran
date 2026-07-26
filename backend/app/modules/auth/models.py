@@ -31,6 +31,11 @@ class User(Base):
 
     # ─── 프로필 ───────────────────────────────────────────────
     full_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    age: Mapped[int | None] = mapped_column(nullable=True)
+    gender: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    sexual_orientation: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    height: Mapped[int | None] = mapped_column(nullable=True)
+    body_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     profile_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
