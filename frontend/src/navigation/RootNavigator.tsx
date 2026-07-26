@@ -32,6 +32,14 @@ import { Ionicons } from "@expo/vector-icons";
 
 const Stack = createNativeStackNavigator<any>();
 const Tab = createBottomTabNavigator<any>();
+const FeedStack = createNativeStackNavigator<any>();
+
+const FeedStackNavigator = () => (
+  <FeedStack.Navigator id="feed-stack" screenOptions={{ headerShown: false, animation: "none" }}>
+    <FeedStack.Screen name="FeedHome" component={FeedScreen} />
+    <FeedStack.Screen name="Community" component={CommunityScreen} />
+  </FeedStack.Navigator>
+);
 
 const MainTabs = () => {
   const { colors } = useTheme();
@@ -63,7 +71,7 @@ const MainTabs = () => {
     >
       <Tab.Screen
         name="Feed"
-        component={FeedScreen}
+        component={FeedStackNavigator}
         options={{
           tabBarIcon: ({ color, focused }) => (
             <View style={{ alignItems: "center", justifyContent: "center", width: 64, height: 52, borderRadius: 18, paddingTop: 4, backgroundColor: focused ? colors.accentPurple + "12" : "transparent" }}>
@@ -209,7 +217,6 @@ const AppContent = () => {
               <Stack.Screen name="ChatRoom" component={ChatRoomScreen} />
               <Stack.Screen name="Notification" component={NotificationScreen} />
               <Stack.Screen name="Hashtag" component={HashtagScreen} />
-              <Stack.Screen name="Community" component={CommunityScreen} options={{ animation: "none" }} />
               <Stack.Screen name="Admin" component={AdminScreen} />
               <Stack.Screen name="CommunityAdmin" component={CommunityAdminScreen} />
             </>

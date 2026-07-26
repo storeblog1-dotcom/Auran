@@ -381,7 +381,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
         style={[styles.sectionTabs, { borderBottomColor: colors.borderLight }]}
         contentContainerStyle={styles.sectionTabsContent}
       >
-        <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("MainTabs", { screen: "Feed" })}>
+        <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("FeedHome")}>
           <Text style={[styles.sectionTabText, { color: colors.textSecondary }]}>피드</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.sectionTab} onPress={() => changeSection("anonymous")}>
@@ -426,7 +426,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.supportTitle, { color: colors.textPrimary }]}>도움이 필요할 때</Text>
                 <Text style={[styles.supportBody, { color: colors.textSecondary }]}>혼자가 아니에요. 안전하고 익명으로 필요한 도움과 정보를 찾아보세요.</Text>
-                <TouchableOpacity style={[styles.supportButton, { backgroundColor: colors.bgCard }]} onPress={() => navigation.navigate("Community", { section: "info" })}>
+                <TouchableOpacity style={[styles.supportButton, { backgroundColor: colors.bgCard }]} onPress={() => changeSection("info")}>
                   <Text style={[styles.supportButtonText, { color: colors.accentPurple }]}>자세히 보기</Text>
                   <Ionicons name="arrow-forward" size={15} color={colors.accentPurple} />
                 </TouchableOpacity>
