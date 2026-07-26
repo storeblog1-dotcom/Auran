@@ -47,9 +47,28 @@ async def register(db: AsyncSession, data: RegisterRequest) -> User:
     """
     clean_username = data.username.strip()
     clean_email = data.email.strip().lower()
+    clean_nickname = data.nickname.strip()
     clean_fullname = data.full_name.strip()
 
     # 중복 확인 (username OR email 둘 다 대소문자 구분 없이 체크)
+    username_exists = await db.execute(
+        select(User.id).where(func.lower(User.username) == clean_username.lower())
+    )
+    if username_exists.scalar_one_or_none():
+        raise ConflictException("\uc774\ubbf8 \uc0ac\uc6a9 \uc911\uc778 \uc544\uc774\ub514\uc785\ub2c8\ub2e4.")
+
+    nickname_exists = await db.execute(
+        select(User.id).where(func.lower(User.nickname) == clean_nickname.lower())
+    )
+    if nickname_exists.scalar_one_or_none():
+        raise ConflictException("\uc774\ubbf8 \uc0ac\uc6a9 \uc911\uc778 \ub2c9\ub124\uc784\uc785\ub2c8\ub2e4.")
+
+    email_exists = await db.execute(
+        select(User.id).where(func.lower(User.email) == clean_email)
+    )
+    if email_exists.scalar_one_or_none():
+        raise ConflictException("\uc774\ubbf8 \uc0ac\uc6a9 \uc911\uc778 \uc774\uba54\uc77c\uc785\ub2c8\ub2e4.")
+
     existing = await db.execute(
         select(User).where(
             or_(
@@ -65,13 +84,16 @@ async def register(db: AsyncSession, data: RegisterRequest) -> User:
         username=clean_username,
         email=clean_email,
         full_name=clean_fullname,
+        nickname=clean_nickname,
         age=data.age,
         gender=data.gender,
         sexual_orientation=data.sexual_orientation,
+        sexual_orientations=data.sexual_orientations,
         height=data.height,
         body_type=data.body_type,
         bio=data.bio,
         profile_image_url=data.profile_image_url,
+        profile_visibility=data.profile_visibility,
         hashed_password=hash_password(data.password),
     )
     db.add(user)

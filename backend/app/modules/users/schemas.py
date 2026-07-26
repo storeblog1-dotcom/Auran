@@ -46,10 +46,17 @@ class UserProfileResponse(BaseModel):
     full_name: str
     bio: str | None = None
     profile_image_url: str | None = None
+    age: int | None = None
+    gender: str | None = None
+    sexual_orientations: list[str] | None = None
+    height: int | None = None
+    body_type: str | None = None
+    profile_visibility: str = "mutual_followers"
     posts_count: int = 0
     followers_count: int = 0
     following_count: int = 0
     is_following: bool = False
+    is_mutual_following: bool = False
     is_me: bool = False
     is_admin: bool = False
     created_at: datetime

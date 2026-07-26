@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, Text, func
+from sqlalchemy import Boolean, DateTime, JSON, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,13 +31,16 @@ class User(Base):
 
     # ─── 프로필 ───────────────────────────────────────────────
     full_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    nickname: Mapped[str | None] = mapped_column(String(50), unique=True, nullable=True, index=True)
     age: Mapped[int | None] = mapped_column(nullable=True)
     gender: Mapped[str | None] = mapped_column(String(30), nullable=True)
     sexual_orientation: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    sexual_orientations: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     height: Mapped[int | None] = mapped_column(nullable=True)
     body_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     profile_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    profile_visibility: Mapped[str] = mapped_column(String(20), nullable=False, default="mutual_followers")
 
     # ─── 인증 및 설정 ──────────────────────────────────────────
     google_id: Mapped[str | None] = mapped_column(

@@ -24,8 +24,8 @@ export const LoginScreen = ({ navigation }: any) => {
   return <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]}><View style={styles.inner}>
     <AuraLogoText fontSize={44} />
     <Text style={[styles.subtitle, { color: colors.textSecondary }]}>계정에 로그인하세요</Text>
-    <TextInput style={inputStyle} placeholder="이메일 또는 사용자명" placeholderTextColor={colors.textSecondary} value={identifier} onChangeText={setIdentifier} autoCapitalize="none" />
-    <TextInput style={inputStyle} placeholder="비밀번호" placeholderTextColor={colors.textSecondary} value={password} onChangeText={setPassword} secureTextEntry />
+    <TextInput style={inputStyle} placeholder="이메일 또는 사용자명" placeholderTextColor={colors.textSecondary} value={identifier} onChangeText={setIdentifier} autoCapitalize="none" autoComplete="username" textContentType="username" importantForAutofill="yes" />
+    <TextInput style={inputStyle} placeholder="비밀번호" placeholderTextColor={colors.textSecondary} value={password} onChangeText={setPassword} secureTextEntry autoComplete="password" textContentType="password" importantForAutofill="yes" />
     <TouchableOpacity onPress={submit} disabled={loading} activeOpacity={0.85}><LinearGradient colors={(colors.auraGradient || ["#8b5cf6", "#ec4899", "#06b6d4"]) as [string, string, ...string[]]} style={styles.button}><Text style={styles.buttonText}>{loading ? <ActivityIndicator color="#fff" /> : "로그인"}</Text></LinearGradient></TouchableOpacity>
     <View style={styles.footer}><Text style={{ color: colors.textSecondary }}>계정이 없으신가요? </Text><TouchableOpacity onPress={() => navigation.navigate("Register")}><Text style={[styles.link, { color: colors.accentPurple || "#8b5cf6" }]}>회원가입</Text></TouchableOpacity></View>
   </View></SafeAreaView>;

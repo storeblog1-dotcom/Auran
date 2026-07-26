@@ -57,6 +57,7 @@ async def get_user_profile(
     # 본인 여부 및 팔로우 여부 확인
     is_me = False
     is_following = False
+    is_mutual_following = False
 
     if current_user:
         if current_user.id == target_user.id:
@@ -70,16 +71,41 @@ async def get_user_profile(
             )
             is_following = follow_res.scalar_one_or_none() is not None
 
+            if is_following:
+                reverse_follow_res = await db.execute(
+                    select(Follow).where(
+                        Follow.follower_id == target_user.id,
+                        Follow.following_id == current_user.id,
+                    )
+                )
+                is_mutual_following = reverse_follow_res.scalar_one_or_none() is not None
+
+    can_view_sensitive_profile = (
+        is_me
+        or target_user.profile_visibility == "public"
+        or (
+            target_user.profile_visibility == "mutual_followers"
+            and is_mutual_following
+        )
+    )
+
     return UserProfileResponse(
         id=target_user.id,
         username=target_user.username,
         full_name=target_user.full_name,
         bio=target_user.bio,
         profile_image_url=target_user.profile_image_url,
+        age=target_user.age if can_view_sensitive_profile else None,
+        gender=target_user.gender if can_view_sensitive_profile else None,
+        sexual_orientations=target_user.sexual_orientations if can_view_sensitive_profile else None,
+        height=target_user.height if can_view_sensitive_profile else None,
+        body_type=target_user.body_type if can_view_sensitive_profile else None,
+        profile_visibility=target_user.profile_visibility,
         posts_count=posts_count,
         followers_count=followers_count,
         following_count=following_count,
         is_following=is_following,
+        is_mutual_following=is_mutual_following,
         is_me=is_me,
         is_admin=target_user.is_admin,
         created_at=target_user.created_at,
