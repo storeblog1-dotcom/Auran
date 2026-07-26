@@ -1,5 +1,6 @@
 import React, { useRef } from "react";
 import { View, ActivityIndicator, Text, StyleSheet } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { NavigationContainer, NavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -211,7 +212,7 @@ const AppContent = () => {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <NotificationToast
         toast={toastNotification}
         onPressToast={handlePressToast}
@@ -238,7 +239,7 @@ const AppContent = () => {
           )}
         </Stack.Navigator>
       </NavigationContainer>
-    </View>
+    </SafeAreaView>
   );
 };
 
