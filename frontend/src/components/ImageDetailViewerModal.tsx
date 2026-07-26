@@ -72,7 +72,7 @@ export const ZoomableImage = ({ uri, imageWidth, imageHeight, onZoomChange = () 
   };
 
   return (
-    <PanGestureHandler ref={panRef} simultaneousHandlers={pinchRef} onGestureEvent={onPanEvent} onHandlerStateChange={finishPan}>
+    <PanGestureHandler ref={panRef} minPointers={1} maxPointers={1} shouldCancelWhenOutside={false} simultaneousHandlers={pinchRef} onGestureEvent={onPanEvent} onHandlerStateChange={finishPan}>
       <Animated.View style={styles.zoomImageHolder}>
         <PinchGestureHandler ref={pinchRef} simultaneousHandlers={panRef} onGestureEvent={onPinchEvent} onHandlerStateChange={finishPinch}>
           <Animated.View style={styles.zoomImageHolder}>
