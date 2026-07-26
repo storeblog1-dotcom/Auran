@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Modal,
   View,
@@ -13,8 +13,10 @@ import {
   FlatList,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { PinchGestureHandler, State } from "react-native-gesture-handler";
 import { getFullImageUrl } from "../config";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -31,6 +33,27 @@ interface ImageDetailViewerModalProps {
   initialIndex?: number;
   onClose: () => void;
 }
+
+const ZoomableImage = ({ uri, imageWidth, imageHeight }: { uri: string; imageWidth: number; imageHeight: number }) => {
+  const scale = useRef(new Animated.Value(1)).current;
+  const currentScale = useRef(1);
+  const onPinchEvent = Animated.event([{ nativeEvent: { scale } }], { useNativeDriver: true });
+
+  const finishPinch = (event: any) => {
+    if (event.nativeEvent.state !== State.END) return;
+    const nextScale = Math.min(4, Math.max(1, currentScale.current * event.nativeEvent.scale));
+    currentScale.current = nextScale;
+    scale.setValue(nextScale);
+  };
+
+  return (
+    <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={finishPinch}>
+      <Animated.View style={styles.zoomImageHolder}>
+        <Animated.Image source={{ uri }} style={{ width: imageWidth, height: imageHeight, transform: [{ scale }] }} resizeMode="contain" />
+      </Animated.View>
+    </PinchGestureHandler>
+  );
+};
 
 export const ImageDetailViewerModal: React.FC<ImageDetailViewerModalProps> = ({
   visible,
@@ -88,22 +111,7 @@ export const ImageDetailViewerModal: React.FC<ImageDetailViewerModalProps> = ({
 
     return (
       <View key={item.id || `view-${index}`} style={styles.slideContainer}>
-        <ScrollView
-          style={styles.zoomScrollView}
-          contentContainerStyle={styles.zoomScrollContent}
-          minimumZoomScale={1}
-          maximumZoomScale={4}
-          showsHorizontalScrollIndicator={false}
-          showsVerticalScrollIndicator={false}
-          bouncesZoom={true}
-          centerContent={true}
-        >
-          <Image
-            source={{ uri: fullUri }}
-            style={{ width: imgWidth, height: imgHeight }}
-            resizeMode="contain"
-          />
-        </ScrollView>
+        <ZoomableImage uri={fullUri} imageWidth={imgWidth} imageHeight={imgHeight} />
       </View>
     );
   };
@@ -204,6 +212,12 @@ const styles = StyleSheet.create({
   },
   zoomScrollContent: {
     flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  zoomImageHolder: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
     justifyContent: "center",
     alignItems: "center",
   },
