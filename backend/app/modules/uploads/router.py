@@ -20,7 +20,8 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 MAX_DIMENSION = 1080  # 모바일 인스타그램 표준 최대 너비/높이
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_FILE_SIZE = 1 * 1024 * 1024
+MAX_OUTPUT_SIZE = 400 * 1024
 
 
 async def upload_to_supabase_storage(image_bytes: bytes, filename: str) -> str | None:
@@ -50,7 +51,7 @@ async def upload_to_supabase_storage(image_bytes: bytes, filename: str) -> str |
         return None
 
 
-def process_and_resize_image(file_bytes: bytes, original_filename: str, preserve_dimensions: bool = False) -> tuple[bytes, str]:
+def process_and_resize_image(file_bytes: bytes, original_filename: str) -> tuple[bytes, str]:
     ext = os.path.splitext(original_filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         ext = ".jpg"
@@ -66,14 +67,11 @@ def process_and_resize_image(file_bytes: bytes, original_filename: str, preserve
             image = image.convert("RGB")
 
         # 모바일용 비율 유지 다운스케일링 (1080px)
-        if not preserve_dimensions:
-            image.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.Resampling.LANCZOS)
+        image.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.Resampling.LANCZOS)
 
         filename = f"{uuid.uuid4().hex}.jpg"
         
-        buffer = BytesIO()
-        image.save(buffer, format="JPEG", quality=75 if preserve_dimensions else 85, optimize=True, progressive=True)
-        compressed_bytes = buffer.getvalue()
+        compressed_bytes = _encode_for_display(image)
 
         # 로컬 폴백 저장
         save_path = os.path.join(UPLOAD_DIR, filename)
@@ -83,6 +81,22 @@ def process_and_resize_image(file_bytes: bytes, original_filename: str, preserve
         return compressed_bytes, filename
     except Exception as e:
         raise BadRequestException(f"이미지 처리 중 오류가 발생했습니다: {str(e)}")
+
+
+def _encode_for_display(image: Image.Image) -> bytes:
+    working = image.copy()
+    while True:
+        for quality in range(85, 4, -5):
+            buffer = BytesIO()
+            working.save(buffer, format="JPEG", quality=quality, optimize=True, progressive=True)
+            encoded = buffer.getvalue()
+            if len(encoded) <= MAX_OUTPUT_SIZE:
+                return encoded
+
+        width, height = working.size
+        if max(width, height) <= 320:
+            return encoded
+        working.thumbnail((max(320, int(width * 0.85)), max(320, int(height * 0.85))), Image.Resampling.LANCZOS)
 
 
 @router.post(
@@ -101,12 +115,11 @@ async def upload_image(
 
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE:
-        raise BadRequestException("파일 크기는 최대 10MB까지 가능합니다.")
+        raise BadRequestException("Upload file must be 1MB or less.")
 
     compressed_bytes, filename = process_and_resize_image(
         contents,
         file.filename or "image.jpg",
-        preserve_dimensions=purpose == "story",
     )
     
     # 1. Supabase Storage 업로드 시도
