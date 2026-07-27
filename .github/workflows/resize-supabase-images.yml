@@ -1,0 +1,27 @@
+name: Resize Supabase Images
+
+on:
+  workflow_dispatch:
+
+jobs:
+  resize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Resize all Supabase images
+        working-directory: backend
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_STORAGE_BUCKET: uploads
+        run: python scripts/resize_supabase_images.py
