@@ -18,6 +18,7 @@ jobs:
       - name: Resize all Supabase images
         working-directory: backend
         env:
+          PYTHONPATH: .
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           SUPABASE_STORAGE_BUCKET: uploads
