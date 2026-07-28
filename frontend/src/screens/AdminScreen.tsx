@@ -48,6 +48,8 @@ export const AdminScreen = ({ navigation }: any) => {
   const [postDetailModalVisible, setPostDetailModalVisible] = useState(false);
   const [activityLogs, setActivityLogs] = useState<AdminActivityLog[]>([]);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [activityQuery, setActivityQuery] = useState("");
+  const [activityContent, setActivityContent] = useState<any>(null);
 
   const loadStats = async () => {
     try {
@@ -88,8 +90,8 @@ export const AdminScreen = ({ navigation }: any) => {
       setLoading(false);
     }
   };
-  const loadActivity = async () => {
-    try { setLoading(true); const res = await adminService.getActivityLogs(); setActivityLogs(res.items); }
+  const loadActivity = async (q: string = activityQuery) => {
+    try { setLoading(true); const res = await adminService.getActivityLogs(q); setActivityLogs(res.items); }
     catch { Alert.alert("오류", "활동 로그를 불러오는데 실패했습니다."); }
     finally { setLoading(false); }
   };
@@ -189,7 +191,7 @@ export const AdminScreen = ({ navigation }: any) => {
       </View>
 
       {/* Segmented Tab Bar */}
-      <View style={[styles.tabBar, { borderBottomColor: colors.borderColor }]}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.tabBar, { borderBottomColor: colors.borderColor, paddingHorizontal: 10, gap: 12 }]}>
         <TouchableOpacity
           style={[styles.tabItem, activeTab === "stats" && { borderBottomColor: primaryAccent, borderBottomWidth: 3 }]}
           onPress={() => setActiveTab("stats")}
@@ -227,7 +229,7 @@ export const AdminScreen = ({ navigation }: any) => {
           <Ionicons name="receipt-outline" size={16} color={activeTab === "activity" ? primaryAccent : colors.textMuted} />
           <Text style={[styles.tabText, { color: activeTab === "activity" ? primaryAccent : colors.textMuted, fontWeight: activeTab === "activity" ? "bold" : "500" }]}>활동 로그</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
 
       {/* Main Content Area */}
       {activeTab === "stats" && (
@@ -466,11 +468,7 @@ export const AdminScreen = ({ navigation }: any) => {
       )}
 
       {activeTab === "activity" && (
-        <FlatList data={activityLogs} keyExtractor={(item) => item.id} contentContainerStyle={{ padding: 16 }}
-          renderItem={({ item }) => <TouchableOpacity activeOpacity={0.8} onPress={() => setExpandedLogId(expandedLogId === item.id ? null : item.id)} style={[styles.userCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
-            <View style={{ flex: 1 }}><Text style={[styles.usernameText, { color: colors.textPrimary }]}>{item.event_type === "signup" ? "가입" : item.event_type === "withdrawal" ? "탈퇴" : item.event_type}</Text><Text style={{ color: colors.textMuted, fontSize: 12 }}>{new Date(item.created_at).toLocaleString()}</Text></View>
-            {expandedLogId === item.id && <View style={{ width: "100%", marginTop: 12, borderTopWidth: 1, borderTopColor: colors.borderColor, paddingTop: 10 }}><Text style={{ color: colors.textPrimary }}>IP: {item.ip_address || "기록 없음"}</Text><Text style={{ color: colors.textMuted, marginTop: 4 }}>대상: {item.target_type || "계정"} {item.target_id || ""}</Text>{item.snapshot && <Text style={{ color: colors.textMuted, marginTop: 4 }}>{JSON.stringify(item.snapshot)}</Text>}</View>}
-          </TouchableOpacity>} />
+        <View style={{ flex: 1, padding: 16 }}><View style={[styles.searchContainer, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}><Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: 8 }} /><TextInput value={activityQuery} onChangeText={(text) => { setActivityQuery(text); loadActivity(text); }} placeholder="아이디 또는 닉네임 검색" placeholderTextColor={colors.textMuted} style={[styles.searchInput, { color: colors.textPrimary }]} /></View><FlatList data={activityLogs} keyExtractor={(item) => item.id} contentContainerStyle={{ paddingTop: 12 }} renderItem={({ item }) => <TouchableOpacity activeOpacity={0.8} onPress={async () => { setExpandedLogId(expandedLogId === item.id ? null : item.id); if (item.user_id) setActivityContent(await adminService.getUserContent(item.user_id)); }} style={[styles.userCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}><View style={{ flex: 1 }}><Text style={[styles.usernameText, { color: colors.textPrimary }]}>{item.username} {item.nickname ? `(${item.nickname})` : ""}</Text><Text style={{ color: colors.textMuted, fontSize: 12 }}>{item.event_type} · {new Date(item.created_at).toLocaleString()}</Text></View>{expandedLogId === item.id && <View style={{ width: "100%", marginTop: 12, borderTopWidth: 1, borderTopColor: colors.borderColor, paddingTop: 10 }}><Text style={{ color: colors.textPrimary }}>IP: {item.ip_address || "기록 없음"} {item.content_number || ""}</Text>{activityContent?.posts?.map((post: any) => <Text key={post.id} style={{ color: colors.textPrimary, marginTop: 8 }}>{post.content_number} · {post.caption || "(내용 없음)"}</Text>)}{activityContent?.comments?.map((comment: any) => <Text key={comment.id} style={{ color: colors.textMuted, marginTop: 5 }}>↳ {comment.content_number} · {comment.content}</Text>)}</View>}</TouchableOpacity>} /></View>
       )}
 
       {/* 회원별 작성 게시물 팝업 모달 */}
