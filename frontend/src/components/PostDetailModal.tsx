@@ -280,6 +280,15 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
     commentInputRef.current?.focus();
   };
 
+  const handleReplyToAuthor = () => {
+    if (!post?.user) return;
+    setEditingComment(null);
+    setReplyParentComment(null);
+    setReplyTargetUser(post.user);
+    setInputText("");
+    commentInputRef.current?.focus();
+  };
+
   const handleCancelReply = () => {
     setReplyParentComment(null);
     setReplyTargetUser(null);
@@ -366,7 +375,6 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   if (!visible) return null;
 
   const commentsCount = post?.comments_count || 0;
-  const isPostAuthor = !!(post?.is_mine || (currentUser && currentUser.username === post?.user?.username));
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
@@ -404,21 +412,6 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     {post.location ? <Text style={[styles.location, { color: colors.textSecondary }]}>{post.location}</Text> : null}
                   </View>
                 </View>
-                {!isPostAuthor && (
-                  <TouchableOpacity
-                    style={[styles.authorReplyButton, { borderColor: colors.accentBlue, backgroundColor: colors.bgInput }]}
-                    onPress={() => {
-                      setEditingComment(null);
-                      setReplyParentComment(null);
-                      setReplyTargetUser(post.user);
-                      setInputText("");
-                      commentInputRef.current?.focus();
-                    }}
-                  >
-                    <Ionicons name="arrow-undo-outline" size={14} color={colors.accentBlue} />
-                    <Text style={[styles.authorReplyButtonText, { color: colors.accentBlue }]}>작성자에게 답글</Text>
-                  </TouchableOpacity>
-                )}
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                   {currentUser && currentUser.username === post.user?.username && (
                     <>
@@ -545,6 +538,15 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                       </Text>
                     </View>
                   )}
+                  <View style={styles.authorReplyFooter}>
+                    <TouchableOpacity
+                      style={[styles.authorReplyButton, { borderColor: colors.accentBlue, backgroundColor: colors.bgInput }]}
+                      onPress={handleReplyToAuthor}
+                    >
+                      <Ionicons name="arrow-undo-outline" size={14} color={colors.accentBlue} />
+                      <Text style={[styles.authorReplyButtonText, { color: colors.accentBlue }]}>작성자에게 답글</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             </ScrollView>
@@ -665,7 +667,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    marginLeft: 8,
+  },
+  authorReplyFooter: {
+    alignItems: "flex-start",
+    marginTop: 12,
   },
   authorReplyButtonText: {
     fontSize: 12,
