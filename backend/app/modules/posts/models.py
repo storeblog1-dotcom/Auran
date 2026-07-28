@@ -235,6 +235,13 @@ class Comment(Base):
         nullable=True,
         index=True,
     )
+    reply_to_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reply_to_display_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -250,6 +257,9 @@ class Comment(Base):
     )
 
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id], lazy="selectin")
+    reply_to_user: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[reply_to_user_id], lazy="selectin"
+    )
     post: Mapped["Post"] = relationship("Post", back_populates="comments")
     replies: Mapped[List["Comment"]] = relationship(
         "Comment",
@@ -382,4 +392,3 @@ class PostRepost(Base):
 
     def __repr__(self) -> str:
         return f"<PostRepost user_id={self.user_id} post_id={self.post_id}>"
-

@@ -619,18 +619,30 @@ async def create_comment(
     if not post_res.scalar_one_or_none():
         raise NotFoundException("Post")
 
+    reply_to_display_name = None
+    if data.mention_user_id:
+        reply_target = (
+            await db.execute(select(User).where(User.id == data.mention_user_id))
+        ).scalar_one_or_none()
+        if reply_target:
+            reply_to_display_name = reply_target.nickname or reply_target.username
+
     comment = Comment(
         user_id=current_user.id,
         post_id=post_id,
         content=data.content,
         parent_id=data.parent_id,
+        reply_to_user_id=data.mention_user_id,
+        reply_to_display_name=reply_to_display_name,
     )
     db.add(comment)
     await db.commit()
 
     # 연관 유저 정보 로딩
     res = await db.execute(
-        select(Comment).options(selectinload(Comment.user)).where(Comment.id == comment.id)
+        select(Comment)
+        .options(selectinload(Comment.user), selectinload(Comment.reply_to_user))
+        .where(Comment.id == comment.id)
     )
     created_comment = res.scalar_one()
 
@@ -696,12 +708,23 @@ async def create_comment(
         full_name=created_comment.user.full_name,
         profile_image_url=created_comment.user.profile_image_url,
     )
+    reply_to_user_summary = None
+    if created_comment.reply_to_user:
+        reply_to_user_summary = PostUserSummary(
+            id=created_comment.reply_to_user.id,
+            username=created_comment.reply_to_user.username,
+            nickname=created_comment.reply_to_user.nickname,
+            full_name=created_comment.reply_to_user.full_name,
+            profile_image_url=created_comment.reply_to_user.profile_image_url,
+        )
 
     return CommentResponse(
         id=created_comment.id,
         post_id=created_comment.post_id,
         parent_id=created_comment.parent_id,
         user=user_summary,
+        reply_to_user=reply_to_user_summary,
+        reply_to_display_name=created_comment.reply_to_display_name,
         content=created_comment.content,
         created_at=created_comment.created_at,
         updated_at=created_comment.updated_at,
@@ -790,6 +813,18 @@ async def get_post_comments(
             post_id=c.post_id,
             parent_id=c.parent_id,
             user=c_user,
+            reply_to_user=(
+                PostUserSummary(
+                    id=(uuid.UUID(int=0) if post.board_type == "anonymous" else c.reply_to_user.id),
+                    username=("익명" if post.board_type == "anonymous" else c.reply_to_user.username),
+                    nickname=("익명" if post.board_type == "anonymous" else c.reply_to_user.nickname),
+                    full_name=("익명 사용자" if post.board_type == "anonymous" else c.reply_to_user.full_name),
+                    profile_image_url=(None if post.board_type == "anonymous" else c.reply_to_user.profile_image_url),
+                )
+                if c.reply_to_user
+                else None
+            ),
+            reply_to_display_name=("익명" if post.board_type == "anonymous" and c.reply_to_display_name else c.reply_to_display_name),
             content=c.content,
             created_at=c.created_at,
             updated_at=c.updated_at,
@@ -886,6 +921,18 @@ async def update_comment(
         post_id=comment.post_id,
         parent_id=comment.parent_id,
         user=user_summary,
+        reply_to_user=(
+            PostUserSummary(
+                id=comment.reply_to_user.id,
+                username=comment.reply_to_user.username,
+                nickname=comment.reply_to_user.nickname,
+                full_name=comment.reply_to_user.full_name,
+                profile_image_url=comment.reply_to_user.profile_image_url,
+            )
+            if comment.reply_to_user
+            else None
+        ),
+        reply_to_display_name=comment.reply_to_display_name,
         content=comment.content,
         created_at=comment.created_at,
         updated_at=comment.updated_at,
