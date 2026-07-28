@@ -18,6 +18,7 @@ import { useTheme } from "../context/ThemeContext";
 import {
   adminService,
   AdminContentRevision,
+  AdminContentHistoryItem,
 } from "../services/adminService";
 
 
@@ -37,19 +38,35 @@ export const AdminContentRevisionModal = ({
   const [revision, setRevision] = useState<AdminContentRevision | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [history, setHistory] = useState<AdminContentHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     if (!visible || !revisionId) {
       setRevision(null);
+      setHistory([]);
       setFailed(false);
       return;
     }
     let active = true;
     setLoading(true);
     setFailed(false);
+    setHistory([]);
     adminService.getContentRevision(revisionId)
       .then((data) => {
-        if (active) setRevision(data);
+        if (!active) return;
+        setRevision(data);
+        setHistoryLoading(true);
+        adminService.getContentHistory(data.kind, data.target_id)
+          .then((items) => {
+            if (active) setHistory(items);
+          })
+          .catch(() => {
+            if (active) setHistory([]);
+          })
+          .finally(() => {
+            if (active) setHistoryLoading(false);
+          });
       })
       .catch(() => {
         if (active) setFailed(true);
@@ -61,6 +78,19 @@ export const AdminContentRevisionModal = ({
       active = false;
     };
   }, [visible, revisionId]);
+
+  const openHistoryRevision = async (targetRevisionId: string) => {
+    if (targetRevisionId === revision?.revision_id) return;
+    setLoading(true);
+    setFailed(false);
+    try {
+      setRevision(await adminService.getContentRevision(targetRevisionId));
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const body = revision?.kind === "comment"
     ? revision.content
@@ -150,6 +180,46 @@ export const AdminContentRevisionModal = ({
                   {revision.legal_hold ? "법적 보존 해제" : "법적 보존 설정"}
                 </Text>
               </TouchableOpacity>
+            </View>
+
+            <View style={[styles.section, { borderBottomColor: colors.borderColor }]}>
+              <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
+                작성·수정·삭제 IP 이력
+              </Text>
+              {historyLoading ? (
+                <ActivityIndicator style={{ marginVertical: 8 }} color="#7c3aed" />
+              ) : history.length === 0 ? (
+                <Text style={{ color: colors.textMuted }}>보존된 변경 이력이 없습니다.</Text>
+              ) : history.map((item) => (
+                <TouchableOpacity
+                  key={item.revision_id}
+                  onPress={() => openHistoryRevision(item.revision_id)}
+                  style={[
+                    styles.historyRow,
+                    {
+                      borderColor:
+                        item.revision_id === revision.revision_id
+                          ? "#7c3aed"
+                          : colors.borderColor,
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: "#7c3aed", fontWeight: "700", fontSize: 12 }}>
+                      버전 {item.version} · {item.lifecycle_event}
+                    </Text>
+                    <Text style={{ color: colors.textPrimary, marginTop: 3, fontSize: 12 }}>
+                      IP: {item.event_ip || "기록 없음"}
+                    </Text>
+                    <Text style={{ color: colors.textMuted, marginTop: 2, fontSize: 11 }}>
+                      {new Date(item.event_at).toLocaleString()}
+                    </Text>
+                  </View>
+                  <Text style={{ color: "#7c3aed", fontSize: 11, fontWeight: "700" }}>
+                    {item.revision_id === revision.revision_id ? "현재 표시" : "상세 보기"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
             {revision.kind === "comment" && revision.post && (
@@ -255,4 +325,14 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: "800", marginBottom: 8 },
   body: { fontSize: 15, lineHeight: 22 },
   comment: { borderWidth: 1, borderRadius: 10, padding: 10, marginTop: 8 },
+  historyRow: {
+    minHeight: 66,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 7,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
 });

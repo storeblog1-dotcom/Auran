@@ -4,7 +4,11 @@ import unittest
 import uuid
 
 from app.main import app
-from app.modules.admin.router import _comment_number, _revision_comments
+from app.modules.admin.router import (
+    _comment_number,
+    _latest_revision_map,
+    _revision_comments,
+)
 
 
 class AdminActivityTests(unittest.TestCase):
@@ -44,6 +48,16 @@ class AdminActivityTests(unittest.TestCase):
         self.assertEqual(result["author"]["username"], "member1")
         self.assertEqual(result["author"]["nickname"], "회원")
         self.assertEqual(result["event_ip"], "203.0.113.15")
+
+    def test_latest_revision_map_selects_highest_version(self) -> None:
+        post_id = uuid.uuid4()
+        older = SimpleNamespace(post_id=post_id, version=1, event_ip="198.51.100.1")
+        latest = SimpleNamespace(post_id=post_id, version=3, event_ip="198.51.100.3")
+        middle = SimpleNamespace(post_id=post_id, version=2, event_ip="198.51.100.2")
+
+        result = _latest_revision_map([older, latest, middle], "post_id")
+
+        self.assertIs(result[post_id], latest)
 
 
 if __name__ == "__main__":

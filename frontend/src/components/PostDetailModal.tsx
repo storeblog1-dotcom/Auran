@@ -35,8 +35,17 @@ interface PostDetailModalProps {
   initialOpenComments?: boolean;
   adminMode?: boolean;
   adminBoardLabel?: string | null;
+  adminAuditContext?: AdminPostAuditContext | null;
   onClose: () => void;
   onPostUpdated?: () => void;
+}
+
+export interface AdminPostAuditContext {
+  contentNumber?: string | null;
+  contentType?: string | null;
+  eventType?: string | null;
+  eventIp?: string | null;
+  eventAt?: string | null;
 }
 
 export const PostDetailModal: React.FC<PostDetailModalProps> = ({
@@ -44,6 +53,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   postId,
   adminMode = false,
   adminBoardLabel,
+  adminAuditContext,
   onClose,
   onPostUpdated,
 }) => {
@@ -474,6 +484,28 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                 </View>
               )}
 
+              {adminMode && adminAuditContext && (
+                <View style={[styles.adminAuditCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+                  <Text style={{ color: colors.accentBlue, fontWeight: "800", fontSize: 12 }}>
+                    관리자 IP 기록 · {adminAuditContext.contentType || "게시물"}
+                  </Text>
+                  <Text style={{ color: colors.textPrimary, marginTop: 5, fontWeight: "700" }}>
+                    {adminAuditContext.contentNumber || "고유번호 없음"}
+                  </Text>
+                  <Text style={{ color: colors.textSecondary, marginTop: 4, fontSize: 12 }}>
+                    최근 행위: {adminAuditContext.eventType || "기록 없음"}
+                  </Text>
+                  <Text style={{ color: colors.textSecondary, marginTop: 2, fontSize: 12 }}>
+                    IP: {adminAuditContext.eventIp || "기록 없음"}
+                  </Text>
+                  <Text style={{ color: colors.textSecondary, marginTop: 2, fontSize: 12 }}>
+                    시간: {adminAuditContext.eventAt
+                      ? new Date(adminAuditContext.eventAt).toLocaleString()
+                      : "기록 없음"}
+                  </Text>
+                </View>
+              )}
+
               {/* Main Image Carousel */}
               {post.media && post.media.length > 0 ? (
                 <PostCarousel media={post.media} enableZoomViewer={true} />
@@ -720,6 +752,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "800",
     lineHeight: 24,
+  },
+  adminAuditCard: {
+    marginHorizontal: 12,
+    marginVertical: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 12,
   },
   postImage: {
     width: width - 24,
