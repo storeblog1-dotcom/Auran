@@ -78,9 +78,9 @@ export const CommentNode: React.FC<CommentNodeProps> = ({
           style={depth > 0 ? styles.replyAvatar : styles.avatar}
         />
         <View style={styles.commentContentContainer}>
-          {/* Row 1: Username & Timestamp & Reply Button */}
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
+          {/* Author and timestamp stay separate from comment actions on narrow screens. */}
+          <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", marginBottom: 3 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", flexShrink: 1 }}>
               {depth > 0 && (
                 <Text style={{ color: colors.accentBlue, fontWeight: "bold", fontSize: 13, marginRight: 4 }}>
                   ↳
@@ -98,35 +98,28 @@ export const CommentNode: React.FC<CommentNodeProps> = ({
                 })}
               </Text>
             </View>
-
-            <TouchableOpacity style={styles.replyBtn} onPress={() => onPressReply(comment)}>
-              <Text style={[styles.replyBtnText, { color: colors.accentBlue }]}>답글 달기</Text>
-            </TouchableOpacity>
           </View>
 
           {/* Row 2: Comment Content on the Next Line */}
           <View style={{ marginTop: 2, marginBottom: 2 }}>
             <HashtagText text={comment.content} style={{ fontSize: 14, lineHeight: 20, color: colors.textPrimary }} />
           </View>
-        </View>
-        {isMyComment && (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-            {onEditComment && (
-              <TouchableOpacity
-                style={styles.deleteBtn}
-                onPress={() => onEditComment(comment)}
-              >
-                <Ionicons name="create-outline" size={14} color={colors.accentPurple || "#a855f7"} />
+          <View style={styles.commentActionsRow}>
+            <TouchableOpacity style={styles.replyBtn} onPress={() => onPressReply(comment)}>
+              <Text style={[styles.replyBtnText, { color: colors.accentBlue }]}>답글 달기</Text>
+            </TouchableOpacity>
+            {isMyComment && onEditComment && (
+              <TouchableOpacity style={styles.commentActionButton} onPress={() => onEditComment(comment)}>
+                <Ionicons name="create-outline" size={16} color={colors.accentPurple || "#a855f7"} />
               </TouchableOpacity>
             )}
-            <TouchableOpacity
-              style={styles.deleteBtn}
-              onPress={() => onDeleteComment(comment.id)}
-            >
-              <Ionicons name="trash-outline" size={14} color="#ef4444" />
-            </TouchableOpacity>
+            {isMyComment && (
+              <TouchableOpacity style={styles.commentActionButton} onPress={() => onDeleteComment(comment.id)}>
+                <Ionicons name="trash-outline" size={16} color="#ef4444" />
+              </TouchableOpacity>
+            )}
           </View>
-        )}
+        </View>
       </View>
 
       {/* Render nested replies recursively matching exact 2-tier indent diagram */}
@@ -489,7 +482,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   replyBtn: {
-    paddingVertical: 2,
+    minHeight: 32,
+    paddingHorizontal: 6,
+    justifyContent: "center",
   },
   replyBtnText: {
     fontSize: 12,
@@ -516,9 +511,18 @@ const styles = StyleSheet.create({
     color: "#8e8e8e",
     fontSize: 11,
   },
-  deleteBtn: {
-    padding: 4,
-    marginLeft: 8,
+  commentActionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 6,
+  },
+  commentActionButton: {
+    minWidth: 32,
+    minHeight: 32,
+    alignItems: "center",
+    justifyContent: "center",
   },
   deleteBtnText: {
     fontSize: 14,
