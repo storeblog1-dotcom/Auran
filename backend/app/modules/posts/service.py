@@ -263,6 +263,7 @@ async def create_post(
     db: AsyncSession,
     current_user: User,
     data: PostCreateRequest,
+    ip_address: str | None = None,
 ) -> PostResponse:
     """신규 게시물을 작성하고 미디어를 저장합니다."""
     if data.board_id:
@@ -281,6 +282,8 @@ async def create_post(
     )
     db.add(post)
     await db.flush()
+    from app.modules.audit.service import record
+    await record(db, user_id=current_user.id, event_type="post_created", ip_address=ip_address, target_type="post", target_id=post.id, snapshot={"title": data.title, "caption": data.caption})
 
     for item in data.media:
         media_obj = PostMedia(
@@ -445,6 +448,7 @@ async def update_post(
     post_id: uuid.UUID,
     current_user: User,
     data: PostUpdateRequest,
+    ip_address: str | None = None,
 ) -> PostResponse:
     """본인이 작성한 게시물의 제목, 게시판 타입, 문구, 위치 및 미디어를 수정합니다."""
     result = await db.execute(
@@ -458,6 +462,9 @@ async def update_post(
 
     if post.user_id != current_user.id and not current_user.is_admin:
         raise ForbiddenException("You can only edit your own posts")
+
+    from app.modules.audit.service import record
+    await record(db, user_id=current_user.id, event_type="post_updated", ip_address=ip_address, target_type="post", target_id=post.id, snapshot={"title": post.title, "caption": post.caption, "location": post.location})
 
     if data.title is not None:
         post.title = data.title

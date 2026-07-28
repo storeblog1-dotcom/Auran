@@ -7,6 +7,7 @@ from app.common.exceptions import AppException, app_exception_handler
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.modules.auth.models import User  # noqa: F401
+from app.modules.audit.models import AuditEvent, WithdrawnAccount  # noqa: F401
 from app.modules.posts.models import Post, Comment, PostLike, PostMedia, PostBookmark, PostRepost  # noqa: F401
 from app.modules.stories.models import Story  # noqa: F401
 from app.modules.users.models import Follow  # noqa: F401
@@ -173,5 +174,4 @@ app.include_router(hashtags_router, prefix="/api/v1")
 app.include_router(notifications_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 app.include_router(community_router, prefix="/api/v1")
-
 

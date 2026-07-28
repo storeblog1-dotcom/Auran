@@ -9,10 +9,26 @@ from app.common.exceptions import NotFoundException, BadRequestException
 from app.core.database import get_db
 from app.modules.auth.dependencies import get_current_admin_user
 from app.modules.auth.models import User
+from app.modules.audit.models import AuditEvent
+from app.modules.audit.service import record
+import json
 from app.modules.posts.models import Post, Comment, PostLike
 from app.modules.stories.models import Story
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+@router.get("/activity-logs", summary="관리자 전용 가입·탈퇴 및 게시글 감사 로그")
+async def activity_logs(
+    page: int = Query(1, ge=1), size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db), admin: User = Depends(get_current_admin_user),
+) -> ApiResponse[list[dict[str, Any]]]:
+    total = await db.scalar(select(func.count(AuditEvent.id)))
+    rows = (await db.execute(select(AuditEvent).order_by(desc(AuditEvent.created_at)).offset((page - 1) * size).limit(size))).scalars().all()
+    data = [{"id": str(x.id), "user_id": str(x.user_id) if x.user_id else None, "event_type": x.event_type, "target_type": x.target_type, "target_id": x.target_id, "ip_address": x.ip_address, "snapshot": json.loads(x.snapshot) if x.snapshot else None, "created_at": x.created_at.isoformat()} for x in rows]
+    await record(db, user_id=admin.id, event_type="admin_audit_view", ip_address=None, target_type="activity_logs")
+    await db.commit()
+    return ApiResponse.paginated(data=data, total=total or 0)
 
 
 @router.get("/stats", summary="서비스 종합 지표 통계")
