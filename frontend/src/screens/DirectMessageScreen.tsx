@@ -47,6 +47,11 @@ interface ChatRoom {
   unread_count: number;
   request_status: "ACCEPTED" | "PENDING" | "REJECTED";
   is_outgoing_request: boolean;
+  request_message_count: number;
+  request_message_limit: number;
+  can_send_message: boolean;
+  can_share_post: boolean;
+  message_permission_reason: string | null;
   updated_at: string;
 }
 
@@ -133,6 +138,10 @@ export const DirectMessageScreen = ({ navigation, route }: any) => {
         autoFocus: true,
         requestStatus: room.request_status,
         isOutgoingRequest: room.is_outgoing_request,
+        requestMessageCount: room.request_message_count,
+        requestMessageLimit: room.request_message_limit,
+        canSendMessage: room.can_send_message,
+        messagePermissionReason: room.message_permission_reason,
       });
     } catch (error: any) {
       console.error("Failed to create room", error);
@@ -207,6 +216,10 @@ export const DirectMessageScreen = ({ navigation, route }: any) => {
             targetUser: target,
             requestStatus: item.request_status,
             isOutgoingRequest: item.is_outgoing_request,
+            requestMessageCount: item.request_message_count,
+            requestMessageLimit: item.request_message_limit,
+            canSendMessage: item.can_send_message,
+            messagePermissionReason: item.message_permission_reason,
           })
         }
       >
@@ -278,6 +291,10 @@ export const DirectMessageScreen = ({ navigation, route }: any) => {
               targetUser: target,
               requestStatus: item.request_status,
               isOutgoingRequest: false,
+              requestMessageCount: item.request_message_count,
+              requestMessageLimit: item.request_message_limit,
+              canSendMessage: false,
+              messagePermissionReason: item.message_permission_reason,
             })
           }
         >

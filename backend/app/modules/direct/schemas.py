@@ -48,6 +48,23 @@ class ChatRoomResponse(BaseModel):
     unread_count: int = 0
     request_status: str = "ACCEPTED"
     is_outgoing_request: bool = False
+    request_message_count: int = 0
+    request_message_limit: int = 5
+    can_send_message: bool = True
+    can_share_post: bool = True
+    message_permission_reason: str | None = None
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DirectMessageEligibilityResponse(BaseModel):
+    target_user: SenderResponse
+    room_id: UUID | None = None
+    request_status: str
+    is_outgoing_request: bool = False
+    request_message_count: int = 0
+    request_message_limit: int = 5
+    can_send_message: bool
+    can_share_post: bool
+    message_permission_reason: str | None = None

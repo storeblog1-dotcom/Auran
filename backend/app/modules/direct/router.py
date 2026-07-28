@@ -25,6 +25,7 @@ from app.modules.direct.schemas import (
     ChatMessageResponse,
     ChatRoomCreate,
     ChatRoomResponse,
+    DirectMessageEligibilityResponse,
     SenderResponse,
 )
 from app.modules.direct.websocket_manager import manager
@@ -35,6 +36,16 @@ router = APIRouter(prefix="/direct", tags=["Direct Messages"])
 REQUEST_ACCEPTED = "ACCEPTED"
 REQUEST_PENDING = "PENDING"
 REQUEST_REJECTED = "REJECTED"
+REQUEST_NEW = "NEW_REQUEST"
+MESSAGE_REQUEST_LIMIT = 5
+
+
+def message_request_allowed(is_mutual: bool, recipient_allows_requests: bool) -> bool:
+    return is_mutual or recipient_allows_requests
+
+
+def pending_request_has_capacity(message_count: int) -> bool:
+    return message_count < MESSAGE_REQUEST_LIMIT
 
 
 @router.post("/rooms", response_model=ChatRoomResponse, status_code=status.HTTP_201_CREATED)
@@ -58,10 +69,6 @@ async def create_or_get_direct_room(
     is_mutual = await _users_are_mutual_followers(
         db, current_user.id, target_user_id
     )
-    sender_follows_target = await _user_follows(
-        db, current_user.id, target_user_id
-    )
-
     # 기존 1:1 방 탐색
     query = (
         select(ChatRoom)
@@ -84,13 +91,11 @@ async def create_or_get_direct_room(
             raise ForbiddenException("거절된 메시지 요청입니다.")
         room_id = existing_room.id
     else:
-        if (
-            not is_mutual
-            and not sender_follows_target
-            and not target_user.allow_message_requests
+        if not message_request_allowed(
+            is_mutual, target_user.allow_message_requests
         ):
             raise ForbiddenException(
-                "상대방이 팔로워가 아닌 사람의 메시지 요청을 받지 않습니다."
+                "상대방이 메시지 요청을 받지 않습니다."
             )
 
         # 새로 생성
@@ -110,6 +115,118 @@ async def create_or_get_direct_room(
 
     # 대화방 정보 로드
     return await _format_room_response(db, room_id, current_user.id)
+
+
+@router.get(
+    "/eligibility/{target_user_id}",
+    response_model=DirectMessageEligibilityResponse,
+)
+async def get_direct_message_eligibility(
+    target_user_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """대상 사용자에게 보낼 수 있는 메시지 종류와 요청 상태를 조회합니다."""
+    target_user = await get_user_by_id(db, target_user_id)
+    target_response = _format_sender(target_user)
+
+    if target_user_id == current_user.id:
+        return DirectMessageEligibilityResponse(
+            target_user=target_response,
+            request_status=REQUEST_REJECTED,
+            can_send_message=False,
+            can_share_post=False,
+            message_permission_reason="내 게시물에는 메시지를 보낼 수 없습니다.",
+        )
+
+    if await _users_are_blocked(db, current_user.id, target_user_id):
+        return DirectMessageEligibilityResponse(
+            target_user=target_response,
+            request_status=REQUEST_REJECTED,
+            can_send_message=False,
+            can_share_post=False,
+            message_permission_reason="차단 관계인 사용자에게는 메시지를 보낼 수 없습니다.",
+        )
+
+    is_mutual = await _users_are_mutual_followers(
+        db, current_user.id, target_user_id
+    )
+    existing_room = await _find_direct_room(
+        db, current_user.id, target_user_id
+    )
+
+    if is_mutual:
+        if existing_room and existing_room.request_status != REQUEST_ACCEPTED:
+            existing_room.request_status = REQUEST_ACCEPTED
+            existing_room.request_sender_id = None
+            await db.commit()
+        return DirectMessageEligibilityResponse(
+            target_user=target_response,
+            room_id=existing_room.id if existing_room else None,
+            request_status=REQUEST_ACCEPTED,
+            can_send_message=True,
+            can_share_post=True,
+        )
+
+    if existing_room:
+        if existing_room.request_status == REQUEST_ACCEPTED:
+            return DirectMessageEligibilityResponse(
+                target_user=target_response,
+                room_id=existing_room.id,
+                request_status=REQUEST_ACCEPTED,
+                can_send_message=True,
+                can_share_post=True,
+            )
+        if existing_room.request_status == REQUEST_REJECTED:
+            return DirectMessageEligibilityResponse(
+                target_user=target_response,
+                room_id=existing_room.id,
+                request_status=REQUEST_REJECTED,
+                can_send_message=False,
+                can_share_post=False,
+                message_permission_reason="거절된 메시지 요청입니다.",
+            )
+
+        is_outgoing = existing_room.request_sender_id == current_user.id
+        request_count = await _request_message_count(
+            db, existing_room.id, existing_room.request_sender_id
+        )
+        can_send = (
+            is_outgoing
+            and target_user.allow_message_requests
+            and pending_request_has_capacity(request_count)
+        )
+        reason = None
+        if not is_outgoing:
+            reason = "받은 요청을 승인한 후 답장할 수 있습니다."
+        elif not target_user.allow_message_requests:
+            reason = "상대방이 메시지 요청을 받지 않습니다."
+        elif not pending_request_has_capacity(request_count):
+            reason = "상대방이 승인할 때까지 메시지는 5개까지만 보낼 수 있습니다."
+        return DirectMessageEligibilityResponse(
+            target_user=target_response,
+            room_id=existing_room.id,
+            request_status=REQUEST_PENDING,
+            is_outgoing_request=is_outgoing,
+            request_message_count=request_count,
+            can_send_message=can_send,
+            can_share_post=False,
+            message_permission_reason=reason,
+        )
+
+    can_request = message_request_allowed(
+        is_mutual=False,
+        recipient_allows_requests=target_user.allow_message_requests,
+    )
+    return DirectMessageEligibilityResponse(
+        target_user=target_response,
+        request_status=REQUEST_NEW,
+        can_send_message=can_request,
+        can_share_post=False,
+        message_permission_reason=(
+            None if can_request else "상대방이 메시지 요청을 받지 않습니다."
+        ),
+    )
 
 
 @router.get("/rooms", response_model=List[ChatRoomResponse])
@@ -546,6 +663,50 @@ async def _room_member_ids(
     return list(result.scalars().all())
 
 
+async def _find_direct_room(
+    db: AsyncSession,
+    first_user_id: uuid.UUID,
+    second_user_id: uuid.UUID,
+) -> ChatRoom | None:
+    result = await db.execute(
+        select(ChatRoom)
+        .join(ChatRoomMember, ChatRoom.id == ChatRoomMember.room_id)
+        .where(
+            ChatRoom.is_group.is_(False),
+            ChatRoomMember.user_id.in_([first_user_id, second_user_id]),
+        )
+        .group_by(ChatRoom.id)
+        .having(func.count(ChatRoomMember.id) == 2)
+    )
+    return result.scalars().first()
+
+
+async def _request_message_count(
+    db: AsyncSession,
+    room_id: uuid.UUID,
+    request_sender_id: uuid.UUID | None,
+) -> int:
+    if request_sender_id is None:
+        return 0
+    result = await db.execute(
+        select(func.count(ChatMessage.id)).where(
+            ChatMessage.room_id == room_id,
+            ChatMessage.sender_id == request_sender_id,
+        )
+    )
+    return result.scalar() or 0
+
+
+def _format_sender(user: User) -> SenderResponse:
+    return SenderResponse(
+        id=user.id,
+        username=user.username,
+        nickname=user.nickname,
+        full_name=user.full_name,
+        profile_image_url=user.profile_image_url,
+    )
+
+
 async def _users_are_mutual_followers(
     db: AsyncSession, first_user_id: uuid.UUID, second_user_id: uuid.UUID
 ) -> bool:
@@ -564,20 +725,6 @@ async def _users_are_mutual_followers(
         )
     )
     return (result.scalar() or 0) == 2
-
-
-async def _user_follows(
-    db: AsyncSession,
-    follower_id: uuid.UUID,
-    following_id: uuid.UUID,
-) -> bool:
-    result = await db.execute(
-        select(func.count(Follow.id)).where(
-            Follow.follower_id == follower_id,
-            Follow.following_id == following_id,
-        )
-    )
-    return (result.scalar() or 0) > 0
 
 
 async def _users_are_blocked(
@@ -666,6 +813,17 @@ async def _authorize_message_send(
             "메시지 요청을 승인한 후 답장할 수 있습니다."
         )
 
+    member_ids = await _room_member_ids(db, room.id)
+    target_user_id = next(
+        (member_id for member_id in member_ids if member_id != sender_id),
+        None,
+    )
+    if target_user_id is None:
+        raise NotFoundException("메시지 수신자")
+    target_user = await get_user_by_id(db, target_user_id)
+    if not target_user.allow_message_requests:
+        raise ForbiddenException("상대방이 메시지 요청을 받지 않습니다.")
+
     if (
         body.message_type.upper() != "TEXT"
         or not body.content
@@ -674,17 +832,15 @@ async def _authorize_message_send(
         or body.shared_post_id is not None
     ):
         raise ForbiddenException(
-            "상대방이 요청을 승인하기 전에는 텍스트 메시지 1개만 보낼 수 있습니다."
+            "상대방이 요청을 승인하기 전에는 텍스트 메시지만 보낼 수 있습니다."
         )
 
-    count_result = await db.execute(
-        select(func.count(ChatMessage.id)).where(
-            ChatMessage.room_id == room.id
-        )
+    request_count = await _request_message_count(
+        db, room.id, room.request_sender_id
     )
-    if (count_result.scalar() or 0) >= 1:
+    if not pending_request_has_capacity(request_count):
         raise ForbiddenException(
-            "상대방이 메시지 요청을 승인할 때까지 추가 메시지를 보낼 수 없습니다."
+            "상대방이 메시지 요청을 승인할 때까지 메시지는 5개까지만 보낼 수 있습니다."
         )
     return room
 
@@ -719,13 +875,7 @@ async def _format_room_response(db: AsyncSession, room_id: uuid.UUID, current_us
     current_member = None
 
     for m in members:
-        user_info = SenderResponse(
-            id=m.user.id,
-            username=m.user.username,
-            nickname=m.user.nickname,
-            full_name=m.user.full_name,
-            profile_image_url=m.user.profile_image_url,
-        )
+        user_info = _format_sender(m.user)
         members_resp.append(user_info)
         if m.user_id != current_user_id:
             target_user_resp = user_info
@@ -783,6 +933,31 @@ async def _format_room_response(db: AsyncSession, room_id: uuid.UUID, current_us
         u_res = await db.execute(unread_stmt)
         unread_count = u_res.scalar() or 0
 
+    is_outgoing_request = room.request_sender_id == current_user_id
+    request_message_count = 0
+    can_send_message = room.request_status == REQUEST_ACCEPTED
+    can_share_post = room.request_status == REQUEST_ACCEPTED
+    message_permission_reason = None
+
+    if room.request_status == REQUEST_PENDING:
+        request_message_count = await _request_message_count(
+            db, room.id, room.request_sender_id
+        )
+        target_member = next(
+            (member for member in members if member.user_id != current_user_id),
+            None,
+        )
+        if not is_outgoing_request:
+            message_permission_reason = "메시지 요청을 승인한 후 답장할 수 있습니다."
+        elif target_member and not target_member.user.allow_message_requests:
+            message_permission_reason = "상대방이 메시지 요청을 받지 않습니다."
+        elif not pending_request_has_capacity(request_message_count):
+            message_permission_reason = (
+                "상대방이 승인할 때까지 메시지는 5개까지만 보낼 수 있습니다."
+            )
+        else:
+            can_send_message = True
+
     return ChatRoomResponse(
         id=room.id,
         is_group=room.is_group,
@@ -792,6 +967,11 @@ async def _format_room_response(db: AsyncSession, room_id: uuid.UUID, current_us
         last_message=last_msg_resp,
         unread_count=unread_count,
         request_status=room.request_status,
-        is_outgoing_request=room.request_sender_id == current_user_id,
+        is_outgoing_request=is_outgoing_request,
+        request_message_count=request_message_count,
+        request_message_limit=MESSAGE_REQUEST_LIMIT,
+        can_send_message=can_send_message,
+        can_share_post=can_share_post,
+        message_permission_reason=message_permission_reason,
         updated_at=room.updated_at,
     )
