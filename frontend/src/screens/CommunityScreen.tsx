@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useLayoutEffect, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -128,7 +128,6 @@ export const CommunityScreen = ({ navigation, route }: any) => {
       const res = await api.get("/community/boards");
       const list = res.data?.data || [];
       setBoards(list);
-      if (list.length) selectFirstBoard(list, requestedSection);
     } catch (err) {
       console.log("Error fetching community boards", err);
       setBoards([]);
@@ -171,21 +170,23 @@ export const CommunityScreen = ({ navigation, route }: any) => {
     fetchBoards();
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setSection(requestedSection);
-    if (boards.length) selectFirstBoard(boards, requestedSection);
   }, [requestedSection]);
 
   const changeSection = (nextSection: CommunitySection) => {
     setSection(nextSection);
     navigation.setParams({ section: nextSection });
-    selectFirstBoard(boards, nextSection);
   };
+
+  useLayoutEffect(() => {
+    if (boards.length) selectFirstBoard(boards, section);
+  }, [boards, section]);
 
   useEffect(() => {
     setLoading(true);
     fetchCommunityPosts(selectedBoardId);
-  }, [selectedBoardId]);
+  }, [selectedBoardId, selectedParentId]);
 
   const onRefresh = () => {
     setRefreshing(true);
