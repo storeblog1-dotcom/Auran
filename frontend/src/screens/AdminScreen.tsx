@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -50,6 +50,9 @@ export const AdminScreen = ({ navigation }: any) => {
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [activityQuery, setActivityQuery] = useState("");
   const [activityContent, setActivityContent] = useState<any>(null);
+  const [activityContentLoading, setActivityContentLoading] = useState(false);
+  const activityContentCache = useRef<Map<string, any>>(new Map());
+  const activityRequestId = useRef(0);
 
   const loadStats = async () => {
     try {
@@ -91,9 +94,67 @@ export const AdminScreen = ({ navigation }: any) => {
     }
   };
   const loadActivity = async (q: string = activityQuery) => {
-    try { setLoading(true); const res = await adminService.getActivityLogs(q); setActivityLogs(res.items); }
+    try {
+      setLoading(true);
+      activityContentCache.current.clear();
+      setActivityContent(null);
+      const res = await adminService.getActivityLogs(q);
+      setActivityLogs(res.items);
+    }
     catch { Alert.alert("오류", "활동 로그를 불러오는데 실패했습니다."); }
     finally { setLoading(false); }
+  };
+
+  const toggleActivityLog = async (item: AdminActivityLog) => {
+    const opening = expandedLogId !== item.id;
+    setExpandedLogId(opening ? item.id : null);
+    if (!opening || !item.user_id) {
+      activityRequestId.current += 1;
+      setActivityContentLoading(false);
+      setActivityContent(null);
+      return;
+    }
+    const cached = activityContentCache.current.get(item.user_id);
+    if (cached) {
+      setActivityContent(cached);
+      return;
+    }
+    const requestId = ++activityRequestId.current;
+    setActivityContent(null);
+    setActivityContentLoading(true);
+    try {
+      const content = await adminService.getUserContent(item.user_id);
+      activityContentCache.current.set(item.user_id, content);
+      if (requestId === activityRequestId.current) setActivityContent(content);
+    } catch {
+      Alert.alert("오류", "사용자 콘텐츠를 불러오는데 실패했습니다.");
+    } finally {
+      if (requestId === activityRequestId.current) setActivityContentLoading(false);
+    }
+  };
+
+  const loadMoreActivityContent = async (userId: string) => {
+    if (!activityContent || activityContentLoading) return;
+    setActivityContentLoading(true);
+    try {
+      const pagination = activityContent.pagination;
+      const next = await adminService.getUserContent(
+        userId,
+        (pagination?.post_page || 1) + 1,
+        (pagination?.comment_page || 1) + 1,
+      );
+      const merged = {
+        ...next,
+        posts: [...(activityContent.posts || []), ...(next.posts || [])],
+        comments: [...(activityContent.comments || []), ...(next.comments || [])],
+      };
+      activityContentCache.current.set(userId, merged);
+      setActivityContent(merged);
+    } catch {
+      Alert.alert("오류", "추가 콘텐츠를 불러오는데 실패했습니다.");
+    } finally {
+      setActivityContentLoading(false);
+    }
   };
 
   const handleRefresh = async () => {
@@ -169,6 +230,62 @@ export const AdminScreen = ({ navigation }: any) => {
 
   const primaryAccent = isDark ? "#a855f7" : "#7c3aed";
   const cyanBorder = isDark ? "#06b6d4" : "#0284c7";
+
+  const renderActivityLog = ({ item }: { item: AdminActivityLog }) => {
+    const isExpanded = expandedLogId === item.id;
+    const hasMore = activityContent?.pagination?.posts_has_more || activityContent?.pagination?.comments_has_more;
+    return (
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={() => toggleActivityLog(item)}
+        style={[styles.activityLogCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
+      >
+        <View>
+          <Text style={[styles.usernameText, { color: colors.textPrimary }]}>
+            {item.username} {item.nickname ? `(${item.nickname})` : ""}
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+            {item.event_type} · {new Date(item.created_at).toLocaleString()}
+          </Text>
+        </View>
+        {isExpanded && (
+          <View style={[styles.activityDetail, { borderTopColor: colors.borderColor }]}>
+            <Text style={{ color: colors.textPrimary }}>IP: {item.ip_address || "기록 없음"}</Text>
+            {activityContentLoading && !activityContent && (
+              <ActivityIndicator style={{ marginVertical: 14 }} color={primaryAccent} />
+            )}
+            {activityContent?.posts?.map((post: any) => (
+              <View key={post.id} style={styles.activityContentRow}>
+                <Text style={{ color: primaryAccent, fontWeight: "700" }}>
+                  [{post.content_type}] [{post.board_label}] {post.content_number}
+                </Text>
+                <Text style={{ color: colors.textPrimary, marginTop: 2 }}>{post.display_text || "(내용 없음)"}</Text>
+              </View>
+            ))}
+            {activityContent?.comments?.map((comment: any) => (
+              <View key={comment.id} style={styles.activityContentRow}>
+                <Text style={{ color: primaryAccent, fontWeight: "700" }}>
+                  [{comment.content_type}] [{comment.board_label}] {comment.content_number}
+                </Text>
+                <Text style={{ color: colors.textMuted, marginTop: 2 }}>{comment.display_text}</Text>
+              </View>
+            ))}
+            {activityContent && hasMore && item.user_id && (
+              <TouchableOpacity
+                disabled={activityContentLoading}
+                onPress={() => loadMoreActivityContent(item.user_id!)}
+                style={[styles.loadMoreButton, { borderColor: primaryAccent }]}
+              >
+                {activityContentLoading
+                  ? <ActivityIndicator size="small" color={primaryAccent} />
+                  : <Text style={{ color: primaryAccent, fontWeight: "700" }}>더 보기</Text>}
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
@@ -468,7 +585,24 @@ export const AdminScreen = ({ navigation }: any) => {
       )}
 
       {activeTab === "activity" && (
-        <View style={{ flex: 1, padding: 16 }}><View style={styles.activitySearchRow}><View style={[styles.searchContainer, styles.activitySearchContainer, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}><Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: 8 }} /><TextInput value={activityQuery} onChangeText={setActivityQuery} placeholder="아이디 또는 닉네임 검색" placeholderTextColor={colors.textMuted} style={[styles.searchInput, { color: colors.textPrimary }]} /></View><TouchableOpacity onPress={() => loadActivity(activityQuery)} style={[styles.activitySearchButton, { backgroundColor: primaryAccent }]}><Text style={{ color: "white", fontWeight: "bold" }}>검색</Text></TouchableOpacity></View><FlatList data={activityLogs} keyExtractor={(item) => item.id} contentContainerStyle={{ paddingTop: 12 }} ListEmptyComponent={<Text style={{ color: colors.textMuted, textAlign: "center", marginTop: 24 }}>표시할 가입·탈퇴·게시물 활동 로그가 없습니다.</Text>} renderItem={({ item }) => <TouchableOpacity activeOpacity={0.8} onPress={async () => { const opening = expandedLogId !== item.id; setExpandedLogId(opening ? item.id : null); setActivityContent(null); if (opening && item.user_id) setActivityContent(await adminService.getUserContent(item.user_id)); }} style={[styles.activityLogCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}><View><Text style={[styles.usernameText, { color: colors.textPrimary }]}>{item.username} {item.nickname ? `(${item.nickname})` : ""}</Text><Text style={{ color: colors.textMuted, fontSize: 12 }}>{item.event_type} · {new Date(item.created_at).toLocaleString()}</Text></View>{expandedLogId === item.id && activityContent && <View style={[styles.activityDetail, { borderTopColor: colors.borderColor }]}><Text style={{ color: colors.textPrimary }}>IP: {item.ip_address || "기록 없음"}</Text>{activityContent.posts?.map((post: any) => <View key={post.id} style={styles.activityContentRow}><Text style={{ color: primaryAccent, fontWeight: "700" }}>[{post.content_type}] [{post.board_label}] {post.content_number}</Text><Text style={{ color: colors.textPrimary, marginTop: 2 }}>{post.display_text || "(내용 없음)"}</Text></View>)}{activityContent.comments?.map((comment: any) => <View key={comment.id} style={styles.activityContentRow}><Text style={{ color: primaryAccent, fontWeight: "700" }}>[{comment.content_type}] {comment.content_number}</Text><Text style={{ color: colors.textMuted, marginTop: 2 }}>{comment.display_text}</Text></View>)}</View>}</TouchableOpacity>} /></View>
+        <View style={{ flex: 1, padding: 16 }}>
+          <View style={styles.activitySearchRow}>
+            <View style={[styles.searchContainer, styles.activitySearchContainer, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+              <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
+              <TextInput value={activityQuery} onChangeText={setActivityQuery} placeholder="아이디 또는 닉네임 검색" placeholderTextColor={colors.textMuted} style={[styles.searchInput, { color: colors.textPrimary }]} />
+            </View>
+            <TouchableOpacity onPress={() => loadActivity(activityQuery)} style={[styles.activitySearchButton, { backgroundColor: primaryAccent }]}>
+              <Text style={{ color: "white", fontWeight: "bold" }}>검색</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={activityLogs}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{ paddingTop: 12 }}
+            ListEmptyComponent={<Text style={{ color: colors.textMuted, textAlign: "center", marginTop: 24 }}>표시할 가입·탈퇴·게시물 활동 로그가 없습니다.</Text>}
+            renderItem={renderActivityLog}
+          />
+        </View>
       )}
 
       {/* 회원별 작성 게시물 팝업 모달 */}
@@ -582,6 +716,7 @@ const styles = StyleSheet.create({
   activityLogCard: { padding: 12, borderRadius: 14, borderWidth: 1, marginBottom: 10 },
   activityDetail: { marginTop: 10, paddingTop: 10, borderTopWidth: 1 },
   activityContentRow: { marginTop: 10 },
+  loadMoreButton: { height: 38, marginTop: 14, borderWidth: 1, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   countText: {
     fontSize: 12,
     marginBottom: 10,

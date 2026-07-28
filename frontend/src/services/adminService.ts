@@ -80,5 +80,8 @@ export const adminService = {
     const res = await api.get("/admin/activity-logs", { params: { q, page, size } });
     return { items: res.data.data as AdminActivityLog[], total: res.data.pagination?.total || 0 };
   },
-  getUserContent: async (userId: string) => (await api.get(`/admin/users/${userId}/content`)).data.data,
+  getUserContent: async (userId: string, postPage: number = 1, commentPage: number = 1, size: number = 20) =>
+    (await api.get(`/admin/users/${userId}/content`, {
+      params: { post_page: postPage, comment_page: commentPage, size },
+    })).data.data,
 };

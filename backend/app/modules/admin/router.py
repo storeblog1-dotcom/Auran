@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete, desc
+from sqlalchemy.orm import aliased
 
 from app.common.response import ApiResponse
 from app.common.exceptions import NotFoundException, BadRequestException
@@ -45,24 +46,48 @@ async def activity_logs(
 @router.get("/users/{user_id}/content", summary="관리자 전용 사용자 작성 콘텐츠")
 async def get_admin_user_content(
     user_id: uuid.UUID,
+    post_page: int = Query(1, ge=1),
+    comment_page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_admin_user),
 ) -> ApiResponse[dict[str, Any]]:
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user:
         raise NotFoundException("사용자")
-    posts = (await db.execute(select(Post).where(Post.user_id == user_id).order_by(desc(Post.created_at)))).scalars().all()
-    comments = (await db.execute(select(Comment, Post.display_number, Post.board_type, Post.board_id).join(Post, Post.id == Comment.post_id).where(Comment.user_id == user_id).order_by(desc(Comment.created_at)))).all()
-    board_ids = [post.board_id for post in posts if post.board_id] + [board_id for _, _, _, board_id in comments if board_id]
-    boards = (await db.execute(select(CommunityBoard).where(CommunityBoard.id.in_(board_ids)))).scalars().all() if board_ids else []
-    board_names = {board.id: board.name for board in boards}
-    parent_ids = [comment.parent_id for comment, _, _, _ in comments if comment.parent_id]
-    parents = (await db.execute(select(Comment).where(Comment.id.in_(parent_ids)))).scalars().all() if parent_ids else []
-    parent_numbers = {parent.id: parent.display_number for parent in parents}
+    post_rows = (await db.execute(
+        select(Post, CommunityBoard.name)
+        .outerjoin(CommunityBoard, CommunityBoard.id == Post.board_id)
+        .where(Post.user_id == user_id)
+        .order_by(desc(Post.created_at))
+        .offset((post_page - 1) * size)
+        .limit(size + 1)
+    )).all()
+    parent_comment = aliased(Comment)
+    comment_board = aliased(CommunityBoard)
+    comment_rows = (await db.execute(
+        select(Comment, Post.display_number, Post.board_type, comment_board.name, parent_comment.display_number)
+        .join(Post, Post.id == Comment.post_id)
+        .outerjoin(comment_board, comment_board.id == Post.board_id)
+        .outerjoin(parent_comment, parent_comment.id == Comment.parent_id)
+        .where(Comment.user_id == user_id)
+        .order_by(desc(Comment.created_at))
+        .offset((comment_page - 1) * size)
+        .limit(size + 1)
+    )).all()
+    posts = post_rows[:size]
+    comments = comment_rows[:size]
     return ApiResponse.ok({
         "user": {"id": str(user.id), "username": user.username, "nickname": user.nickname},
-        "posts": [{"id": str(p.id), "content_number": f"P-{p.display_number:06d}", "content_type": "게시물", "board_label": board_names.get(p.board_id) or ("익명게시판" if p.board_type == "anonymous" else (p.board_type or "피드")), "title": p.title, "display_text": p.title if p.title else p.caption, "created_at": p.created_at.isoformat()} for p in posts],
-        "comments": [{"id": str(c.id), "content_number": f"P-{number:06d}-C-{parent_numbers[c.parent_id]:03d}-R-{c.display_number:03d}" if c.parent_id in parent_numbers else f"P-{number:06d}-C-{c.display_number:03d}", "content_type": f"{'대댓글' if c.parent_id else '댓글'} · {board_names.get(board_id) or ('익명게시판' if board_type == 'anonymous' else (board_type or '피드'))}", "board_label": board_names.get(board_id) or ("익명게시판" if board_type == "anonymous" else (board_type or "피드")), "display_text": c.content, "created_at": c.created_at.isoformat()} for c, number, board_type, board_id in comments],
+        "posts": [{"id": str(p.id), "content_number": f"P-{p.display_number:06d}", "content_type": "게시물", "board_label": board_name or ("익명게시판" if p.board_type == "anonymous" else (p.board_type or "피드")), "title": p.title, "display_text": p.title if p.title else p.caption, "created_at": p.created_at.isoformat()} for p, board_name in posts],
+        "comments": [{"id": str(c.id), "content_number": f"P-{number:06d}-C-{parent_number:03d}-R-{c.display_number:03d}" if parent_number else f"P-{number:06d}-C-{c.display_number:03d}", "content_type": "대댓글" if c.parent_id else "댓글", "board_label": board_name or ("익명게시판" if board_type == "anonymous" else (board_type or "피드")), "display_text": c.content, "created_at": c.created_at.isoformat()} for c, number, board_type, board_name, parent_number in comments],
+        "pagination": {
+            "post_page": post_page,
+            "comment_page": comment_page,
+            "size": size,
+            "posts_has_more": len(post_rows) > size,
+            "comments_has_more": len(comment_rows) > size,
+        },
     })
 
 
