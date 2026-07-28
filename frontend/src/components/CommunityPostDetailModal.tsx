@@ -141,6 +141,7 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
         await api.post(`/posts/${post.id}/comments`, {
           content: inputText.trim(),
           parent_id: replyParentComment ? replyParentComment.id : undefined,
+          mention_user_id: replyParentComment?.user.id,
         });
 
         setInputText("");

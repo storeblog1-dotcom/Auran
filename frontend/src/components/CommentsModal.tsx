@@ -194,7 +194,7 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
   const handlePressReply = (comment: Comment) => {
     setEditingComment(null);
     setReplyParentComment(comment);
-    setInputText(`@${comment.user.username} `);
+    setInputText("");
   };
 
   const handleCancelReply = () => {
@@ -230,6 +230,7 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
         const response = await api.post(`/posts/${postId}/comments`, {
           content: inputText.trim(),
           parent_id: replyParentComment ? replyParentComment.id : null,
+          mention_user_id: replyParentComment?.user.id,
         });
         if (response.data) {
           setInputText("");

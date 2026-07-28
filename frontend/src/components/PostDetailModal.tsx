@@ -57,6 +57,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   const [inputText, setInputText] = useState<string>("");
   const [submittingComment, setSubmittingComment] = useState<boolean>(false);
   const [replyParentComment, setReplyParentComment] = useState<Comment | null>(null);
+  const [replyTargetUser, setReplyTargetUser] = useState<any | null>(null);
   const [editingComment, setEditingComment] = useState<Comment | null>(null);
 
   const commentInputRef = useRef<TextInput>(null);
@@ -97,6 +98,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   useEffect(() => {
     if (visible && postId) {
       setReplyParentComment(null);
+      setReplyTargetUser(null);
       setEditingComment(null);
       setInputText("");
       fetchPostDetail(postId);
@@ -273,17 +275,20 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   const handlePressReply = (comment: Comment) => {
     setEditingComment(null);
     setReplyParentComment(comment);
-    setInputText(`@${comment.user.username} `);
+    setReplyTargetUser(comment.user);
+    setInputText("");
     commentInputRef.current?.focus();
   };
 
   const handleCancelReply = () => {
     setReplyParentComment(null);
+    setReplyTargetUser(null);
     setInputText("");
   };
 
   const handleEditComment = (comment: Comment) => {
     setReplyParentComment(null);
+    setReplyTargetUser(null);
     setEditingComment(comment);
     setInputText(comment.content);
     commentInputRef.current?.focus();
@@ -315,10 +320,12 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
         const response = await api.post(`/posts/${post.id}/comments`, {
           content: inputText.trim(),
           parent_id: targetParentId,
+          mention_user_id: replyTargetUser?.id,
         });
         if (response.data) {
           setInputText("");
           setReplyParentComment(null);
+          setReplyTargetUser(null);
           fetchComments(post.id);
           setPost((prev: any) => (prev ? { ...prev, comments_count: (prev.comments_count || 0) + 1 } : prev));
           if (onPostUpdated) onPostUpdated();
@@ -359,6 +366,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   if (!visible) return null;
 
   const commentsCount = post?.comments_count || 0;
+  const isPostAuthor = !!(post?.is_mine || (currentUser && currentUser.username === post?.user?.username));
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
@@ -396,6 +404,21 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     {post.location ? <Text style={[styles.location, { color: colors.textSecondary }]}>{post.location}</Text> : null}
                   </View>
                 </View>
+                {!isPostAuthor && (
+                  <TouchableOpacity
+                    style={[styles.authorReplyButton, { borderColor: colors.accentBlue, backgroundColor: colors.bgInput }]}
+                    onPress={() => {
+                      setEditingComment(null);
+                      setReplyParentComment(null);
+                      setReplyTargetUser(post.user);
+                      setInputText("");
+                      commentInputRef.current?.focus();
+                    }}
+                  >
+                    <Ionicons name="arrow-undo-outline" size={14} color={colors.accentBlue} />
+                    <Text style={[styles.authorReplyButtonText, { color: colors.accentBlue }]}>작성자에게 답글</Text>
+                  </TouchableOpacity>
+                )}
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                   {currentUser && currentUser.username === post.user?.username && (
                     <>
@@ -527,10 +550,10 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
             </ScrollView>
 
             {/* Target Reply Bar if replyParentComment is set */}
-            {replyParentComment && (
+            {replyTargetUser && (
               <View style={[styles.replyingBar, { backgroundColor: colors.bgInput }]}>
                 <Text style={[styles.replyingText, { color: colors.textSecondary }]}>
-                  <Text style={{ fontWeight: "bold", color: colors.accentBlue }}>{getDisplayName(replyParentComment.user)}</Text> 님에게 답글 작성 중
+                  <Text style={{ fontWeight: "bold", color: colors.accentBlue }}>{getDisplayName(replyTargetUser)}</Text> 님에게 답글 작성 중
                 </Text>
                 <TouchableOpacity onPress={handleCancelReply} style={styles.cancelReplyBtn}>
                   <Ionicons name="close-circle" size={18} color={colors.textMuted} />
@@ -556,8 +579,8 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                 ref={commentInputRef}
                 style={[styles.textInput, { color: colors.textPrimary, backgroundColor: colors.bgInput, borderColor: colors.borderColor, borderWidth: 1 }]}
                 placeholder={
-                  replyParentComment
-                    ? `${getDisplayName(replyParentComment.user)} 님에게 답글 달기...`
+                  replyTargetUser
+                    ? `${getDisplayName(replyTargetUser)} 님에게 답글 달기...`
                     : "댓글 달기..."
                 }
                 placeholderTextColor={colors.textSecondary}
@@ -633,6 +656,20 @@ const styles = StyleSheet.create({
   userInfo: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  authorReplyButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginLeft: 8,
+  },
+  authorReplyButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   avatar: {
     width: 38,

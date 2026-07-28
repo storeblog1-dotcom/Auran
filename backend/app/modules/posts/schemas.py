@@ -75,6 +75,9 @@ class CommentCreateRequest(BaseModel):
     parent_id: Optional[UUID] = Field(None, description="대댓글 대상 댓글 ID (없으면 최상위 댓글)")
 
 
+    mention_user_id: Optional[UUID] = Field(None, description="Reply or mention notification recipient ID")
+
+
 class CommentUpdateRequest(BaseModel):
     """댓글 수정 요청 DTO"""
 
