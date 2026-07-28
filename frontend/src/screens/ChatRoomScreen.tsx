@@ -677,6 +677,7 @@ const styles = StyleSheet.create({
   bubble: {
     maxWidth: "78%",
     minWidth: 36,
+    flexShrink: 1,
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 9,
@@ -692,6 +693,8 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 15,
     lineHeight: 22,
+    minWidth: 0,
+    flexShrink: 1,
     flexWrap: "wrap",
   },
   myMessageText: {

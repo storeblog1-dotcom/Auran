@@ -505,6 +505,7 @@ const styles = StyleSheet.create({
   },
   commentContentContainer: {
     flex: 1,
+    minWidth: 0,
   },
   commentText: {
     color: "#fff",
