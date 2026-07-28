@@ -12,6 +12,7 @@ from app.modules.auth.models import User
 from app.modules.audit.models import AuditEvent
 import json
 from app.modules.posts.models import Post, Comment, PostLike
+from app.modules.community.models import CommunityBoard
 from app.modules.stories.models import Story
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -51,14 +52,17 @@ async def get_admin_user_content(
     if not user:
         raise NotFoundException("사용자")
     posts = (await db.execute(select(Post).where(Post.user_id == user_id).order_by(desc(Post.created_at)))).scalars().all()
-    comments = (await db.execute(select(Comment, Post.display_number).join(Post, Post.id == Comment.post_id).where(Comment.user_id == user_id).order_by(desc(Comment.created_at)))).all()
-    parent_ids = [comment.parent_id for comment, _ in comments if comment.parent_id]
+    comments = (await db.execute(select(Comment, Post.display_number, Post.board_type, Post.board_id).join(Post, Post.id == Comment.post_id).where(Comment.user_id == user_id).order_by(desc(Comment.created_at)))).all()
+    board_ids = [post.board_id for post in posts if post.board_id] + [board_id for _, _, _, board_id in comments if board_id]
+    boards = (await db.execute(select(CommunityBoard).where(CommunityBoard.id.in_(board_ids)))).scalars().all() if board_ids else []
+    board_names = {board.id: board.name for board in boards}
+    parent_ids = [comment.parent_id for comment, _, _, _ in comments if comment.parent_id]
     parents = (await db.execute(select(Comment).where(Comment.id.in_(parent_ids)))).scalars().all() if parent_ids else []
     parent_numbers = {parent.id: parent.display_number for parent in parents}
     return ApiResponse.ok({
         "user": {"id": str(user.id), "username": user.username, "nickname": user.nickname},
-        "posts": [{"id": str(p.id), "content_number": f"P-{p.display_number:06d}", "caption": p.caption, "created_at": p.created_at.isoformat()} for p in posts],
-        "comments": [{"id": str(c.id), "content_number": f"P-{number:06d}-C-{parent_numbers[c.parent_id]:03d}-R-{c.display_number:03d}" if c.parent_id in parent_numbers else f"P-{number:06d}-C-{c.display_number:03d}", "content": c.content, "created_at": c.created_at.isoformat()} for c, number in comments],
+        "posts": [{"id": str(p.id), "content_number": f"P-{p.display_number:06d}", "content_type": "게시물", "board_label": board_names.get(p.board_id) or ("익명게시판" if p.board_type == "anonymous" else (p.board_type or "피드")), "title": p.title, "display_text": p.title if p.title else p.caption, "created_at": p.created_at.isoformat()} for p in posts],
+        "comments": [{"id": str(c.id), "content_number": f"P-{number:06d}-C-{parent_numbers[c.parent_id]:03d}-R-{c.display_number:03d}" if c.parent_id in parent_numbers else f"P-{number:06d}-C-{c.display_number:03d}", "content_type": f"{'대댓글' if c.parent_id else '댓글'} · {board_names.get(board_id) or ('익명게시판' if board_type == 'anonymous' else (board_type or '피드'))}", "board_label": board_names.get(board_id) or ("익명게시판" if board_type == "anonymous" else (board_type or "피드")), "display_text": c.content, "created_at": c.created_at.isoformat()} for c, number, board_type, board_id in comments],
     })
 
 
