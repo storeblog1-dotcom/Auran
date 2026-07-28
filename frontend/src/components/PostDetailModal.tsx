@@ -33,6 +33,8 @@ interface PostDetailModalProps {
   visible: boolean;
   postId: string | null;
   initialOpenComments?: boolean;
+  adminMode?: boolean;
+  adminBoardLabel?: string | null;
   onClose: () => void;
   onPostUpdated?: () => void;
 }
@@ -40,6 +42,8 @@ interface PostDetailModalProps {
 export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   visible,
   postId,
+  adminMode = false,
+  adminBoardLabel,
   onClose,
   onPostUpdated,
 }) => {
@@ -455,14 +459,29 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                 </View>
               </View>
 
+              {adminMode && (post.title || adminBoardLabel) && (
+                <View style={[styles.adminPostContext, { borderBottomColor: colors.borderColor }]}>
+                  {!!adminBoardLabel && (
+                    <Text style={{ color: colors.accentBlue, fontWeight: "700", fontSize: 12 }}>
+                      {adminBoardLabel}
+                    </Text>
+                  )}
+                  {!!post.title && (
+                    <Text style={[styles.adminPostTitle, { color: colors.textPrimary }]}>
+                      {post.title}
+                    </Text>
+                  )}
+                </View>
+              )}
+
               {/* Main Image Carousel */}
               {post.media && post.media.length > 0 ? (
                 <PostCarousel media={post.media} enableZoomViewer={true} />
-              ) : (
+              ) : !adminMode ? (
                 <View style={[styles.postImage, styles.noMedia, { backgroundColor: colors.bgCard }]}>
                   <Text style={{ color: colors.textMuted }}>이미지 없음</Text>
                 </View>
-              )}
+              ) : null}
 
               {/* Action Bar without Dividers */}
               <View style={styles.actionRow}>
@@ -690,6 +709,17 @@ const styles = StyleSheet.create({
   location: {
     color: "#8e8e8e",
     fontSize: 12,
+  },
+  adminPostContext: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 5,
+  },
+  adminPostTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    lineHeight: 24,
   },
   postImage: {
     width: width - 24,

@@ -86,6 +86,74 @@ async def activity_logs(
     return ApiResponse.paginated(data=data, total=total or 0)
 
 
+@router.get("/activity-users", summary="관리자 전용 사용자별 활동 요약")
+async def activity_users(
+    q: str | None = Query(None, description="아이디 또는 닉네임 검색"),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+) -> ApiResponse[list[dict[str, Any]]]:
+    activity_summary = (
+        select(
+            AuditEvent.user_id.label("user_id"),
+            func.max(AuditEvent.created_at).label("latest_activity_at"),
+            func.count(AuditEvent.id).label("activity_count"),
+        )
+        .where(
+            AuditEvent.user_id.is_not(None),
+            AuditEvent.event_type != "admin_audit_view",
+        )
+        .group_by(AuditEvent.user_id)
+        .subquery()
+    )
+    query = (
+        select(
+            User,
+            activity_summary.c.latest_activity_at,
+            activity_summary.c.activity_count,
+            WithdrawnAccount.requested_at,
+            WithdrawnAccount.finalized_at,
+            WithdrawnAccount.personal_data_purged_at,
+        )
+        .join(activity_summary, activity_summary.c.user_id == User.id)
+        .outerjoin(WithdrawnAccount, WithdrawnAccount.user_id == User.id)
+    )
+    if q and q.strip():
+        pattern = f"%{q.strip()}%"
+        query = query.where(
+            (User.username.ilike(pattern)) | (User.nickname.ilike(pattern))
+        )
+    total = await db.scalar(select(func.count()).select_from(query.subquery()))
+    rows = (
+        await db.execute(
+            query.order_by(desc(activity_summary.c.latest_activity_at))
+            .offset((page - 1) * size)
+            .limit(size)
+        )
+    ).all()
+    data = []
+    for user, latest_activity_at, activity_count, requested_at, finalized_at, purged_at in rows:
+        withdrawal_status = (
+            "purged"
+            if purged_at
+            else "finalized"
+            if finalized_at
+            else "pending"
+            if requested_at
+            else None
+        )
+        data.append({
+            "user_id": str(user.id),
+            "username": user.username,
+            "nickname": user.nickname,
+            "latest_activity_at": latest_activity_at.isoformat(),
+            "activity_count": activity_count,
+            "withdrawal_status": withdrawal_status,
+        })
+    return ApiResponse.paginated(data=data, total=total or 0)
+
+
 def _comment_number(revision: CommentRevision) -> str | None:
     if not revision.post_display_number or not revision.display_number:
         return None
@@ -95,6 +163,59 @@ def _comment_number(revision: CommentRevision) -> str | None:
             f"C-{revision.parent_display_number:03d}-R-{revision.display_number:03d}"
         )
     return f"P-{revision.post_display_number:06d}-C-{revision.display_number:03d}"
+
+
+async def _comment_states_at(
+    db: AsyncSession,
+    post_id: uuid.UUID,
+    event_at,
+    *,
+    include_deleted: bool,
+) -> tuple[list[CommentRevision], dict[uuid.UUID, User]]:
+    rows = (
+        await db.execute(
+            select(CommentRevision)
+            .where(
+                CommentRevision.post_id == post_id,
+                CommentRevision.event_at <= event_at,
+            )
+            .order_by(CommentRevision.comment_id, desc(CommentRevision.version))
+        )
+    ).scalars().all()
+    latest: dict[uuid.UUID, CommentRevision] = {}
+    for row in rows:
+        latest.setdefault(row.comment_id, row)
+    comments = [
+        row
+        for row in latest.values()
+        if include_deleted or row.lifecycle_event != "deleted"
+    ]
+    comments.sort(key=lambda row: (row.source_created_at, str(row.comment_id)))
+    author_ids = list({row.user_id for row in comments})
+    authors = (
+        await db.execute(select(User).where(User.id.in_(author_ids)))
+    ).scalars().all() if author_ids else []
+    return comments, {author.id: author for author in authors}
+
+
+def _revision_comments(
+    comments: list[CommentRevision],
+    author_map: dict[uuid.UUID, User],
+) -> list[dict[str, Any]]:
+    return [{
+        "id": str(comment.comment_id),
+        "content_number": _comment_number(comment),
+        "content_type": "대댓글" if comment.parent_id else "댓글",
+        "content": comment.content,
+        "lifecycle_event": comment.lifecycle_event,
+        "event_ip": comment.event_ip,
+        "created_at": comment.source_created_at.isoformat(),
+        "author": {
+            "id": str(comment.user_id),
+            "username": author_map[comment.user_id].username if comment.user_id in author_map else "알 수 없음",
+            "nickname": author_map[comment.user_id].nickname if comment.user_id in author_map else None,
+        },
+    } for comment in comments]
 
 
 @router.get("/content-revisions/{revision_id}", summary="관리자 전용 보존 콘텐츠 상세")
@@ -110,21 +231,11 @@ async def get_content_revision(
         author = (
             await db.execute(select(User).where(User.id == post_revision.user_id))
         ).scalar_one_or_none()
-        rows = (
-            await db.execute(
-                select(CommentRevision)
-                .where(
-                    CommentRevision.post_id == post_revision.post_id,
-                    CommentRevision.event_at <= post_revision.event_at,
-                )
-                .order_by(CommentRevision.comment_id, desc(CommentRevision.version))
-            )
-        ).scalars().all()
-        latest: dict[uuid.UUID, CommentRevision] = {}
-        for row in rows:
-            latest.setdefault(row.comment_id, row)
-        comments = sorted(
-            latest.values(), key=lambda row: (row.source_created_at, str(row.comment_id))
+        comments, comment_authors = await _comment_states_at(
+            db,
+            post_revision.post_id,
+            post_revision.event_at,
+            include_deleted=post_revision.lifecycle_event == "deleted",
         )
         return ApiResponse.ok({
             "kind": "post",
@@ -149,15 +260,7 @@ async def get_content_revision(
             "event_at": post_revision.event_at.isoformat(),
             "retention_until": post_revision.retention_until.isoformat(),
             "legal_hold": post_revision.legal_hold,
-            "comments": [{
-                "id": str(comment.comment_id),
-                "content_number": _comment_number(comment),
-                "content_type": "대댓글" if comment.parent_id else "댓글",
-                "content": comment.content,
-                "lifecycle_event": comment.lifecycle_event,
-                "event_ip": comment.event_ip,
-                "created_at": comment.source_created_at.isoformat(),
-            } for comment in comments],
+            "comments": _revision_comments(comments, comment_authors),
         })
 
     comment_revision = (
@@ -179,6 +282,12 @@ async def get_content_revision(
             .limit(1)
         )
     ).scalar_one_or_none()
+    comments, comment_authors = await _comment_states_at(
+        db,
+        comment_revision.post_id,
+        comment_revision.event_at,
+        include_deleted=False,
+    )
     return ApiResponse.ok({
         "kind": "comment",
         "revision_id": str(comment_revision.id),
@@ -193,6 +302,9 @@ async def get_content_revision(
             "content_number": f"P-{source_post.display_number:06d}" if source_post and source_post.display_number else None,
             "title": source_post.title if source_post else None,
             "caption": source_post.caption if source_post else None,
+            "location": source_post.location if source_post else None,
+            "visibility": source_post.visibility if source_post else None,
+            "media": source_post.media_manifest if source_post else [],
             "board_label": (
                 source_post.board_name
                 or ("익명게시판" if source_post.board_type == "anonymous" else (source_post.board_type or "피드"))
@@ -208,6 +320,7 @@ async def get_content_revision(
         "event_at": comment_revision.event_at.isoformat(),
         "retention_until": comment_revision.retention_until.isoformat(),
         "legal_hold": comment_revision.legal_hold,
+        "comments": _revision_comments(comments, comment_authors),
     })
 
 
@@ -376,6 +489,7 @@ async def get_admin_user_content(
     live_comments = (
         select(
             Comment.id.label("id"),
+            Comment.post_id.label("post_id"),
             Post.display_number.label("post_display_number"),
             Comment.display_number.label("display_number"),
             Comment.parent_id.label("parent_id"),
@@ -408,6 +522,7 @@ async def get_admin_user_content(
     )
     deleted_comments = select(
         CommentRevision.comment_id.label("id"),
+        CommentRevision.post_id.label("post_id"),
         CommentRevision.post_display_number.label("post_display_number"),
         CommentRevision.display_number.label("display_number"),
         CommentRevision.parent_id.label("parent_id"),
@@ -431,8 +546,45 @@ async def get_admin_user_content(
     )).all()
     posts = post_rows[:size]
     comments = comment_rows[:size]
+    post_ids = [row.id for row in posts]
+    comment_ids = [row.id for row in comments]
+    post_revision_counts = dict((
+        await db.execute(
+            select(PostRevision.post_id, func.count(PostRevision.id))
+            .where(PostRevision.post_id.in_(post_ids))
+            .group_by(PostRevision.post_id)
+        )
+    ).all()) if post_ids else {}
+    comment_revision_counts = dict((
+        await db.execute(
+            select(CommentRevision.comment_id, func.count(CommentRevision.id))
+            .where(CommentRevision.comment_id.in_(comment_ids))
+            .group_by(CommentRevision.comment_id)
+        )
+    ).all()) if comment_ids else {}
+    account_events = (
+        await db.execute(
+            select(AuditEvent)
+            .where(
+                AuditEvent.user_id == user_id,
+                AuditEvent.event_type.in_([
+                    "signup",
+                    "withdrawal_requested",
+                    "withdrawal_cancelled",
+                ]),
+            )
+            .order_by(desc(AuditEvent.created_at))
+            .limit(50)
+        )
+    ).scalars().all()
     return ApiResponse.ok({
         "user": {"id": str(user.id), "username": user.username, "nickname": user.nickname},
+        "account_events": [{
+            "id": str(event.id),
+            "event_type": event.event_type,
+            "ip_address": event.ip_address,
+            "created_at": event.created_at.isoformat(),
+        } for event in account_events],
         "posts": [{
             "id": str(row.id),
             "revision_id": str(row.revision_id) if row.revision_id else None,
@@ -443,9 +595,11 @@ async def get_admin_user_content(
             "display_text": row.title if row.title else row.caption,
             "created_at": row.created_at.isoformat(),
             "deleted": row.deleted,
+            "revision_count": post_revision_counts.get(row.id, 0),
         } for row in posts],
         "comments": [{
             "id": str(row.id),
+            "post_id": str(row.post_id),
             "revision_id": str(row.revision_id) if row.revision_id else None,
             "content_number": (
                 f"P-{row.post_display_number:06d}-C-{row.parent_display_number:03d}-R-{row.display_number:03d}"
@@ -457,6 +611,7 @@ async def get_admin_user_content(
             "display_text": row.content,
             "created_at": row.created_at.isoformat(),
             "deleted": row.deleted,
+            "revision_count": comment_revision_counts.get(row.id, 0),
         } for row in comments],
         "pagination": {
             "post_page": post_page,
@@ -466,6 +621,69 @@ async def get_admin_user_content(
             "comments_has_more": len(comment_rows) > size,
         },
     })
+
+
+@router.get(
+    "/content-history/{content_type}/{content_id}",
+    summary="관리자 전용 콘텐츠 변경 이력",
+)
+async def get_content_history(
+    content_type: str,
+    content_id: uuid.UUID,
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+) -> ApiResponse[list[dict[str, Any]]]:
+    if content_type == "post":
+        query = select(PostRevision).where(PostRevision.post_id == content_id)
+        total = await db.scalar(
+            select(func.count(PostRevision.id)).where(PostRevision.post_id == content_id)
+        )
+        rows = (
+            await db.execute(
+                query.order_by(desc(PostRevision.version))
+                .offset((page - 1) * size)
+                .limit(size)
+            )
+        ).scalars().all()
+        data = [{
+            "revision_id": str(row.id),
+            "target_id": str(row.post_id),
+            "content_type": "post",
+            "version": row.version,
+            "lifecycle_event": row.lifecycle_event,
+            "event_at": row.event_at.isoformat(),
+            "event_ip": row.event_ip,
+            "display_text": row.title or row.caption,
+        } for row in rows]
+    elif content_type == "comment":
+        query = select(CommentRevision).where(CommentRevision.comment_id == content_id)
+        total = await db.scalar(
+            select(func.count(CommentRevision.id)).where(
+                CommentRevision.comment_id == content_id
+            )
+        )
+        rows = (
+            await db.execute(
+                query.order_by(desc(CommentRevision.version))
+                .offset((page - 1) * size)
+                .limit(size)
+            )
+        ).scalars().all()
+        data = [{
+            "revision_id": str(row.id),
+            "target_id": str(row.comment_id),
+            "content_type": "comment",
+            "version": row.version,
+            "lifecycle_event": row.lifecycle_event,
+            "event_at": row.event_at.isoformat(),
+            "event_ip": row.event_ip,
+            "display_text": row.content,
+        } for row in rows]
+    else:
+        raise BadRequestException("콘텐츠 종류는 post 또는 comment여야 합니다.")
+    return ApiResponse.paginated(data=data, total=total or 0)
 
 
 @router.get("/stats", summary="서비스 종합 지표 통계")
