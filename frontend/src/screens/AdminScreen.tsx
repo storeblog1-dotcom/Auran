@@ -179,10 +179,6 @@ export const AdminScreen = ({ navigation }: any) => {
         >
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.tabItem, activeTab === "activity" && { borderBottomColor: primaryAccent, borderBottomWidth: 3 }]} onPress={() => setActiveTab("activity")}>
-          <Ionicons name="receipt-outline" size={16} color={activeTab === "activity" ? primaryAccent : colors.textMuted} />
-          <Text style={[styles.tabText, { color: activeTab === "activity" ? primaryAccent : colors.textMuted }]}>활동 로그</Text>
-        </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>🛡️ 관리자 대시보드</Text>
         <TouchableOpacity style={styles.refreshBtn} onPress={handleRefresh} activeOpacity={0.7}>
           <Ionicons name="refresh" size={20} color={primaryAccent} />
@@ -222,6 +218,14 @@ export const AdminScreen = ({ navigation }: any) => {
           <Text style={[styles.tabText, { color: activeTab === "posts" ? primaryAccent : colors.textMuted, fontWeight: activeTab === "posts" ? "bold" : "500" }]}>
             게시물 관리
           </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === "activity" && { borderBottomColor: primaryAccent, borderBottomWidth: 3 }]}
+          onPress={() => setActiveTab("activity")}
+        >
+          <Ionicons name="receipt-outline" size={16} color={activeTab === "activity" ? primaryAccent : colors.textMuted} />
+          <Text style={[styles.tabText, { color: activeTab === "activity" ? primaryAccent : colors.textMuted, fontWeight: activeTab === "activity" ? "bold" : "500" }]}>활동 로그</Text>
         </TouchableOpacity>
       </View>
 
