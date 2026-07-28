@@ -671,6 +671,24 @@ async def create_comment(
                         comment_id=str(comment.id),
                     )
 
+    if data.mention_user_id and data.mention_user_id != current_user.id:
+        mentioned_user = (
+            await db.execute(select(User).where(User.id == data.mention_user_id))
+        ).scalar_one_or_none()
+        if mentioned_user:
+            from app.modules.notifications.models import NotificationType
+            from app.modules.notifications.service import create_notification
+
+            await create_notification(
+                db,
+                recipient_id=mentioned_user.id,
+                sender_id=current_user.id,
+                type=NotificationType.MENTION.value,
+                message=f"{current_user.nickname or current_user.username}님이 댓글에서 회원님을 언급했습니다.",
+                post_id=post_id,
+                comment_id=str(comment.id),
+            )
+
     user_summary = PostUserSummary(
         id=created_comment.user.id,
         username=created_comment.user.username,
