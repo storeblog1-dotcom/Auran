@@ -145,10 +145,16 @@ async def update_post(
 )
 async def delete_post(
     post_id: UUID,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[dict]:
-    await service.delete_post(db, post_id=post_id, current_user=current_user)
+    await service.delete_post(
+        db,
+        post_id=post_id,
+        current_user=current_user,
+        ip_address=get_client_ip(request),
+    )
     return ApiResponse.ok({"message": "게시물이 성공적으로 삭제되었습니다."})
 
 
@@ -195,11 +201,16 @@ async def get_post_likes(
 async def create_comment(
     post_id: UUID,
     body: CommentCreateRequest,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[CommentResponse]:
     comment = await service.create_comment(
-        db, post_id=post_id, current_user=current_user, data=body
+        db,
+        post_id=post_id,
+        current_user=current_user,
+        data=body,
+        ip_address=get_client_ip(request),
     )
     return ApiResponse.ok(comment)
 
@@ -231,11 +242,16 @@ async def get_post_comments(
 async def update_comment(
     comment_id: UUID,
     body: CommentUpdateRequest,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[CommentResponse]:
     comment = await service.update_comment(
-        db, comment_id=comment_id, current_user=current_user, data=body
+        db,
+        comment_id=comment_id,
+        current_user=current_user,
+        data=body,
+        ip_address=get_client_ip(request),
     )
     return ApiResponse.ok(comment)
 
@@ -247,10 +263,16 @@ async def update_comment(
 )
 async def delete_comment(
     comment_id: UUID,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[dict]:
-    await service.delete_comment(db, comment_id=comment_id, current_user=current_user)
+    await service.delete_comment(
+        db,
+        comment_id=comment_id,
+        current_user=current_user,
+        ip_address=get_client_ip(request),
+    )
     return ApiResponse.ok({"message": "댓글이 성공적으로 삭제되었습니다."})
 
 

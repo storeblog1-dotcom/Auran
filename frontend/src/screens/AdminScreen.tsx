@@ -19,6 +19,7 @@ import { adminService, AdminStats, AdminUserItem, AdminPostItem, AdminActivityLo
 import { getFullImageUrl } from "../config";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { AdminUserPostsModal } from "../components/AdminUserPostsModal";
+import { AdminContentRevisionModal } from "../components/AdminContentRevisionModal";
 import { getDisplayName } from "../utils/displayName";
 
 type AdminTab = "stats" | "users" | "posts" | "activity";
@@ -46,6 +47,8 @@ export const AdminScreen = ({ navigation }: any) => {
   const [totalPosts, setTotalPosts] = useState(0);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [postDetailModalVisible, setPostDetailModalVisible] = useState(false);
+  const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
+  const [revisionModalVisible, setRevisionModalVisible] = useState(false);
   const [activityLogs, setActivityLogs] = useState<AdminActivityLog[]>([]);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [activityQuery, setActivityQuery] = useState("");
@@ -106,6 +109,16 @@ export const AdminScreen = ({ navigation }: any) => {
   };
 
   const toggleActivityLog = async (item: AdminActivityLog) => {
+    if (item.revision_id) {
+      setSelectedRevisionId(item.revision_id);
+      setRevisionModalVisible(true);
+      return;
+    }
+    if (item.target_type === "post" && item.target_id) {
+      setSelectedPostId(item.target_id);
+      setPostDetailModalVisible(true);
+      return;
+    }
     const opening = expandedLogId !== item.id;
     setExpandedLogId(opening ? item.id : null);
     if (!opening || !item.user_id) {
@@ -618,6 +631,14 @@ export const AdminScreen = ({ navigation }: any) => {
         postId={selectedPostId}
         onClose={() => setPostDetailModalVisible(false)}
         onPostUpdated={() => loadPosts(postPage)}
+      />
+      <AdminContentRevisionModal
+        visible={revisionModalVisible}
+        revisionId={selectedRevisionId}
+        onClose={() => {
+          setRevisionModalVisible(false);
+          setSelectedRevisionId(null);
+        }}
       />
     </SafeAreaView>
   );

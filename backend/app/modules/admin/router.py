@@ -1,16 +1,17 @@
 import uuid
 from typing import Any
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, delete, desc
+from sqlalchemy import select, func, delete, desc, update, literal, union_all
 from sqlalchemy.orm import aliased
 
 from app.common.response import ApiResponse
+from app.common.client_ip import get_client_ip
 from app.common.exceptions import NotFoundException, BadRequestException
 from app.core.database import get_db
 from app.modules.auth.dependencies import get_current_admin_user
 from app.modules.auth.models import User
-from app.modules.audit.models import AuditEvent
+from app.modules.audit.models import AuditEvent, CommentRevision, PostRevision
 import json
 from app.modules.posts.models import Post, Comment, PostLike
 from app.modules.community.models import CommunityBoard
@@ -36,11 +37,234 @@ async def activity_logs(
     if post_ids:
         posts = (await db.execute(select(Post).where(Post.id.in_(post_ids)))).scalars().all()
         post_numbers = {str(post.id): f"P-{post.display_number:06d}" for post in posts if post.display_number}
+    revision_ids = [x.revision_id for x in rows if x.revision_id]
+    post_revisions = (
+        await db.execute(select(PostRevision).where(PostRevision.id.in_(revision_ids)))
+    ).scalars().all() if revision_ids else []
+    comment_revisions = (
+        await db.execute(select(CommentRevision).where(CommentRevision.id.in_(revision_ids)))
+    ).scalars().all() if revision_ids else []
+    revision_number_map = {
+        str(revision.id): f"P-{revision.display_number:06d}"
+        for revision in post_revisions
+        if revision.display_number
+    }
+    revision_number_map.update({
+        str(revision.id): (
+            f"P-{revision.post_display_number:06d}-"
+            + (
+                f"C-{revision.parent_display_number:03d}-R-{revision.display_number:03d}"
+                if revision.parent_display_number and revision.display_number
+                else f"C-{revision.display_number:03d}"
+            )
+        )
+        for revision in comment_revisions
+        if revision.post_display_number and revision.display_number
+    })
     user_ids = [x.user_id for x in rows if x.user_id]
     users = (await db.execute(select(User).where(User.id.in_(user_ids)))).scalars().all() if user_ids else []
     user_map = {u.id: u for u in users}
-    data = [{"id": str(x.id), "user_id": str(x.user_id) if x.user_id else None, "username": user_map[x.user_id].username if x.user_id in user_map else "알 수 없음", "nickname": user_map[x.user_id].nickname if x.user_id in user_map else None, "event_type": x.event_type, "target_type": x.target_type, "target_id": x.target_id, "content_number": post_numbers.get(x.target_id or ""), "ip_address": x.ip_address, "snapshot": json.loads(x.snapshot) if x.snapshot else None, "created_at": x.created_at.isoformat()} for x in rows if x.event_type != "admin_audit_view"]
+    data = [{
+        "id": str(x.id),
+        "user_id": str(x.user_id) if x.user_id else None,
+        "username": user_map[x.user_id].username if x.user_id in user_map else "알 수 없음",
+        "nickname": user_map[x.user_id].nickname if x.user_id in user_map else None,
+        "event_type": x.event_type,
+        "target_type": x.target_type,
+        "target_id": x.target_id,
+        "revision_id": str(x.revision_id) if x.revision_id else None,
+        "content_number": revision_number_map.get(str(x.revision_id)) if x.revision_id else post_numbers.get(x.target_id or ""),
+        "ip_address": x.ip_address,
+        "snapshot": json.loads(x.snapshot) if x.snapshot else None,
+        "created_at": x.created_at.isoformat(),
+    } for x in rows if x.event_type != "admin_audit_view"]
     return ApiResponse.paginated(data=data, total=total or 0)
+
+
+def _comment_number(revision: CommentRevision) -> str | None:
+    if not revision.post_display_number or not revision.display_number:
+        return None
+    if revision.parent_display_number:
+        return (
+            f"P-{revision.post_display_number:06d}-"
+            f"C-{revision.parent_display_number:03d}-R-{revision.display_number:03d}"
+        )
+    return f"P-{revision.post_display_number:06d}-C-{revision.display_number:03d}"
+
+
+@router.get("/content-revisions/{revision_id}", summary="관리자 전용 보존 콘텐츠 상세")
+async def get_content_revision(
+    revision_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+) -> ApiResponse[dict[str, Any]]:
+    post_revision = (
+        await db.execute(select(PostRevision).where(PostRevision.id == revision_id))
+    ).scalar_one_or_none()
+    if post_revision:
+        author = (
+            await db.execute(select(User).where(User.id == post_revision.user_id))
+        ).scalar_one_or_none()
+        rows = (
+            await db.execute(
+                select(CommentRevision)
+                .where(
+                    CommentRevision.post_id == post_revision.post_id,
+                    CommentRevision.event_at <= post_revision.event_at,
+                )
+                .order_by(CommentRevision.comment_id, desc(CommentRevision.version))
+            )
+        ).scalars().all()
+        latest: dict[uuid.UUID, CommentRevision] = {}
+        for row in rows:
+            latest.setdefault(row.comment_id, row)
+        comments = sorted(
+            latest.values(), key=lambda row: (row.source_created_at, str(row.comment_id))
+        )
+        return ApiResponse.ok({
+            "kind": "post",
+            "revision_id": str(post_revision.id),
+            "target_id": str(post_revision.post_id),
+            "version": post_revision.version,
+            "lifecycle_event": post_revision.lifecycle_event,
+            "content_number": f"P-{post_revision.display_number:06d}" if post_revision.display_number else None,
+            "board_label": post_revision.board_name or ("익명게시판" if post_revision.board_type == "anonymous" else (post_revision.board_type or "피드")),
+            "title": post_revision.title,
+            "caption": post_revision.caption,
+            "location": post_revision.location,
+            "visibility": post_revision.visibility,
+            "media": post_revision.media_manifest,
+            "author": {
+                "id": str(post_revision.user_id),
+                "username": author.username if author else "알 수 없음",
+                "nickname": author.nickname if author else None,
+                "profile_image_url": author.profile_image_url if author else None,
+            },
+            "event_ip": post_revision.event_ip,
+            "event_at": post_revision.event_at.isoformat(),
+            "retention_until": post_revision.retention_until.isoformat(),
+            "legal_hold": post_revision.legal_hold,
+            "comments": [{
+                "id": str(comment.comment_id),
+                "content_number": _comment_number(comment),
+                "content_type": "대댓글" if comment.parent_id else "댓글",
+                "content": comment.content,
+                "lifecycle_event": comment.lifecycle_event,
+                "event_ip": comment.event_ip,
+                "created_at": comment.source_created_at.isoformat(),
+            } for comment in comments],
+        })
+
+    comment_revision = (
+        await db.execute(select(CommentRevision).where(CommentRevision.id == revision_id))
+    ).scalar_one_or_none()
+    if not comment_revision:
+        raise NotFoundException("보존 콘텐츠")
+    author = (
+        await db.execute(select(User).where(User.id == comment_revision.user_id))
+    ).scalar_one_or_none()
+    source_post = (
+        await db.execute(
+            select(PostRevision)
+            .where(
+                PostRevision.post_id == comment_revision.post_id,
+                PostRevision.event_at <= comment_revision.event_at,
+            )
+            .order_by(desc(PostRevision.version))
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return ApiResponse.ok({
+        "kind": "comment",
+        "revision_id": str(comment_revision.id),
+        "target_id": str(comment_revision.comment_id),
+        "version": comment_revision.version,
+        "lifecycle_event": comment_revision.lifecycle_event,
+        "content_number": _comment_number(comment_revision),
+        "content_type": "대댓글" if comment_revision.parent_id else "댓글",
+        "content": comment_revision.content,
+        "post": {
+            "id": str(comment_revision.post_id),
+            "content_number": f"P-{source_post.display_number:06d}" if source_post and source_post.display_number else None,
+            "title": source_post.title if source_post else None,
+            "caption": source_post.caption if source_post else None,
+            "board_label": (
+                source_post.board_name
+                or ("익명게시판" if source_post.board_type == "anonymous" else (source_post.board_type or "피드"))
+            ) if source_post else None,
+        },
+        "author": {
+            "id": str(comment_revision.user_id),
+            "username": author.username if author else "알 수 없음",
+            "nickname": author.nickname if author else None,
+            "profile_image_url": author.profile_image_url if author else None,
+        },
+        "event_ip": comment_revision.event_ip,
+        "event_at": comment_revision.event_at.isoformat(),
+        "retention_until": comment_revision.retention_until.isoformat(),
+        "legal_hold": comment_revision.legal_hold,
+    })
+
+
+@router.patch("/content-revisions/{revision_id}/legal-hold", summary="보존 콘텐츠 법적 보존 설정")
+async def set_content_revision_legal_hold(
+    revision_id: uuid.UUID,
+    enabled: bool = Query(...),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+) -> ApiResponse[dict[str, Any]]:
+    revision = (
+        await db.execute(select(PostRevision).where(PostRevision.id == revision_id))
+    ).scalar_one_or_none()
+    if revision is None:
+        revision = (
+            await db.execute(select(CommentRevision).where(CommentRevision.id == revision_id))
+        ).scalar_one_or_none()
+    if revision is None:
+        raise NotFoundException("보존 콘텐츠")
+    if isinstance(revision, PostRevision):
+        post_revision_ids = (
+            await db.execute(
+                select(PostRevision.id).where(PostRevision.post_id == revision.post_id)
+            )
+        ).scalars().all()
+        comment_revision_ids = (
+            await db.execute(
+                select(CommentRevision.id).where(CommentRevision.post_id == revision.post_id)
+            )
+        ).scalars().all()
+        await db.execute(
+            update(PostRevision)
+            .where(PostRevision.post_id == revision.post_id)
+            .values(legal_hold=enabled)
+        )
+        await db.execute(
+            update(CommentRevision)
+            .where(CommentRevision.post_id == revision.post_id)
+            .values(legal_hold=enabled)
+        )
+        affected_revision_ids = [*post_revision_ids, *comment_revision_ids]
+    else:
+        affected_revision_ids = (
+            await db.execute(
+                select(CommentRevision.id).where(
+                    CommentRevision.comment_id == revision.comment_id
+                )
+            )
+        ).scalars().all()
+        await db.execute(
+            update(CommentRevision)
+            .where(CommentRevision.comment_id == revision.comment_id)
+            .values(legal_hold=enabled)
+        )
+    if affected_revision_ids:
+        await db.execute(
+            update(AuditEvent)
+            .where(AuditEvent.revision_id.in_(affected_revision_ids))
+            .values(legal_hold=enabled)
+        )
+    await db.commit()
+    return ApiResponse.ok({"revision_id": str(revision_id), "legal_hold": enabled})
 
 
 @router.get("/users/{user_id}/content", summary="관리자 전용 사용자 작성 콘텐츠")
@@ -55,23 +279,97 @@ async def get_admin_user_content(
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user:
         raise NotFoundException("사용자")
-    post_rows = (await db.execute(
-        select(Post, CommunityBoard.name)
+    live_posts = (
+        select(
+            Post.id.label("id"),
+            Post.display_number.label("display_number"),
+            Post.board_type.label("board_type"),
+            CommunityBoard.name.label("board_name"),
+            Post.title.label("title"),
+            Post.caption.label("caption"),
+            Post.created_at.label("created_at"),
+            literal(False).label("deleted"),
+            literal(None).label("revision_id"),
+        )
         .outerjoin(CommunityBoard, CommunityBoard.id == Post.board_id)
         .where(Post.user_id == user_id)
-        .order_by(desc(Post.created_at))
+    )
+    deleted_posts = select(
+        PostRevision.post_id.label("id"),
+        PostRevision.display_number.label("display_number"),
+        PostRevision.board_type.label("board_type"),
+        PostRevision.board_name.label("board_name"),
+        PostRevision.title.label("title"),
+        PostRevision.caption.label("caption"),
+        PostRevision.source_created_at.label("created_at"),
+        literal(True).label("deleted"),
+        PostRevision.id.label("revision_id"),
+    ).where(
+        PostRevision.user_id == user_id,
+        PostRevision.lifecycle_event == "deleted",
+    )
+    posts_union = union_all(live_posts, deleted_posts).subquery()
+    post_rows = (await db.execute(
+        select(posts_union)
+        .order_by(desc(posts_union.c.created_at))
         .offset((post_page - 1) * size)
         .limit(size + 1)
     )).all()
     parent_comment = aliased(Comment)
     comment_board = aliased(CommunityBoard)
-    comment_rows = (await db.execute(
-        select(Comment, Post.display_number, Post.board_type, comment_board.name, parent_comment.display_number)
+    live_comments = (
+        select(
+            Comment.id.label("id"),
+            Post.display_number.label("post_display_number"),
+            Comment.display_number.label("display_number"),
+            Comment.parent_id.label("parent_id"),
+            parent_comment.display_number.label("parent_display_number"),
+            Post.board_type.label("board_type"),
+            comment_board.name.label("board_name"),
+            Comment.content.label("content"),
+            Comment.created_at.label("created_at"),
+            literal(False).label("deleted"),
+            literal(None).label("revision_id"),
+        )
         .join(Post, Post.id == Comment.post_id)
         .outerjoin(comment_board, comment_board.id == Post.board_id)
         .outerjoin(parent_comment, parent_comment.id == Comment.parent_id)
         .where(Comment.user_id == user_id)
-        .order_by(desc(Comment.created_at))
+    )
+    retained_board_name = (
+        select(PostRevision.board_name)
+        .where(PostRevision.post_id == CommentRevision.post_id)
+        .order_by(desc(PostRevision.version))
+        .limit(1)
+        .scalar_subquery()
+    )
+    retained_board_type = (
+        select(PostRevision.board_type)
+        .where(PostRevision.post_id == CommentRevision.post_id)
+        .order_by(desc(PostRevision.version))
+        .limit(1)
+        .scalar_subquery()
+    )
+    deleted_comments = select(
+        CommentRevision.comment_id.label("id"),
+        CommentRevision.post_display_number.label("post_display_number"),
+        CommentRevision.display_number.label("display_number"),
+        CommentRevision.parent_id.label("parent_id"),
+        CommentRevision.parent_display_number.label("parent_display_number"),
+        retained_board_type.label("board_type"),
+        retained_board_name.label("board_name"),
+        CommentRevision.content.label("content"),
+        CommentRevision.source_created_at.label("created_at"),
+        literal(True).label("deleted"),
+        CommentRevision.id.label("revision_id"),
+    ).where(
+        CommentRevision.user_id == user_id,
+        CommentRevision.lifecycle_event == "deleted",
+    )
+    comments_union = union_all(live_comments, deleted_comments).subquery()
+    comment_rows = (await db.execute(
+        select(comments_union)
+        .order_by(desc(comments_union.c.created_at))
         .offset((comment_page - 1) * size)
         .limit(size + 1)
     )).all()
@@ -79,8 +377,31 @@ async def get_admin_user_content(
     comments = comment_rows[:size]
     return ApiResponse.ok({
         "user": {"id": str(user.id), "username": user.username, "nickname": user.nickname},
-        "posts": [{"id": str(p.id), "content_number": f"P-{p.display_number:06d}", "content_type": "게시물", "board_label": board_name or ("익명게시판" if p.board_type == "anonymous" else (p.board_type or "피드")), "title": p.title, "display_text": p.title if p.title else p.caption, "created_at": p.created_at.isoformat()} for p, board_name in posts],
-        "comments": [{"id": str(c.id), "content_number": f"P-{number:06d}-C-{parent_number:03d}-R-{c.display_number:03d}" if parent_number else f"P-{number:06d}-C-{c.display_number:03d}", "content_type": "대댓글" if c.parent_id else "댓글", "board_label": board_name or ("익명게시판" if board_type == "anonymous" else (board_type or "피드")), "display_text": c.content, "created_at": c.created_at.isoformat()} for c, number, board_type, board_name, parent_number in comments],
+        "posts": [{
+            "id": str(row.id),
+            "revision_id": str(row.revision_id) if row.revision_id else None,
+            "content_number": f"P-{row.display_number:06d}" if row.display_number else None,
+            "content_type": "삭제 게시물" if row.deleted else "게시물",
+            "board_label": row.board_name or ("익명게시판" if row.board_type == "anonymous" else (row.board_type or "피드")),
+            "title": row.title,
+            "display_text": row.title if row.title else row.caption,
+            "created_at": row.created_at.isoformat(),
+            "deleted": row.deleted,
+        } for row in posts],
+        "comments": [{
+            "id": str(row.id),
+            "revision_id": str(row.revision_id) if row.revision_id else None,
+            "content_number": (
+                f"P-{row.post_display_number:06d}-C-{row.parent_display_number:03d}-R-{row.display_number:03d}"
+                if row.parent_display_number
+                else f"P-{row.post_display_number:06d}-C-{row.display_number:03d}"
+            ) if row.post_display_number and row.display_number else None,
+            "content_type": ("삭제 대댓글" if row.deleted else "대댓글") if row.parent_id else ("삭제 댓글" if row.deleted else "댓글"),
+            "board_label": row.board_name or ("익명게시판" if row.board_type == "anonymous" else (row.board_type or "피드")),
+            "display_text": row.content,
+            "created_at": row.created_at.isoformat(),
+            "deleted": row.deleted,
+        } for row in comments],
         "pagination": {
             "post_page": post_page,
             "comment_page": comment_page,
@@ -236,15 +557,16 @@ async def get_admin_posts(
 @router.delete("/posts/{post_id}", summary="관리자 권한 게시물 강제 삭제")
 async def admin_delete_post(
     post_id: uuid.UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_admin_user),
 ) -> ApiResponse[dict[str, str]]:
-    stmt = select(Post).where(Post.id == post_id)
-    res = await db.execute(stmt)
-    post = res.scalar_one_or_none()
-    if not post:
-        raise NotFoundException("게시물")
-
-    await db.delete(post)
-    await db.commit()
+    from app.modules.posts.service import delete_post
+    await delete_post(
+        db,
+        post_id=post_id,
+        current_user=admin,
+        ip_address=get_client_ip(request),
+        record_audit=False,
+    )
     return ApiResponse.ok({"message": "게시물이 성공적으로 강제 삭제되었습니다."})
