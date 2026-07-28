@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -21,6 +21,8 @@ import { getFullImageUrl } from "../config";
 
 export const EditProfileScreen = ({ navigation }: any) => {
   const { user, refreshProfile, logout } = useAuth();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const shouldScrollToWithdrawalRef = useRef(false);
 
   const [fullName, setFullName] = useState(user?.full_name || "");
   const [nickname, setNickname] = useState(user?.nickname || "");
@@ -248,6 +250,12 @@ export const EditProfileScreen = ({ navigation }: any) => {
     );
   };
 
+  const handleToggleWithdrawal = () => {
+    const nextVisible = !showWithdrawalSection;
+    shouldScrollToWithdrawalRef.current = nextVisible;
+    setShowWithdrawalSection(nextVisible);
+  };
+
   const currentAvatarUri = selectedAsset
     ? selectedAsset.uri
     : getFullImageUrl(profileImageUrl);
@@ -269,7 +277,17 @@ export const EditProfileScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        ref={scrollViewRef}
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+        onContentSizeChange={() => {
+          if (shouldScrollToWithdrawalRef.current) {
+            shouldScrollToWithdrawalRef.current = false;
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+          }
+        }}
+      >
         {/* Avatar Section */}
         <TouchableOpacity style={styles.avatarSection} onPress={handlePickProfileImage} activeOpacity={0.8}>
           <Image source={{ uri: currentAvatarUri }} style={styles.avatar} />
@@ -407,7 +425,7 @@ export const EditProfileScreen = ({ navigation }: any) => {
 
         <TouchableOpacity
           style={styles.withdrawalToggleBtn}
-          onPress={() => setShowWithdrawalSection(!showWithdrawalSection)}
+          onPress={handleToggleWithdrawal}
         >
           <Text style={styles.withdrawalToggleText}>계정 탈퇴 신청</Text>
           <Ionicons
