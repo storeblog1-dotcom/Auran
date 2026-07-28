@@ -3,8 +3,10 @@ import unittest
 from app.main import app
 from app.modules.direct.router import (
     MESSAGE_REQUEST_LIMIT,
+    admin_message_access,
     message_request_allowed,
     pending_request_has_capacity,
+    room_starts_accepted,
 )
 from app.modules.direct.schemas import ChatRoomResponse
 
@@ -16,6 +18,22 @@ class DirectMessagePolicyTests(unittest.TestCase):
 
     def test_mutual_followers_can_message_when_requests_are_disabled(self) -> None:
         self.assertTrue(message_request_allowed(True, False))
+
+    def test_admin_can_message_when_requests_are_disabled(self) -> None:
+        self.assertTrue(
+            message_request_allowed(
+                False,
+                False,
+                sender_is_admin=True,
+            )
+        )
+        self.assertTrue(admin_message_access(True))
+        self.assertFalse(admin_message_access(False))
+
+    def test_admin_room_starts_accepted_without_mutual_follow(self) -> None:
+        self.assertTrue(room_starts_accepted(False, True))
+        self.assertTrue(room_starts_accepted(True, False))
+        self.assertFalse(room_starts_accepted(False, False))
 
     def test_pending_request_allows_exactly_five_messages(self) -> None:
         self.assertEqual(MESSAGE_REQUEST_LIMIT, 5)
