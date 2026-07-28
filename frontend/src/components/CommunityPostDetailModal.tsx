@@ -376,7 +376,7 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
                 ) : replyParentComment ? (
                   <View style={styles.replyBanner}>
                     <Text style={[styles.replyBannerText, { color: colors.textSecondary }]}>
-                      @{replyParentComment.user?.username || "익명"} 님에게 답글 작성 중
+                      {getDisplayName(replyParentComment.user, "익명")} 님에게 답글 작성 중
                     </Text>
                     <TouchableOpacity onPress={() => setReplyParentComment(null)}>
                       <Ionicons name="close" size={16} color={colors.textSecondary} />
@@ -391,7 +391,7 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
                       editingComment
                         ? "댓글 내용 수정..."
                         : replyParentComment
-                        ? `@${replyParentComment.user?.username || "익명"} 님에게 답글 달기...`
+                        ? `${getDisplayName(replyParentComment.user, "익명")} 님에게 답글 달기...`
                         : isAnonymous
                         ? "익명으로 댓글 작성..."
                         : "댓글 작성..."
