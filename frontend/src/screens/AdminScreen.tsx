@@ -24,7 +24,10 @@ import {
   AdminContentHistoryItem,
 } from "../services/adminService";
 import { getFullImageUrl } from "../config";
-import { PostDetailModal } from "../components/PostDetailModal";
+import {
+  PostDetailModal,
+  AdminPostAuditContext,
+} from "../components/PostDetailModal";
 import { AdminUserPostsModal } from "../components/AdminUserPostsModal";
 import { AdminContentRevisionModal } from "../components/AdminContentRevisionModal";
 import { getDisplayName } from "../utils/displayName";
@@ -54,6 +57,8 @@ export const AdminScreen = ({ navigation }: any) => {
   const [totalPosts, setTotalPosts] = useState(0);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [selectedPostBoardLabel, setSelectedPostBoardLabel] = useState<string | null>(null);
+  const [selectedPostAuditContext, setSelectedPostAuditContext] =
+    useState<AdminPostAuditContext | null>(null);
   const [postDetailModalVisible, setPostDetailModalVisible] = useState(false);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
   const [revisionModalVisible, setRevisionModalVisible] = useState(false);
@@ -187,6 +192,13 @@ export const AdminScreen = ({ navigation }: any) => {
     }
     setSelectedPostId(postId);
     setSelectedPostBoardLabel(item.board_label || null);
+    setSelectedPostAuditContext({
+      contentNumber: item.content_number,
+      contentType: item.content_type,
+      eventType: item.latest_event_type,
+      eventIp: item.latest_event_ip,
+      eventAt: item.latest_event_at,
+    });
     setPostDetailModalVisible(true);
   };
 
@@ -379,6 +391,15 @@ export const AdminScreen = ({ navigation }: any) => {
               style={{ color: colors.textPrimary, marginTop: 3 }}
             >
               {content.display_text || "(내용 없음)"}
+            </Text>
+            <Text style={{ color: colors.textMuted, marginTop: 6, fontSize: 11 }}>
+              최근 행위: {content.latest_event_type || "기록 없음"}
+              {" · "}IP {content.latest_event_ip || "기록 없음"}
+            </Text>
+            <Text style={{ color: colors.textMuted, marginTop: 2, fontSize: 11 }}>
+              {content.latest_event_at
+                ? new Date(content.latest_event_at).toLocaleString()
+                : "시간 기록 없음"}
             </Text>
             <TouchableOpacity
               onPress={(event) => {
@@ -874,9 +895,11 @@ export const AdminScreen = ({ navigation }: any) => {
         postId={selectedPostId}
         adminMode
         adminBoardLabel={selectedPostBoardLabel}
+        adminAuditContext={selectedPostAuditContext}
         onClose={() => {
           setPostDetailModalVisible(false);
           setSelectedPostBoardLabel(null);
+          setSelectedPostAuditContext(null);
         }}
         onPostUpdated={() => loadPosts(postPage)}
       />

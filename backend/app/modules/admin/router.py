@@ -218,6 +218,16 @@ def _revision_comments(
     } for comment in comments]
 
 
+def _latest_revision_map(rows: list[Any], target_attribute: str) -> dict[uuid.UUID, Any]:
+    latest: dict[uuid.UUID, Any] = {}
+    for row in rows:
+        target_id = getattr(row, target_attribute)
+        current = latest.get(target_id)
+        if current is None or row.version > current.version:
+            latest[target_id] = row
+    return latest
+
+
 @router.get("/content-revisions/{revision_id}", summary="관리자 전용 보존 콘텐츠 상세")
 async def get_content_revision(
     revision_id: uuid.UUID,
@@ -562,6 +572,21 @@ async def get_admin_user_content(
             .group_by(CommentRevision.comment_id)
         )
     ).all()) if comment_ids else {}
+    post_revisions = (
+        await db.execute(
+            select(PostRevision).where(PostRevision.post_id.in_(post_ids))
+        )
+    ).scalars().all() if post_ids else []
+    comment_revisions = (
+        await db.execute(
+            select(CommentRevision).where(CommentRevision.comment_id.in_(comment_ids))
+        )
+    ).scalars().all() if comment_ids else []
+    latest_post_revisions = _latest_revision_map(post_revisions, "post_id")
+    latest_comment_revisions = _latest_revision_map(
+        comment_revisions,
+        "comment_id",
+    )
     account_events = (
         await db.execute(
             select(AuditEvent)
@@ -596,6 +621,10 @@ async def get_admin_user_content(
             "created_at": row.created_at.isoformat(),
             "deleted": row.deleted,
             "revision_count": post_revision_counts.get(row.id, 0),
+            "latest_event_type": latest_post_revisions[row.id].lifecycle_event if row.id in latest_post_revisions else None,
+            "latest_event_ip": latest_post_revisions[row.id].event_ip if row.id in latest_post_revisions else None,
+            "latest_event_at": latest_post_revisions[row.id].event_at.isoformat() if row.id in latest_post_revisions else None,
+            "latest_revision_id": str(latest_post_revisions[row.id].id) if row.id in latest_post_revisions else None,
         } for row in posts],
         "comments": [{
             "id": str(row.id),
@@ -612,6 +641,10 @@ async def get_admin_user_content(
             "created_at": row.created_at.isoformat(),
             "deleted": row.deleted,
             "revision_count": comment_revision_counts.get(row.id, 0),
+            "latest_event_type": latest_comment_revisions[row.id].lifecycle_event if row.id in latest_comment_revisions else None,
+            "latest_event_ip": latest_comment_revisions[row.id].event_ip if row.id in latest_comment_revisions else None,
+            "latest_event_at": latest_comment_revisions[row.id].event_at.isoformat() if row.id in latest_comment_revisions else None,
+            "latest_revision_id": str(latest_comment_revisions[row.id].id) if row.id in latest_comment_revisions else None,
         } for row in comments],
         "pagination": {
             "post_page": post_page,
