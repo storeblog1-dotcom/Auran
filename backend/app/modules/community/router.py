@@ -48,6 +48,21 @@ async def create_board(body: BoardCreateRequest, current_user: User = Depends(ge
             raise BadRequestException("하위 게시판은 2단계까지만 만들 수 있습니다.")
     board = CommunityBoard(**body.model_dump())
     db.add(board)
+    await db.flush()
+    # Every top-level board has a real default child.  "전체" remains a UI-only
+    # aggregate, while posts are always assigned to a concrete child board.
+    if body.parent_id is None:
+        common_slug = f"{body.slug[:64]}-common-{str(board.id).replace('-', '')[:8]}"
+        db.add(
+            CommunityBoard(
+                name="공통",
+                slug=common_slug,
+                parent_id=board.id,
+                is_anonymous=body.is_anonymous,
+                is_default=True,
+                sort_order=0,
+            )
+        )
     await db.commit()
     await db.refresh(board)
     return ApiResponse.ok(board)
@@ -59,6 +74,8 @@ async def update_board(board_id: UUID, body: BoardUpdateRequest, current_user: U
     board = (await db.execute(select(CommunityBoard).where(CommunityBoard.id == board_id))).scalar_one_or_none()
     if not board:
         raise NotFoundException("게시판")
+    if board.is_default and "is_active" in body.model_dump(exclude_unset=True):
+        raise BadRequestException("기본 하위 게시판은 폐쇄할 수 없습니다.")
     for key, value in body.model_dump(exclude_unset=True).items():
         setattr(board, key, value)
     await db.commit()
@@ -93,6 +110,8 @@ async def delete_board(board_id: UUID, confirm_name: str, current_user: User = D
     board = (await db.execute(select(CommunityBoard).where(CommunityBoard.id == board_id))).scalar_one_or_none()
     if not board:
         raise NotFoundException("게시판")
+    if board.is_default:
+        raise BadRequestException("기본 하위 게시판은 삭제할 수 없습니다.")
     if confirm_name != board.name:
         raise BadRequestException("삭제하려면 게시판명을 정확히 입력해야 합니다.")
     children = (await db.execute(select(CommunityBoard.id).where(CommunityBoard.parent_id == board.id))).scalars().first()
