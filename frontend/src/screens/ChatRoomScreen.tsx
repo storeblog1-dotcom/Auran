@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   StatusBar,
   Alert,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -45,6 +46,7 @@ interface ChatMessage {
 
 export const ChatRoomScreen = ({ route, navigation }: any) => {
   const insets = useSafeAreaInsets();
+  const { width: viewportWidth } = useWindowDimensions();
   const {
     roomId,
     targetUser,
@@ -73,6 +75,11 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
   const ws = useRef<WebSocket | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
+  const messageBubbleMaxWidth = Math.min(
+    420,
+    Math.max(180, viewportWidth - 96)
+  );
+  const messageTextMaxWidth = messageBubbleMaxWidth - 28;
 
   useEffect(() => {
     if (requestStatus !== "ACCEPTED") return;
@@ -374,6 +381,7 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
         <View
           style={[
             styles.bubble,
+            { maxWidth: messageBubbleMaxWidth },
             isMine
               ? [styles.myBubble, { alignSelf: "flex-end" }]
               : [styles.otherBubble, { alignSelf: "flex-start", backgroundColor: colors.chatBubbleOther }],
@@ -419,7 +427,16 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
               </View>
             </TouchableOpacity>
           ) : (
-            <Text style={[styles.messageText, { color: isMine ? "#ffffff" : colors.textPrimary }]}>
+            <Text
+              style={[
+                styles.messageText,
+                {
+                  color: isMine ? "#ffffff" : colors.textPrimary,
+                  maxWidth: messageTextMaxWidth,
+                },
+              ]}
+              textBreakStrategy="simple"
+            >
               {item.content}
             </Text>
           )}
@@ -500,8 +517,10 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
           <FlatList
             ref={flatListRef}
             data={messages}
+            extraData={viewportWidth}
             keyExtractor={(item) => item.id}
             renderItem={renderMessageItem}
+            removeClippedSubviews={false}
             contentContainerStyle={styles.messagesList}
             onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
             onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
@@ -657,6 +676,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   messageRow: {
+    width: "100%",
+    minWidth: 0,
     flexDirection: "row",
     marginVertical: 4,
     alignItems: "flex-end",
@@ -675,9 +696,9 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   bubble: {
-    maxWidth: "78%",
     minWidth: 36,
     flexShrink: 1,
+    overflow: "visible",
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 9,
