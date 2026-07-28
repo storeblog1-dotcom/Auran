@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-revision = "20260729_content_revision_retention"
+revision = "20260729_content_retention"
 down_revision = "20260729_admin_content_indexes"
 branch_labels = None
 depends_on = None
