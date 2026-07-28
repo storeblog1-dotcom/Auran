@@ -15,13 +15,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
-import { adminService, AdminStats, AdminUserItem, AdminPostItem } from "../services/adminService";
+import { adminService, AdminStats, AdminUserItem, AdminPostItem, AdminActivityLog } from "../services/adminService";
 import { getFullImageUrl } from "../config";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { AdminUserPostsModal } from "../components/AdminUserPostsModal";
 import { getDisplayName } from "../utils/displayName";
 
-type AdminTab = "stats" | "users" | "posts";
+type AdminTab = "stats" | "users" | "posts" | "activity";
 
 export const AdminScreen = ({ navigation }: any) => {
   const { colors, isDark } = useTheme();
@@ -46,6 +46,8 @@ export const AdminScreen = ({ navigation }: any) => {
   const [totalPosts, setTotalPosts] = useState(0);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [postDetailModalVisible, setPostDetailModalVisible] = useState(false);
+  const [activityLogs, setActivityLogs] = useState<AdminActivityLog[]>([]);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
   const loadStats = async () => {
     try {
@@ -86,6 +88,11 @@ export const AdminScreen = ({ navigation }: any) => {
       setLoading(false);
     }
   };
+  const loadActivity = async () => {
+    try { setLoading(true); const res = await adminService.getActivityLogs(); setActivityLogs(res.items); }
+    catch { Alert.alert("오류", "활동 로그를 불러오는데 실패했습니다."); }
+    finally { setLoading(false); }
+  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -95,6 +102,7 @@ export const AdminScreen = ({ navigation }: any) => {
       await loadUsers(searchQuery, 1);
     } else if (activeTab === "posts") {
       await loadPosts(1);
+    } else { await loadActivity();
     }
     setRefreshing(false);
   };
@@ -106,6 +114,7 @@ export const AdminScreen = ({ navigation }: any) => {
       loadUsers(searchQuery, 1);
     } else if (activeTab === "posts") {
       loadPosts(1);
+    } else { loadActivity();
     }
   }, [activeTab]);
 
@@ -169,6 +178,10 @@ export const AdminScreen = ({ navigation }: any) => {
           activeOpacity={0.7}
         >
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tabItem, activeTab === "activity" && { borderBottomColor: primaryAccent, borderBottomWidth: 3 }]} onPress={() => setActiveTab("activity")}>
+          <Ionicons name="receipt-outline" size={16} color={activeTab === "activity" ? primaryAccent : colors.textMuted} />
+          <Text style={[styles.tabText, { color: activeTab === "activity" ? primaryAccent : colors.textMuted }]}>활동 로그</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>🛡️ 관리자 대시보드</Text>
         <TouchableOpacity style={styles.refreshBtn} onPress={handleRefresh} activeOpacity={0.7}>
@@ -446,6 +459,14 @@ export const AdminScreen = ({ navigation }: any) => {
             />
           )}
         </View>
+      )}
+
+      {activeTab === "activity" && (
+        <FlatList data={activityLogs} keyExtractor={(item) => item.id} contentContainerStyle={{ padding: 16 }}
+          renderItem={({ item }) => <TouchableOpacity activeOpacity={0.8} onPress={() => setExpandedLogId(expandedLogId === item.id ? null : item.id)} style={[styles.userCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+            <View style={{ flex: 1 }}><Text style={[styles.usernameText, { color: colors.textPrimary }]}>{item.event_type === "signup" ? "가입" : item.event_type === "withdrawal" ? "탈퇴" : item.event_type}</Text><Text style={{ color: colors.textMuted, fontSize: 12 }}>{new Date(item.created_at).toLocaleString()}</Text></View>
+            {expandedLogId === item.id && <View style={{ width: "100%", marginTop: 12, borderTopWidth: 1, borderTopColor: colors.borderColor, paddingTop: 10 }}><Text style={{ color: colors.textPrimary }}>IP: {item.ip_address || "기록 없음"}</Text><Text style={{ color: colors.textMuted, marginTop: 4 }}>대상: {item.target_type || "계정"} {item.target_id || ""}</Text>{item.snapshot && <Text style={{ color: colors.textMuted, marginTop: 4 }}>{JSON.stringify(item.snapshot)}</Text>}</View>}
+          </TouchableOpacity>} />
       )}
 
       {/* 회원별 작성 게시물 팝업 모달 */}

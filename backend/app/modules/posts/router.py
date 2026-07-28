@@ -1,6 +1,7 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
+from app.common.client_ip import get_client_ip
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.response import ApiResponse
@@ -38,10 +39,11 @@ users_posts_router = APIRouter(prefix="/users", tags=["Posts"])
 )
 async def create_post(
     body: PostCreateRequest,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[PostResponse]:
-    post = await service.create_post(db, current_user=current_user, data=body)
+    post = await service.create_post(db, current_user=current_user, data=body, ip_address=get_client_ip(request))
     return ApiResponse.ok(post)
 
 
@@ -126,11 +128,12 @@ async def get_post_detail(
 async def update_post(
     post_id: UUID,
     body: PostUpdateRequest,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[PostResponse]:
     post = await service.update_post(
-        db, post_id=post_id, current_user=current_user, data=body
+        db, post_id=post_id, current_user=current_user, data=body, ip_address=get_client_ip(request)
     )
     return ApiResponse.ok(post)
 

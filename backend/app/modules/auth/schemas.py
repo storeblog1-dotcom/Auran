@@ -50,6 +50,11 @@ class RefreshRequest(BaseModel):
     refresh_token: str = Field(..., description="발급받은 Refresh JWT")
 
 
+class WithdrawalRequest(BaseModel):
+    password: str = Field(..., min_length=1)
+    confirmation: str = Field(..., pattern="^탈퇴$")
+
+
 class GoogleLoginRequest(BaseModel):
     """Google OAuth 로그인 요청 DTO"""
     token: str | None = Field(None, description="Google ID Token")

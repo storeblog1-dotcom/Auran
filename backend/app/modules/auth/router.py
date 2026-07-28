@@ -1,4 +1,9 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
+from datetime import timedelta
+from app.common.client_ip import get_client_ip
+from app.modules.audit.service import record
+from app.modules.audit.models import WithdrawnAccount
+from app.core.security import verify_password
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.response import ApiResponse
@@ -13,6 +18,7 @@ from app.modules.auth.schemas import (
     TokenResponse,
     UserMe,
     NicknameAvailabilityResponse,
+    WithdrawalRequest,
 )
 from app.modules.auth import service
 
@@ -40,9 +46,12 @@ async def nickname_availability(
 )
 async def register(
     body: RegisterRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[UserMe]:
     user = await service.register(db, body)
+    await record(db, user_id=user.id, event_type="signup", ip_address=get_client_ip(request), target_type="user", target_id=user.id)
+    await db.commit()
     return ApiResponse.ok(UserMe.model_validate(user))
 
 
@@ -94,3 +103,20 @@ async def me(
     current_user: User = Depends(get_current_active_user),
 ) -> ApiResponse[UserMe]:
     return ApiResponse.ok(UserMe.model_validate(current_user))
+
+
+@router.post("/withdraw", summary="계정 탈퇴 및 보존 처리")
+async def withdraw(
+    body: WithdrawalRequest,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[dict]:
+    if not current_user.hashed_password or not verify_password(body.password, current_user.hashed_password):
+        from app.common.exceptions import UnauthorizedException
+        raise UnauthorizedException("비밀번호가 올바르지 않습니다")
+    current_user.is_active = False
+    db.add(WithdrawnAccount(user_id=current_user.id, retention_until=__import__("datetime").datetime.now(__import__("datetime").timezone.utc) + timedelta(days=365 * 3)))
+    await record(db, user_id=current_user.id, event_type="withdrawal", ip_address=get_client_ip(request), target_type="user", target_id=current_user.id)
+    await db.commit()
+    return ApiResponse.ok({"message": "탈퇴 처리되었습니다. 보존된 기록은 관리자만 열람할 수 있습니다."})
