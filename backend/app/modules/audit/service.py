@@ -1,16 +1,12 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from .models import AuditEvent
 
 
 def _retention_deadline() -> datetime:
-    now = datetime.now(timezone.utc)
-    try:
-        return now.replace(year=now.year + 3)
-    except ValueError:
-        return now.replace(year=now.year + 3, month=2, day=28)
+    return datetime.now(timezone.utc) + timedelta(days=365)
 
 
 async def record(

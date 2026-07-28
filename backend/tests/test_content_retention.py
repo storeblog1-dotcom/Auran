@@ -1,11 +1,13 @@
 import asyncio
 import ast
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
 
 from app.modules.audit.content_retention import retention_deadline
 from app.modules.audit.service import record
+from app.modules.audit.withdrawal import is_cancelable
 
 
 class _RecordingSession:
@@ -34,19 +36,31 @@ class ContentRetentionTests(unittest.TestCase):
                         f"{migration.name} revision id exceeds alembic_version limit",
                     )
 
-    def test_retention_deadline_is_three_calendar_years(self) -> None:
+    def test_retention_deadline_is_exactly_365_days(self) -> None:
         source = datetime(2026, 7, 29, 8, 30, tzinfo=timezone.utc)
         self.assertEqual(
             retention_deadline(source),
-            datetime(2029, 7, 29, 8, 30, tzinfo=timezone.utc),
+            source + timedelta(days=365),
         )
 
     def test_retention_deadline_handles_leap_day(self) -> None:
         source = datetime(2028, 2, 29, 8, 30, tzinfo=timezone.utc)
         self.assertEqual(
             retention_deadline(source),
-            datetime(2031, 2, 28, 8, 30, tzinfo=timezone.utc),
+            datetime(2029, 2, 28, 8, 30, tzinfo=timezone.utc),
         )
+
+    def test_withdrawal_is_cancelable_only_before_deadline(self) -> None:
+        deadline = datetime(2026, 8, 5, 8, 30, tzinfo=timezone.utc)
+        withdrawal = SimpleNamespace(
+            finalized_at=None,
+            personal_data_purged_at=None,
+            cancelable_until=deadline,
+        )
+        self.assertTrue(
+            is_cancelable(withdrawal, now=deadline - timedelta(seconds=1))
+        )
+        self.assertFalse(is_cancelable(withdrawal, now=deadline))
 
     def test_audit_record_always_gets_retention_deadline(self) -> None:
         session = _RecordingSession()

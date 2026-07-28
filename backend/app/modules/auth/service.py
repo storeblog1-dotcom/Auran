@@ -27,6 +27,11 @@ from app.modules.auth.schemas import (
     RegisterRequest,
     TokenResponse,
 )
+from app.modules.audit.withdrawal import (
+    finalize_if_expired,
+    get_withdrawal,
+    is_cancelable,
+)
 
 
 async def generate_auto_nickname(db: AsyncSession) -> str:
@@ -64,6 +69,34 @@ async def get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> User:
     if not user:
         raise NotFoundException("User")
     return user
+
+
+async def _issue_tokens_for_user(
+    db: AsyncSession,
+    user: User,
+) -> TokenResponse:
+    withdrawal = await get_withdrawal(db, user.id)
+    if not user.is_active:
+        if withdrawal:
+            await finalize_if_expired(db, withdrawal)
+            if is_cancelable(withdrawal):
+                token_data = {
+                    "sub": str(user.id),
+                    "purpose": "withdrawal_cancel",
+                }
+                return TokenResponse(
+                    access_token=create_access_token(token_data),
+                    refresh_token=create_refresh_token(token_data),
+                    withdrawal_pending=True,
+                    withdrawal_deadline=withdrawal.cancelable_until,
+                )
+        raise BadRequestException("탈퇴가 완료되었거나 비활성화된 계정입니다")
+
+    token_data = {"sub": str(user.id)}
+    return TokenResponse(
+        access_token=create_access_token(token_data),
+        refresh_token=create_refresh_token(token_data),
+    )
 
 
 async def register(db: AsyncSession, data: RegisterRequest) -> User:
@@ -158,14 +191,7 @@ async def login(db: AsyncSession, data: LoginRequest) -> TokenResponse:
     if not verify_password(data.password, user.hashed_password):
         raise UnauthorizedException("아이디 또는 비밀번호가 올바르지 않습니다")
 
-    if not user.is_active:
-        raise BadRequestException("비활성화된 계정입니다")
-
-    token_data = {"sub": str(user.id)}
-    return TokenResponse(
-        access_token=create_access_token(token_data),
-        refresh_token=create_refresh_token(token_data),
-    )
+    return await _issue_tokens_for_user(db, user)
 
 
 async def google_login(db: AsyncSession, data: GoogleLoginRequest) -> TokenResponse:
@@ -180,6 +206,7 @@ async def google_login(db: AsyncSession, data: GoogleLoginRequest) -> TokenRespo
     email = data.email
     full_name = data.full_name or "Google 사용자"
     profile_image_url = data.profile_image_url
+    google_token_verified = False
 
     # ID 토큰 전달 시 Google API를 통한 검증
     if data.token:
@@ -190,6 +217,7 @@ async def google_login(db: AsyncSession, data: GoogleLoginRequest) -> TokenRespo
                 )
                 if res.status_code == 200:
                     info = res.json()
+                    google_token_verified = True
                     google_id = info.get("sub") or google_id
                     email = info.get("email") or email
                     full_name = info.get("name") or full_name
@@ -247,14 +275,9 @@ async def google_login(db: AsyncSession, data: GoogleLoginRequest) -> TokenRespo
             user.profile_image_url = profile_image_url
         await db.flush()
 
-    if not user.is_active:
-        raise BadRequestException("비활성화된 계정입니다")
-
-    token_data = {"sub": str(user.id)}
-    return TokenResponse(
-        access_token=create_access_token(token_data),
-        refresh_token=create_refresh_token(token_data),
-    )
+    if not user.is_active and not google_token_verified:
+        raise BadRequestException("탈퇴 대기 계정은 Google 재인증이 필요합니다")
+    return await _issue_tokens_for_user(db, user)
 
 
 async def refresh_tokens(db: AsyncSession, refresh_token: str) -> TokenResponse:
@@ -283,6 +306,8 @@ async def refresh_tokens(db: AsyncSession, refresh_token: str) -> TokenResponse:
         raise UnauthorizedException("토큰의 유저 ID가 올바르지 않습니다")
 
     user = await get_user_by_id(db, user_id)
+    if payload.get("purpose") == "withdrawal_cancel":
+        return await _issue_tokens_for_user(db, user)
     if not user.is_active:
         raise BadRequestException("비활성화된 계정입니다")
 
@@ -291,3 +316,36 @@ async def refresh_tokens(db: AsyncSession, refresh_token: str) -> TokenResponse:
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),
     )
+
+
+async def verify_google_token_for_user(
+    user: User,
+    google_token: str,
+) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"https://oauth2.googleapis.com/tokeninfo?id_token={google_token}"
+            )
+        if response.status_code != 200:
+            return False
+        info = response.json()
+        return bool(
+            (user.google_id and info.get("sub") == user.google_id)
+            or (info.get("email") and info["email"].lower() == user.email.lower())
+        )
+    except Exception:
+        return False
+
+
+async def cancel_withdrawal(
+    db: AsyncSession,
+    user: User,
+) -> TokenResponse:
+    withdrawal = await get_withdrawal(db, user.id, for_update=True)
+    if not withdrawal or not is_cancelable(withdrawal):
+        raise BadRequestException("탈퇴 취소 가능 기간이 지났습니다")
+    await db.delete(withdrawal)
+    user.is_active = True
+    await db.flush()
+    return await _issue_tokens_for_user(db, user)

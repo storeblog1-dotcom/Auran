@@ -13,6 +13,7 @@ import { SplashScreen } from "../components/SplashScreen";
 import api from "../services/api";
 
 import { LoginScreen } from "../screens/LoginScreen";
+import { WithdrawalPendingScreen } from "../screens/WithdrawalPendingScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
 import { FeedScreen } from "../screens/FeedScreen";
 import { SearchScreen } from "../screens/SearchScreen";
@@ -158,7 +159,7 @@ const MainTabs = () => {
 };
 
 const AppContent = () => {
-  const { token, isLoading } = useAuth();
+  const { token, isLoading, withdrawalPending } = useAuth();
   const { colors } = useTheme();
   const { toastNotification, clearToast } = useNotification();
   const navigationRef = useRef<NavigationContainerRef<any>>(null);
@@ -208,7 +209,13 @@ const AppContent = () => {
       />
       <NavigationContainer ref={navigationRef}>
         <Stack.Navigator id="root-stack" screenOptions={{ headerShown: false }}>
-          {token ? (
+          {withdrawalPending ? (
+            <Stack.Screen
+              name="WithdrawalPending"
+              component={WithdrawalPendingScreen}
+              options={{ animation: "none" }}
+            />
+          ) : token ? (
             <>
               <Stack.Screen name="MainTabs" component={MainTabs} options={{ animation: "none" }} />
               <Stack.Screen name="UserProfile" component={UserProfileScreen} />

@@ -11,7 +11,12 @@ from app.common.exceptions import NotFoundException, BadRequestException
 from app.core.database import get_db
 from app.modules.auth.dependencies import get_current_admin_user
 from app.modules.auth.models import User
-from app.modules.audit.models import AuditEvent, CommentRevision, PostRevision
+from app.modules.audit.models import (
+    AuditEvent,
+    CommentRevision,
+    PostRevision,
+    WithdrawnAccount,
+)
 import json
 from app.modules.posts.models import Post, Comment, PostLike
 from app.modules.community.models import CommunityBoard
@@ -222,6 +227,7 @@ async def set_content_revision_legal_hold(
         ).scalar_one_or_none()
     if revision is None:
         raise NotFoundException("보존 콘텐츠")
+    target_user_id = revision.user_id
     if isinstance(revision, PostRevision):
         post_revision_ids = (
             await db.execute(
@@ -263,8 +269,58 @@ async def set_content_revision_legal_hold(
             .where(AuditEvent.revision_id.in_(affected_revision_ids))
             .values(legal_hold=enabled)
         )
+    withdrawal = (
+        await db.execute(
+            select(WithdrawnAccount).where(
+                WithdrawnAccount.user_id == target_user_id
+            )
+        )
+    ).scalar_one_or_none()
+    if withdrawal:
+        if enabled:
+            withdrawal.legal_hold = True
+        else:
+            held_post = await db.scalar(
+                select(PostRevision.id)
+                .where(
+                    PostRevision.user_id == target_user_id,
+                    PostRevision.legal_hold.is_(True),
+                )
+                .limit(1)
+            )
+            held_comment = await db.scalar(
+                select(CommentRevision.id)
+                .where(
+                    CommentRevision.user_id == target_user_id,
+                    CommentRevision.legal_hold.is_(True),
+                )
+                .limit(1)
+            )
+            withdrawal.legal_hold = bool(held_post or held_comment)
     await db.commit()
     return ApiResponse.ok({"revision_id": str(revision_id), "legal_hold": enabled})
+
+
+@router.patch("/withdrawals/{user_id}/legal-hold", summary="탈퇴 계정 법적 보존 설정")
+async def set_withdrawal_legal_hold(
+    user_id: uuid.UUID,
+    enabled: bool = Query(...),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+) -> ApiResponse[dict[str, Any]]:
+    withdrawal = (
+        await db.execute(
+            select(WithdrawnAccount).where(WithdrawnAccount.user_id == user_id)
+        )
+    ).scalar_one_or_none()
+    if not withdrawal:
+        raise NotFoundException("탈퇴 계정")
+    withdrawal.legal_hold = enabled
+    await db.commit()
+    return ApiResponse.ok({
+        "user_id": str(user_id),
+        "legal_hold": enabled,
+    })
 
 
 @router.get("/users/{user_id}/content", summary="관리자 전용 사용자 작성 콘텐츠")
@@ -460,9 +516,30 @@ async def get_admin_users(
 
     res = await db.execute(query)
     users = res.scalars().all()
+    withdrawal_rows = []
+    if users:
+        withdrawal_rows = (
+            await db.execute(
+                select(WithdrawnAccount).where(
+                    WithdrawnAccount.user_id.in_([user.id for user in users])
+                )
+            )
+        ).scalars().all()
+    withdrawals_by_user = {row.user_id: row for row in withdrawal_rows}
 
-    user_list = [
-        {
+    user_list = []
+    for u in users:
+        withdrawal = withdrawals_by_user.get(u.id)
+        if withdrawal is None:
+            withdrawal_status = None
+        elif withdrawal.personal_data_purged_at is not None:
+            withdrawal_status = "purged"
+        elif withdrawal.finalized_at is not None:
+            withdrawal_status = "finalized"
+        else:
+            withdrawal_status = "pending"
+
+        user_list.append({
             "id": str(u.id),
             "username": u.username,
             "nickname": u.nickname,
@@ -472,9 +549,30 @@ async def get_admin_users(
             "is_active": u.is_active,
             "is_admin": u.is_admin,
             "created_at": u.created_at.isoformat() if u.created_at else None,
-        }
-        for u in users
-    ]
+            "withdrawal_status": withdrawal_status,
+            "withdrawal_requested_at": (
+                withdrawal.requested_at.isoformat() if withdrawal else None
+            ),
+            "withdrawal_cancelable_until": (
+                withdrawal.cancelable_until.isoformat() if withdrawal else None
+            ),
+            "withdrawal_finalized_at": (
+                withdrawal.finalized_at.isoformat()
+                if withdrawal and withdrawal.finalized_at
+                else None
+            ),
+            "personal_data_retention_until": (
+                withdrawal.retention_until.isoformat() if withdrawal else None
+            ),
+            "personal_data_legal_hold": (
+                withdrawal.legal_hold if withdrawal else False
+            ),
+            "personal_data_purged_at": (
+                withdrawal.personal_data_purged_at.isoformat()
+                if withdrawal and withdrawal.personal_data_purged_at
+                else None
+            ),
+        })
     return ApiResponse.paginated(data=user_list, total=total or 0)
 
 
@@ -492,6 +590,15 @@ async def toggle_user_active(
     user = res.scalar_one_or_none()
     if not user:
         raise NotFoundException("사용자")
+    withdrawal = (
+        await db.execute(
+            select(WithdrawnAccount).where(WithdrawnAccount.user_id == user_id)
+        )
+    ).scalar_one_or_none()
+    if withdrawal:
+        raise BadRequestException(
+            "탈퇴 대기 또는 최종 탈퇴 계정은 관리자 활성화 기능으로 복구할 수 없습니다."
+        )
 
     user.is_active = not user.is_active
     await db.commit()

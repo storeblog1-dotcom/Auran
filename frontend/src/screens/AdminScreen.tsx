@@ -474,21 +474,55 @@ export const AdminScreen = ({ navigation }: any) => {
                     </View>
                     <Text style={[styles.fullNameText, { color: colors.textMuted }]}>{item.full_name}</Text>
                     <Text style={[styles.emailText, { color: colors.textMuted }]}>{item.email}</Text>
+                    {item.withdrawal_status === "pending" && item.withdrawal_cancelable_until && (
+                      <Text style={[styles.emailText, { color: "#f59e0b" }]}>
+                        취소 가능: {new Date(item.withdrawal_cancelable_until).toLocaleString("ko-KR")}
+                      </Text>
+                    )}
+                    {item.withdrawal_status === "finalized" && item.personal_data_retention_until && (
+                      <Text style={[styles.emailText, { color: colors.textMuted }]}>
+                        개인정보 파기 예정: {new Date(item.personal_data_retention_until).toLocaleString("ko-KR")}
+                      </Text>
+                    )}
+                    {item.personal_data_legal_hold && (
+                      <Text style={[styles.emailText, { color: "#ef4444" }]}>적법한 보존 요청 적용 중</Text>
+                    )}
                   </View>
 
                   <View style={{ alignItems: "flex-end" }}>
                     <View
                       style={[
                         styles.statusBadge,
-                        { backgroundColor: item.is_active ? "rgba(34, 197, 94, 0.15)" : "rgba(239, 68, 68, 0.15)" },
+                        {
+                          backgroundColor:
+                            item.withdrawal_status === "pending"
+                              ? "rgba(245, 158, 11, 0.15)"
+                              : item.is_active
+                                ? "rgba(34, 197, 94, 0.15)"
+                                : "rgba(239, 68, 68, 0.15)",
+                        },
                       ]}
                     >
-                      <Text style={{ color: item.is_active ? "#22c55e" : "#ef4444", fontSize: 11, fontWeight: "bold" }}>
-                        {item.is_active ? "🟢 정상" : "🔴 정지"}
+                      <Text
+                        style={{
+                          color: item.withdrawal_status === "pending" ? "#f59e0b" : item.is_active ? "#22c55e" : "#ef4444",
+                          fontSize: 11,
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {item.withdrawal_status === "pending"
+                          ? "탈퇴 대기"
+                          : item.withdrawal_status === "finalized"
+                            ? "최종 탈퇴"
+                            : item.withdrawal_status === "purged"
+                              ? "개인정보 파기"
+                              : item.is_active
+                                ? "정상"
+                                : "정지"}
                       </Text>
                     </View>
 
-                    {!item.is_admin && (
+                    {!item.is_admin && !item.withdrawal_status && (
                       <TouchableOpacity
                         style={[
                           styles.toggleBtn,
