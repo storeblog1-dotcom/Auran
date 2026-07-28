@@ -5,6 +5,7 @@ import api from "../services/api";
 export interface User {
   id: string;
   username: string;
+  nickname?: string;
   email: string;
   full_name: string;
   bio?: string;

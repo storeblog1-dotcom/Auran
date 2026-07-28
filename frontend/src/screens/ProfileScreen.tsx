@@ -19,6 +19,7 @@ import { getFullImageUrl } from "../config";
 import { useFocusEffect } from "@react-navigation/native";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { FollowRequestsModal } from "../components/FollowRequestsModal";
+import { getDisplayName } from "../utils/displayName";
 
 const { width, height } = Dimensions.get("window");
 const DEVICE_ASPECT_RATIO = height / width;
@@ -144,7 +145,7 @@ export const ProfileScreen = ({ navigation }: any) => {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
       {/* Profile Top Navigation Header */}
       <View style={[styles.header, { borderBottomColor: colors.borderColor }]}>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{user?.username || "profile"}</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{getDisplayName(user, "프로필")}</Text>
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
           {/* Admin Dashboard Button (Only for admin) */}
@@ -229,11 +230,10 @@ export const ProfileScreen = ({ navigation }: any) => {
             <View style={styles.userTitleContainer}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center" }}>
                 <Text style={[styles.fullNameText, { color: colors.textPrimary }]}>
-                  {user?.full_name || user?.username}
+                  {getDisplayName(user)}
                 </Text>
                 <Ionicons name="checkmark-circle" size={18} color={primaryAccent} />
               </View>
-              <Text style={[styles.usernameSubText, { color: colors.textSecondary }]}>@{user?.username}</Text>
               {user?.bio ? <Text style={[styles.bioSubText, { color: colors.textSecondary }]}>{user.bio}</Text> : null}
             </View>
 
@@ -722,5 +722,4 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 });
-
 

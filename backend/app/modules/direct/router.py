@@ -341,6 +341,7 @@ async def send_message_rest(
         "sender": {
             "id": str(current_user.id),
             "username": current_user.username,
+            "nickname": current_user.nickname,
             "full_name": current_user.full_name,
             "profile_image_url": current_user.profile_image_url,
         },
@@ -369,7 +370,7 @@ async def send_message_rest(
                 recipient_id=recipient_id,
                 sender_id=current_user.id,
                 type=NotificationType.DIRECT_MESSAGE.value,
-                message=f"{current_user.username}님의 메시지: {msg_text}",
+                message=f"{current_user.nickname or current_user.username}님의 메시지: {msg_text}",
                 direct_message_id=str(new_msg.id),
             )
 
@@ -432,6 +433,7 @@ async def websocket_endpoint(
             sender_info = {
                 "id": str(user.id),
                 "username": user.username,
+                "nickname": user.nickname,
                 "full_name": user.full_name,
                 "profile_image_url": user.profile_image_url,
             }
@@ -500,7 +502,7 @@ async def websocket_endpoint(
                             recipient_id=recipient_id,
                             sender_id=user_id,
                             type=NotificationType.DIRECT_MESSAGE.value,
-                            message=f"{sender_info['username']}님의 메시지: {msg_text}",
+                            message=f"{sender_info.get('nickname') or sender_info['username']}님의 메시지: {msg_text}",
                             direct_message_id=str(new_msg.id),
                         )
 
@@ -720,6 +722,7 @@ async def _format_room_response(db: AsyncSession, room_id: uuid.UUID, current_us
         user_info = SenderResponse(
             id=m.user.id,
             username=m.user.username,
+            nickname=m.user.nickname,
             full_name=m.user.full_name,
             profile_image_url=m.user.profile_image_url,
         )
@@ -748,6 +751,7 @@ async def _format_room_response(db: AsyncSession, room_id: uuid.UUID, current_us
             sender=SenderResponse(
                 id=last_msg.sender.id,
                 username=last_msg.sender.username,
+                nickname=last_msg.sender.nickname,
                 full_name=last_msg.sender.full_name,
                 profile_image_url=last_msg.sender.profile_image_url,
             ),

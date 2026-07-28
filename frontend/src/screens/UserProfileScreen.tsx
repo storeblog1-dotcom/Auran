@@ -18,6 +18,7 @@ import api from "../services/api";
 import { getFullImageUrl } from "../config";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { UserListModal } from "../components/UserListModal";
+import { getDisplayName } from "../utils/displayName";
 
 const { width, height } = Dimensions.get("window");
 const DEVICE_ASPECT_RATIO = height / width;
@@ -133,6 +134,7 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
         targetUser: {
           id: profile.id,
           username: profile.username,
+          nickname: profile.nickname,
           full_name: profile.full_name,
           profile_image_url: profile.profile_image_url,
         },
@@ -198,7 +200,7 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>@{profile?.username || username}</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{getDisplayName(profile, "프로필")}</Text>
         <TouchableOpacity style={{ padding: 6 }}>
           <Ionicons name="ellipsis-horizontal" size={20} color={colors.textPrimary} />
         </TouchableOpacity>
@@ -245,11 +247,10 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
               <View style={styles.userTitleContainer}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center" }}>
                   <Text style={[styles.fullNameText, { color: colors.textPrimary }]}>
-                    {profile.full_name || profile.username}
+                    {getDisplayName(profile)}
                   </Text>
                   <Ionicons name="checkmark-circle" size={18} color={primaryAccent} />
                 </View>
-                <Text style={[styles.usernameSubText, { color: colors.textSecondary }]}>@{profile.username}</Text>
                 {profile.bio ? <Text style={[styles.bioSubText, { color: colors.textSecondary }]}>{profile.bio}</Text> : null}
               </View>
 

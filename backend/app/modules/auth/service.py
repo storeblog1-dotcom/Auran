@@ -29,6 +29,34 @@ from app.modules.auth.schemas import (
 )
 
 
+async def generate_auto_nickname(db: AsyncSession) -> str:
+    """Create the next persistent Aura nickname for accounts without one."""
+    result = await db.execute(select(User.nickname).where(User.nickname.is_not(None)))
+    used = {nickname.strip().lower() for nickname in result.scalars().all() if nickname and nickname.strip()}
+    highest = 0
+    for nickname in used:
+        match = re.fullmatch(r"아우라(\d+)", nickname)
+        if match:
+            highest = max(highest, int(match.group(1)))
+
+    number = highest + 1
+    while f"아우라{number:05d}".lower() in used:
+        number += 1
+    return f"아우라{number:05d}"
+
+
+async def is_nickname_available(
+    db: AsyncSession, nickname: str, exclude_user_id: uuid.UUID | None = None
+) -> bool:
+    clean_nickname = nickname.strip()
+    if not clean_nickname:
+        return False
+    stmt = select(User.id).where(func.lower(User.nickname) == clean_nickname.lower())
+    if exclude_user_id:
+        stmt = stmt.where(User.id != exclude_user_id)
+    return (await db.execute(stmt)).scalar_one_or_none() is None
+
+
 async def get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> User:
     """ID로 사용자 조회. 없으면 NotFoundException."""
     result = await db.execute(select(User).where(User.id == user_id))
@@ -57,10 +85,7 @@ async def register(db: AsyncSession, data: RegisterRequest) -> User:
     if username_exists.scalar_one_or_none():
         raise ConflictException("\uc774\ubbf8 \uc0ac\uc6a9 \uc911\uc778 \uc544\uc774\ub514\uc785\ub2c8\ub2e4.")
 
-    nickname_exists = await db.execute(
-        select(User.id).where(func.lower(User.nickname) == clean_nickname.lower())
-    )
-    if nickname_exists.scalar_one_or_none():
+    if not await is_nickname_available(db, clean_nickname):
         raise ConflictException("\uc774\ubbf8 \uc0ac\uc6a9 \uc911\uc778 \ub2c9\ub124\uc784\uc785\ub2c8\ub2e4.")
 
     email_exists = await db.execute(
@@ -207,6 +232,7 @@ async def google_login(db: AsyncSession, data: GoogleLoginRequest) -> TokenRespo
             full_name=full_name,
             google_id=google_id,
             profile_image_url=profile_image_url,
+            nickname=await generate_auto_nickname(db),
             hashed_password=hash_password(secrets.token_urlsafe(32)),
             is_verified=True,
         )

@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class SenderSummary(BaseModel):
     id: uuid.UUID
     username: str
+    nickname: Optional[str] = None
     full_name: str
     profile_image_url: Optional[str] = None
 

@@ -60,6 +60,7 @@ class PostUserSummary(BaseModel):
 
     id: UUID
     username: str
+    nickname: Optional[str] = None
     full_name: str
     profile_image_url: Optional[str] = None
     is_following: bool = False

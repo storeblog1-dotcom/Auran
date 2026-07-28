@@ -25,6 +25,7 @@ import { Comment, CommentNode } from "./CommentsModal";
 import { SendPostDmModal } from "./SendPostDmModal";
 import { PostCarousel } from "./PostCarousel";
 import { HashtagText } from "./HashtagText";
+import { getDisplayName } from "../utils/displayName";
 
 const { width, height } = Dimensions.get("window");
 
@@ -391,7 +392,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     style={styles.avatar}
                   />
                   <View>
-                    <Text style={[styles.username, { color: colors.textPrimary }]}>{post.user?.username || "user"}</Text>
+                    <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(post.user)}</Text>
                     {post.location ? <Text style={[styles.location, { color: colors.textSecondary }]}>{post.location}</Text> : null}
                   </View>
                 </View>

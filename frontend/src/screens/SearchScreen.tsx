@@ -18,6 +18,7 @@ import api from "../services/api";
 import { getFullImageUrl } from "../config";
 import { useTheme } from "../context/ThemeContext";
 import { PostDetailModal } from "../components/PostDetailModal";
+import { getDisplayName } from "../utils/displayName";
 
 const { width, height } = Dimensions.get("window");
 const DEVICE_ASPECT_RATIO = height / width;
@@ -157,7 +158,7 @@ export const SearchScreen = ({ navigation }: any) => {
             style={styles.userAvatar}
           />
           <View>
-            <Text style={[styles.userUsername, { color: colors.textPrimary }]}>{item.username}</Text>
+            <Text style={[styles.userUsername, { color: colors.textPrimary }]}>{getDisplayName(item)}</Text>
             <Text style={[styles.userFullName, { color: colors.textSecondary }]}>{item.full_name}</Text>
           </View>
         </TouchableOpacity>

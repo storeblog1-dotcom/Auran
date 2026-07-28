@@ -17,6 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { AuraLogoText } from "../components/AuraLogoText";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import api from "../services/api";
 
 const ages = Array.from({ length: 83 }, (_, index) => String(index + 18));
 const genders = ["\uC5EC\uC131", "\uB0A8\uC131", "\uB17C\uBC14\uC774\uB108\uB9AC", "\uC9C1\uC811 \uC785\uB825", "\uC751\uB2F5\uD558\uC9C0 \uC54A\uC74C"];
@@ -47,6 +48,7 @@ export const RegisterScreen = ({ navigation }: any) => {
   const [picker, setPicker] = useState<PickerType>(null);
   const [image, setImage] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
+  const [nicknameStatus, setNicknameStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
   const { register } = useAuth();
   const { colors } = useTheme();
 
@@ -57,6 +59,21 @@ export const RegisterScreen = ({ navigation }: any) => {
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
     if (!result.canceled) setImage(result.assets[0].uri);
+  };
+
+  const checkNickname = async () => {
+    const nickname = form.nickname.trim();
+    if (!nickname) return false;
+    setNicknameStatus("checking");
+    try {
+      const response = await api.get("/auth/nickname-availability", { params: { nickname } });
+      const available = response.data?.data?.available === true;
+      setNicknameStatus(available ? "available" : "taken");
+      return available;
+    } catch {
+      setNicknameStatus("idle");
+      return false;
+    }
   };
 
   const selectSingle = (value: string) => {
@@ -71,6 +88,9 @@ export const RegisterScreen = ({ navigation }: any) => {
   const submit = async () => {
     if (!form.username || !form.nickname || !form.fullName || !form.email || !form.password || !form.age || !form.gender || !orientation || (orientation === DIRECT_INPUT && !customOrientation.trim())) {
       return Alert.alert("\uD544\uC218 \uD56D\uBAA9 \uD655\uC778", "\uD544\uC218 \uD56D\uBAA9\uC744 \uBAA8\uB450 \uC785\uB825\uD574\uC8FC\uC138\uC694.");
+    }
+    if (!(await checkNickname())) {
+      return Alert.alert("닉네임 확인", "이미 사용 중인 닉네임이거나 확인에 실패했습니다.");
     }
     setLoading(true);
     try {
@@ -93,7 +113,8 @@ export const RegisterScreen = ({ navigation }: any) => {
       <Text style={[styles.subtitle, { color: colors.textSecondary }]}>\uC0C8 \uACC4\uC815 \uB9CC\uB4E4\uAE30</Text>
       <Text style={[styles.section, { color: colors.textPrimary }]}>\uACC4\uC815 \uC815\uBCF4</Text>
       <TextInput style={inputStyle} placeholder="\uC544\uC774\uB514 *" placeholderTextColor={colors.textSecondary} value={form.username} onChangeText={(value) => setField("username", value)} autoCapitalize="none" autoComplete="username" textContentType="username" importantForAutofill="yes" />
-      <TextInput style={inputStyle} placeholder="\uB2C9\uB124\uC784 * (\uC571\uC5D0\uC11C \uBCF4\uC5EC\uC9C0\uB294 \uC774\uB984)" placeholderTextColor={colors.textSecondary} value={form.nickname} onChangeText={(value) => setField("nickname", value)} />
+      <TextInput style={inputStyle} placeholder="\uB2C9\uB124\uC784 * (\uC571\uC5D0\uC11C \uBCF4\uC5EC\uC9C0\uB294 \uC774\uB984)" placeholderTextColor={colors.textSecondary} value={form.nickname} onChangeText={(value) => { setField("nickname", value); setNicknameStatus("idle"); }} onBlur={checkNickname} />
+      {nicknameStatus !== "idle" ? <Text style={[styles.nicknameStatus, { color: nicknameStatus === "available" ? "#16a34a" : nicknameStatus === "taken" ? "#ef4444" : colors.textSecondary }]}>{nicknameStatus === "checking" ? "닉네임 확인 중..." : nicknameStatus === "available" ? "사용 가능한 닉네임입니다." : "이미 사용 중인 닉네임입니다."}</Text> : null}
       <TextInput style={inputStyle} placeholder="\uC774\uB984 *" placeholderTextColor={colors.textSecondary} value={form.fullName} onChangeText={(value) => setField("fullName", value)} />
       <TextInput style={inputStyle} placeholder="\uC774\uBA54\uC77C \uC8FC\uC18C *" placeholderTextColor={colors.textSecondary} value={form.email} onChangeText={(value) => setField("email", value)} keyboardType="email-address" autoCapitalize="none" autoComplete="email" textContentType="emailAddress" importantForAutofill="yes" />
       <TextInput style={inputStyle} placeholder="\uBE44\uBC00\uBC88\uD638 *" placeholderTextColor={colors.textSecondary} value={form.password} onChangeText={(value) => setField("password", value)} secureTextEntry autoComplete="new-password" textContentType="newPassword" importantForAutofill="yes" />
@@ -115,4 +136,4 @@ export const RegisterScreen = ({ navigation }: any) => {
   </SafeAreaView>;
 };
 
-const styles = StyleSheet.create({ container: { flex: 1 }, content: { padding: 24, paddingBottom: 40 }, subtitle: { textAlign: "center", marginVertical: 12 }, section: { fontWeight: "700", marginTop: 12, marginBottom: 8 }, input: { borderWidth: 1, borderRadius: 10, padding: 14, fontSize: 15, marginBottom: 10 }, flexInput: { flex: 1 }, row: { flexDirection: "row", gap: 10 }, half: { flex: 1 }, selector: { borderWidth: 1, borderRadius: 10, padding: 14, marginBottom: 10 }, emailRow: { flexDirection: "row", gap: 8 }, smallButton: { height: 48, paddingHorizontal: 12, borderRadius: 10, backgroundColor: "#8b5cf6", justifyContent: "center", marginBottom: 10 }, smallButtonText: { color: "#fff", fontWeight: "700" }, verified: { backgroundColor: "#16a34a" }, privacyHint: { fontSize: 12, lineHeight: 18, marginTop: -2, marginBottom: 4 }, bio: { minHeight: 88, textAlignVertical: "top" }, photo: { height: 110, borderWidth: 1, borderColor: "#555", borderRadius: 12, borderStyle: "dashed", alignItems: "center", justifyContent: "center", marginBottom: 14 }, avatar: { width: 90, height: 90, borderRadius: 45 }, submit: { padding: 15, borderRadius: 10, alignItems: "center" }, submitText: { color: "#fff", fontWeight: "700", fontSize: 16 }, footer: { flexDirection: "row", justifyContent: "center", marginTop: 24 }, link: { color: "#8b5cf6", fontWeight: "700" }, modal: { flex: 1, justifyContent: "flex-end", backgroundColor: "#0008" }, options: { borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: "72%", paddingBottom: 24 }, modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 18 }, done: { color: "#8b5cf6", fontWeight: "700" }, optionsList: { flexGrow: 0 }, option: { minHeight: 52, paddingHorizontal: 18, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#ffffff20" } });
+const styles = StyleSheet.create({ container: { flex: 1 }, content: { padding: 24, paddingBottom: 40 }, subtitle: { textAlign: "center", marginVertical: 12 }, section: { fontWeight: "700", marginTop: 12, marginBottom: 8 }, input: { borderWidth: 1, borderRadius: 10, padding: 14, fontSize: 15, marginBottom: 10 }, nicknameStatus: { marginTop: -6, marginBottom: 10, fontSize: 12 }, flexInput: { flex: 1 }, row: { flexDirection: "row", gap: 10 }, half: { flex: 1 }, selector: { borderWidth: 1, borderRadius: 10, padding: 14, marginBottom: 10 }, emailRow: { flexDirection: "row", gap: 8 }, smallButton: { height: 48, paddingHorizontal: 12, borderRadius: 10, backgroundColor: "#8b5cf6", justifyContent: "center", marginBottom: 10 }, smallButtonText: { color: "#fff", fontWeight: "700" }, verified: { backgroundColor: "#16a34a" }, privacyHint: { fontSize: 12, lineHeight: 18, marginTop: -2, marginBottom: 4 }, bio: { minHeight: 88, textAlignVertical: "top" }, photo: { height: 110, borderWidth: 1, borderColor: "#555", borderRadius: 12, borderStyle: "dashed", alignItems: "center", justifyContent: "center", marginBottom: 14 }, avatar: { width: 90, height: 90, borderRadius: 45 }, submit: { padding: 15, borderRadius: 10, alignItems: "center" }, submitText: { color: "#fff", fontWeight: "700", fontSize: 16 }, footer: { flexDirection: "row", justifyContent: "center", marginTop: 24 }, link: { color: "#8b5cf6", fontWeight: "700" }, modal: { flex: 1, justifyContent: "flex-end", backgroundColor: "#0008" }, options: { borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: "72%", paddingBottom: 24 }, modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 18 }, done: { color: "#8b5cf6", fontWeight: "700" }, optionsList: { flexGrow: 0 }, option: { minHeight: 52, paddingHorizontal: 18, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#ffffff20" } });

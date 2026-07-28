@@ -93,6 +93,7 @@ async def get_user_profile(
     return UserProfileResponse(
         id=target_user.id,
         username=target_user.username,
+        nickname=target_user.nickname,
         full_name=target_user.full_name,
         bio=target_user.bio,
         profile_image_url=target_user.profile_image_url,
@@ -119,6 +120,17 @@ async def update_user_profile(
     data: UserUpdateProfileRequest,
 ) -> User:
     """로그인한 사용자의 프로필 정보를 수정합니다."""
+    if data.nickname is not None:
+        clean_nickname = data.nickname.strip()
+        nickname_exists = await db.execute(
+            select(User.id).where(
+                func.lower(User.nickname) == clean_nickname.lower(),
+                User.id != current_user.id,
+            )
+        )
+        if nickname_exists.scalar_one_or_none():
+            raise ConflictException("이미 사용 중인 닉네임입니다.")
+        current_user.nickname = clean_nickname
     if data.full_name is not None:
         current_user.full_name = data.full_name
     if data.bio is not None:
@@ -190,6 +202,7 @@ async def search_users(
             UserSummaryResponse(
                 id=user.id,
                 username=user.username,
+                nickname=user.nickname,
                 full_name=user.full_name,
                 profile_image_url=user.profile_image_url,
                 is_following=(user.id in following_ids),
@@ -229,7 +242,7 @@ async def follow_user(
             recipient_id=target_user.id,
             sender_id=current_user.id,
             type=NotificationType.FOLLOW.value,
-            message=f"{current_user.username}님이 회원님을 팔로우하기 시작했습니다.",
+            message=f"{current_user.nickname or current_user.username}님이 회원님을 팔로우하기 시작했습니다.",
         )
 
     followers_count_res = await db.execute(
@@ -307,6 +320,7 @@ async def get_followers(
         UserSummaryResponse(
             id=u.id,
             username=u.username,
+            nickname=u.nickname,
             full_name=u.full_name,
             profile_image_url=u.profile_image_url,
             is_following=(u.id in following_ids),
@@ -352,6 +366,7 @@ async def get_following(
         UserSummaryResponse(
             id=u.id,
             username=u.username,
+            nickname=u.nickname,
             full_name=u.full_name,
             profile_image_url=u.profile_image_url,
             is_following=(u.id in following_ids),
@@ -387,6 +402,7 @@ async def get_mutual_followers(
         UserSummaryResponse(
             id=u.id,
             username=u.username,
+            nickname=u.nickname,
             full_name=u.full_name,
             profile_image_url=u.profile_image_url,
             is_following=True,

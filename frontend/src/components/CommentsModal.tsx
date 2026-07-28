@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { getDisplayName } from "../utils/displayName";
 import { HashtagText } from "./HashtagText";
 
 export interface Comment {
@@ -86,7 +87,7 @@ export const CommentNode: React.FC<CommentNodeProps> = ({
                 </Text>
               )}
               <Text style={[styles.username, { color: colors.textPrimary, marginRight: 8 }]}>
-                {comment.user.username}
+                {getDisplayName(comment.user)}
               </Text>
               <Text style={[styles.timeText, { color: colors.textMuted }]}>
                 {new Date(comment.created_at).toLocaleDateString("ko-KR", {
@@ -369,7 +370,7 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
                   ? "댓글 내용 수정..."
                   : replyParentComment
                   ? `@${replyParentComment.user.username} 님에게 답글 달기...`
-                  : `${currentUser?.username || "사용자"} (으)로 댓글 달기...`
+                  : `${getDisplayName(currentUser)} (으)로 댓글 달기...`
               }
               placeholderTextColor={colors.textSecondary}
               value={inputText}

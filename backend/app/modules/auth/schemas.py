@@ -91,3 +91,8 @@ class UserMe(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class NicknameAvailabilityResponse(BaseModel):
+    nickname: str
+    available: bool

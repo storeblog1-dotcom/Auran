@@ -19,6 +19,7 @@ import { getFullImageUrl } from "../config";
 import api from "../services/api";
 import { NotificationItem } from "../services/notifications";
 import { PostDetailModal } from "./PostDetailModal";
+import { getDisplayName } from "../utils/displayName";
 
 interface NotificationsModalProps {
   visible: boolean;
@@ -90,6 +91,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
             targetUser: {
               id: item.sender.id,
               username: item.sender.username,
+              nickname: item.sender.nickname,
               full_name: item.sender.full_name,
               profile_image_url: item.sender.profile_image_url,
             },
@@ -148,7 +150,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                 { color: isRead ? colors.textSecondary : colors.textPrimary },
               ]}
             >
-              {item.sender?.username || "user"}{" "}
+              {getDisplayName(item.sender)}{" "}
             </Text>
             {item.message || "새로운 알림이 도착했습니다."}
           </Text>

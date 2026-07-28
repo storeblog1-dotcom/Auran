@@ -10,6 +10,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { getFullImageUrl } from "../config";
 import { useTheme } from "../context/ThemeContext";
+import { getDisplayInitial, getDisplayName } from "../utils/displayName";
 
 interface StoryBarProps {
   storyGroups: any[];
@@ -69,9 +70,7 @@ export const StoryBar: React.FC<StoryBarProps> = ({
                   ) : (
                     <View style={[styles.avatarImage, styles.avatarPlaceholder]}>
                       <Text style={styles.avatarInitial}>
-                        {currentUser?.username
-                          ? currentUser.username[0].toUpperCase()
-                          : "ME"}
+                        {getDisplayInitial(currentUser, "ME")}
                       </Text>
                     </View>
                   )}
@@ -93,9 +92,7 @@ export const StoryBar: React.FC<StoryBarProps> = ({
                   ) : (
                     <View style={[styles.avatarImage, styles.avatarPlaceholder]}>
                       <Text style={styles.avatarInitial}>
-                        {currentUser?.username
-                          ? currentUser.username[0].toUpperCase()
-                          : "ME"}
+                        {getDisplayInitial(currentUser, "ME")}
                       </Text>
                     </View>
                   )}
@@ -104,7 +101,7 @@ export const StoryBar: React.FC<StoryBarProps> = ({
             )}
           </TouchableOpacity>
           <Text style={[styles.usernameText, { color: colors.textPrimary }]} numberOfLines={1}>
-            {currentUser?.full_name ? currentUser.full_name.split(" ")[0] : (currentUser?.username || "내 스토리")}
+            {getDisplayName(currentUser, "내 스토리")}
           </Text>
         </View>
 
@@ -140,7 +137,7 @@ export const StoryBar: React.FC<StoryBarProps> = ({
                       ) : (
                         <View style={[styles.avatarImage, styles.avatarPlaceholder]}>
                           <Text style={styles.avatarInitial}>
-                            {user.username ? user.username[0].toUpperCase() : "?"}
+                            {getDisplayInitial(user)}
                           </Text>
                         </View>
                       )}
@@ -157,7 +154,7 @@ export const StoryBar: React.FC<StoryBarProps> = ({
                       ) : (
                         <View style={[styles.avatarImage, styles.avatarPlaceholder]}>
                           <Text style={styles.avatarInitial}>
-                            {user.username ? user.username[0].toUpperCase() : "?"}
+                            {getDisplayInitial(user)}
                           </Text>
                         </View>
                       )}
@@ -166,7 +163,7 @@ export const StoryBar: React.FC<StoryBarProps> = ({
                 )}
               </TouchableOpacity>
               <Text style={[styles.usernameText, { color: colors.textPrimary }]} numberOfLines={1}>
-                {user.full_name ? user.full_name.split(" ")[0] : user.username}
+                {getDisplayName(user)}
               </Text>
             </View>
           );

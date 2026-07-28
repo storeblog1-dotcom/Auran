@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class SenderResponse(BaseModel):
     id: UUID
     username: str
+    nickname: str | None = None
     full_name: str
     profile_image_url: str | None = None
 

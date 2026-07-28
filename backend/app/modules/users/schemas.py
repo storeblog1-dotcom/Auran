@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 # ─── Request Schemas ─────────────────────────────────────────
 
 class UserUpdateProfileRequest(BaseModel):
+    nickname: str | None = Field(None, min_length=1, max_length=50, examples=["Aura"])
     full_name: str | None = Field(None, min_length=1, max_length=100, examples=["John Doe"])
     bio: str | None = Field(None, max_length=500, examples=["Hello, world!"])
     profile_image_url: str | None = Field(None, max_length=500, examples=["https://example.com/profile.jpg"])
@@ -32,6 +33,7 @@ class UserSummaryResponse(BaseModel):
     """사용자 목록 / 검색 결과 요약 정보"""
     id: uuid.UUID
     username: str
+    nickname: str | None = None
     full_name: str
     profile_image_url: str | None = None
     is_following: bool = False
@@ -43,6 +45,7 @@ class UserProfileResponse(BaseModel):
     """상세 프로필 정보"""
     id: uuid.UUID
     username: str
+    nickname: str | None = None
     full_name: str
     bio: str | None = None
     profile_image_url: str | None = None

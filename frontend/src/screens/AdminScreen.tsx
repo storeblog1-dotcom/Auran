@@ -19,6 +19,7 @@ import { adminService, AdminStats, AdminUserItem, AdminPostItem } from "../servi
 import { getFullImageUrl } from "../config";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { AdminUserPostsModal } from "../components/AdminUserPostsModal";
+import { getDisplayName } from "../utils/displayName";
 
 type AdminTab = "stats" | "users" | "posts";
 
@@ -315,7 +316,7 @@ export const AdminScreen = ({ navigation }: any) => {
 
                   <View style={{ flex: 1, marginLeft: 12 }}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      <Text style={[styles.usernameText, { color: colors.textPrimary }]}>@{item.username}</Text>
+                      <Text style={[styles.usernameText, { color: colors.textPrimary }]}>{getDisplayName(item)}</Text>
                       {item.is_admin && (
                         <View style={styles.adminBadge}>
                           <Text style={styles.adminBadgeText}>관리자</Text>
@@ -391,7 +392,7 @@ export const AdminScreen = ({ navigation }: any) => {
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                         <Ionicons name="eye-outline" size={16} color={primaryAccent} />
                         <Text style={[styles.postAuthor, { color: primaryAccent }]}>
-                          @{item.author?.username || "알 수 없음"}
+                          {getDisplayName(item.author, "알 수 없음")}
                         </Text>
                       </View>
                       <Text style={{ color: colors.textMuted, fontSize: 11 }}>
