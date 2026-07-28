@@ -326,7 +326,7 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
           {replyParentComment && (
             <View style={[styles.replyingBar, { backgroundColor: colors.bgInput, borderTopColor: colors.borderColor }]}>
               <Text style={[styles.replyingText, { color: colors.textSecondary }]}>
-                <Text style={{ fontWeight: "bold", color: colors.accentBlue }}>@{replyParentComment.user.username}</Text> 님에게 답글 작성 중
+                <Text style={{ fontWeight: "bold", color: colors.accentBlue }}>{getDisplayName(replyParentComment.user)}</Text> 님에게 답글 작성 중
               </Text>
               <TouchableOpacity onPress={handleCancelReply} style={styles.cancelReplyBtn}>
                 <Ionicons name="close-circle" size={18} color={colors.textMuted} />
@@ -362,7 +362,7 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
                 editingComment
                   ? "댓글 내용 수정..."
                   : replyParentComment
-                  ? `@${replyParentComment.user.username} 님에게 답글 달기...`
+                  ? `${getDisplayName(replyParentComment.user)} 님에게 답글 달기...`
                   : `${getDisplayName(currentUser)} (으)로 댓글 달기...`
               }
               placeholderTextColor={colors.textSecondary}
