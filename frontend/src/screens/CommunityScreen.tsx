@@ -86,7 +86,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
   const childBoards = sectionBoards.filter((board) => board.parent_id === selectedParentId);
   const orderedChildBoards = [...childBoards]
     .sort((a, b) => {
-      if (Boolean(a.is_default) !== Boolean(b.is_default)) return a.is_default ? -1 : 1;
+      if (Boolean(a.is_default) !== Boolean(b.is_default)) return a.is_default ? 1 : -1;
       if (section === "anonymous") {
         const aIndex = ANONYMOUS_CATEGORY_ORDER.findIndex((category) => category.slug === a.slug);
         const bIndex = ANONYMOUS_CATEGORY_ORDER.findIndex((category) => category.slug === b.slug);
