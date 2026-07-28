@@ -258,8 +258,16 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
             });
           } else {
             const formData = new FormData();
-            const filename = `post_${Date.now()}_${i}.jpg`;
-            formData.append("file", { uri: item.uri, name: filename, type: "image/jpeg" } as any);
+            const filename = item.asset?.fileName || `post_${Date.now()}_${i}.jpg`;
+            const extensionMatch = /\.(\w+)$/.exec(filename);
+            const mimeType =
+              item.asset?.mimeType ||
+              (extensionMatch ? `image/${extensionMatch[1].toLowerCase()}` : "image/jpeg");
+            formData.append("file", {
+              uri: item.uri,
+              name: filename,
+              type: mimeType,
+            } as any);
 
             const uploadRes = await api.post("/uploads/image", formData, {
               headers: { "Content-Type": "multipart/form-data" },
@@ -289,9 +297,22 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
         navigation.navigate("Feed");
         Alert.alert("성공", "새 피드가 성공적으로 공유되었습니다!");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Create/update post error:", err);
-      Alert.alert("오류", isEditMode ? "게시물 수정에 실패했습니다." : "게시물 공유에 실패했습니다.");
+      const isUploadError = err.config?.url?.includes("/uploads/image");
+      const serverMessage =
+        err.response?.data?.error?.message ||
+        err.response?.data?.detail;
+      const fallbackMessage = isUploadError
+        ? "이미지 업로드에 실패했습니다. 15MB 이하의 JPG, PNG 또는 WebP 이미지를 선택해 주세요."
+        : isEditMode
+        ? "게시물 수정에 실패했습니다."
+        : "게시물 공유에 실패했습니다.";
+
+      Alert.alert(
+        isUploadError ? "이미지 업로드 실패" : "게시물 저장 실패",
+        typeof serverMessage === "string" ? serverMessage : fallbackMessage
+      );
     } finally {
       setSubmitting(false);
     }
