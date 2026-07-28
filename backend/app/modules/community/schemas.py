@@ -30,6 +30,7 @@ class BoardResponse(BaseModel):
     slug: str
     parent_id: UUID | None = None
     is_anonymous: bool
+    is_default: bool = False
     is_active: bool
     sort_order: int
     created_at: datetime

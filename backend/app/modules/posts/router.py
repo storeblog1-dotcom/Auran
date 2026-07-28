@@ -93,6 +93,7 @@ async def get_explore_posts(
 async def get_community_posts(
     board_type: str | None = Query(None, description="기존 게시판 구분"),
     board_id: UUID | None = Query(None, description="게시판 ID"),
+    parent_board_id: UUID | None = Query(None, description="상위 게시판 ID의 모든 하위 게시글"),
     page: int = Query(1, ge=1, description="페이지 번호"),
     size: int = Query(30, ge=1, le=100, description="페이지당 개수"),
     current_user: User | None = Depends(get_optional_current_user),
@@ -100,7 +101,7 @@ async def get_community_posts(
 ) -> ApiResponse[list[PostResponse]]:
     offset = (page - 1) * size
     posts, total = await service.get_community_posts(
-        db, board_type=board_type, board_id=board_id, current_user=current_user, limit=size, offset=offset
+        db, board_type=board_type, board_id=board_id, parent_board_id=parent_board_id, current_user=current_user, limit=size, offset=offset
     )
     has_more = (offset + len(posts)) < total
     return ApiResponse.paginated(data=posts, total=total, has_more=has_more)

@@ -68,13 +68,16 @@ export const CommunityAdminScreen = ({ navigation }: any) => {
       setBoards(res.data?.data || []);
     } catch (e: any) { Alert.alert("오류", e.response?.data?.detail || "게시판 순서 변경에 실패했습니다."); }
   };
-  const closeBoard = (board: any) => Alert.alert("게시판 폐쇄", `‘${board.name}’ 게시판을 폐쇄할까요?`, [
+  const closeBoard = (board: any) => {
+    if (board.is_default) return Alert.alert("안내", "공통은 기본 하위 게시판이라 폐쇄할 수 없습니다.");
+    return Alert.alert("게시판 폐쇄", `‘${board.name}’ 게시판을 폐쇄할까요?`, [
     { text: "취소", style: "cancel" },
     { text: "다음", style: "destructive", onPress: () => Alert.alert("최종 확인", "기존 글은 보존되고 새 글 작성만 막힙니다.", [
       { text: "취소", style: "cancel" },
       { text: "폐쇄", style: "destructive", onPress: async () => { try { await api.delete(`/community/admin/boards/${board.id}?confirm_name=${encodeURIComponent(board.name)}`); load(); } catch (e: any) { Alert.alert("오류", e.response?.data?.detail || "폐쇄에 실패했습니다."); } } },
     ]) },
-  ]);
+    ]);
+  };
   const postNotice = async () => {
     if (!noticeTitle.trim() || !noticeContent.trim()) return Alert.alert("알림", "공지 제목과 내용을 입력해 주세요.");
     try { await api.post("/community/admin/notices", { title: noticeTitle.trim(), content: noticeContent.trim() }); setNoticeTitle(""); setNoticeContent(""); Alert.alert("완료", "전체 공지가 모든 게시판 상단에 표시됩니다."); }
@@ -103,7 +106,7 @@ export const CommunityAdminScreen = ({ navigation }: any) => {
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={[styles.section, { color: colors.textPrimary }]}>게시판 순서</Text>
       {orderedBoards.map((board) => <View key={board.id} style={[styles.boardRow, board.parent_id && styles.childBoardRow, { borderColor: colors.borderColor, backgroundColor: board.parent_id ? colors.bgInput : colors.bgCard, opacity: board.is_active ? 1 : .5 }]}>
-        <TouchableOpacity style={styles.boardInfo} onPress={() => select(board)}><Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{board.parent_id ? "└ " : ""}{board.name}</Text><Text style={{ color: colors.textSecondary, fontSize: 12 }}>{board.slug} · {board.is_anonymous ? "익명" : "일반"}</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.boardInfo} onPress={() => select(board)}><Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{board.parent_id ? "└ " : ""}{board.name}{board.is_default ? " (기본)" : ""}</Text><Text style={{ color: colors.textSecondary, fontSize: 12 }}>{board.slug} · {board.is_anonymous ? "익명" : "일반"}</Text></TouchableOpacity>
         <View style={styles.rowActions}><TouchableOpacity accessibilityLabel="게시판 위로 이동" onPress={() => moveBoard(board, "up")} style={styles.iconButton}><Ionicons name="chevron-up" size={20} color={colors.textPrimary} /></TouchableOpacity><TouchableOpacity accessibilityLabel="게시판 아래로 이동" onPress={() => moveBoard(board, "down")} style={styles.iconButton}><Ionicons name="chevron-down" size={20} color={colors.textPrimary} /></TouchableOpacity><TouchableOpacity onPress={() => closeBoard(board)}><Text style={{ color: "#ef4444", fontWeight: "700" }}>폐쇄</Text></TouchableOpacity></View>
       </View>)}
       <Text style={[styles.hint, { color: colors.textSecondary }]}>위·아래 버튼은 같은 상위 게시판 안에서만 순서를 바꿉니다.</Text>

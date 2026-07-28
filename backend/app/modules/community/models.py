@@ -16,6 +16,7 @@ class CommunityBoard(Base):
     slug: Mapped[str] = mapped_column(String(80), unique=True, nullable=False, index=True)
     parent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("community_boards.id", ondelete="RESTRICT"), nullable=True, index=True)
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

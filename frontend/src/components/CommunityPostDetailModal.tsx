@@ -298,6 +298,15 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
                   </View>
                 </View>
 
+                {post.board_name ? (
+                  <View style={[styles.boardPathBadge, { backgroundColor: colors.bgCard || "#18181b" }]}>
+                    <Ionicons name="folder-outline" size={14} color={colors.accentPurple || "#a855f7"} />
+                    <Text style={[styles.boardPathText, { color: colors.textSecondary }]}>
+                      {post.parent_board_name ? `${post.parent_board_name} · ` : ""}{post.board_name}
+                    </Text>
+                  </View>
+                ) : null}
+
                 {/* Title & Caption */}
                 {post.title ? (
                   <Text style={[styles.postTitle, { color: colors.textPrimary }]}>{post.title}</Text>
@@ -566,6 +575,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     gap: 12,
   },
+  boardPathBadge: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 12 },
+  boardPathText: { fontSize: 12, fontWeight: "700" },
   anonAvatar: {
     width: 42,
     height: 42,

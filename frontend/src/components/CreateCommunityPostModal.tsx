@@ -25,6 +25,7 @@ interface CreateCommunityPostModalProps {
   initialBoardType?: "anonymous" | "info";
   boardId?: string | null;
   boardName?: string;
+  boardOptions?: any[];
   editPost?: any;
   onClose: () => void;
   onPostCreated: () => void;
@@ -35,12 +36,14 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
   initialBoardType = "anonymous",
   boardId,
   boardName,
+  boardOptions = [],
   editPost,
   onClose,
   onPostCreated,
 }) => {
   const { colors } = useTheme();
   const [boardType, setBoardType] = useState<"anonymous" | "info">(initialBoardType);
+  const [selectedBoardId, setSelectedBoardId] = useState<string | null>(boardId || null);
   const [title, setTitle] = useState("");
   const [caption, setCaption] = useState("");
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
@@ -50,6 +53,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
     if (visible) {
       if (editPost) {
         setBoardType(editPost.board_type || initialBoardType);
+        setSelectedBoardId(editPost.board_id || boardId || null);
         setTitle(editPost.title || "");
         setCaption(editPost.caption || "");
         if (editPost.media && editPost.media.length > 0) {
@@ -63,12 +67,20 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
         }
       } else {
         setBoardType(initialBoardType);
+        setSelectedBoardId(boardId || null);
         setTitle("");
         setCaption("");
         setSelectedAsset(null);
       }
     }
-  }, [visible, initialBoardType, editPost]);
+  }, [visible, initialBoardType, boardId, editPost]);
+
+  const selectedBoard = boardOptions.find((board) => board.id === selectedBoardId);
+  const selectedBoardLabel = selectedBoard?.name || boardName || "게시판";
+  const selectBoard = (nextBoard: any) => {
+    setSelectedBoardId(nextBoard.id);
+    setBoardType(nextBoard.is_anonymous ? "anonymous" : "info");
+  };
 
   const handlePickImage = async () => {
     try {
@@ -158,7 +170,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
         await api.patch(`/posts/${editPost.id}`, {
           title: title.trim(),
           board_type: boardType,
-          board_id: boardId,
+          board_id: selectedBoardId,
           caption: caption.trim(),
           media: mediaList,
         });
@@ -168,7 +180,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
           title: title.trim(),
           caption: caption.trim(),
           board_type: boardType,
-          board_id: boardId,
+          board_id: selectedBoardId,
           media: mediaList,
         });
 
@@ -221,8 +233,21 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
           <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
             <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>게시판</Text>
             <View style={[styles.selectedBoard, { backgroundColor: colors.bgCard || "#18181b" }]}>
-              <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{boardName || "게시판"}</Text>
+              <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{selectedBoardLabel}</Text>
             </View>
+            {boardOptions.length > 1 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.boardOptions}>
+                {boardOptions.map((board) => (
+                  <TouchableOpacity
+                    key={board.id}
+                    onPress={() => selectBoard(board)}
+                    style={[styles.boardOption, { borderColor: selectedBoardId === board.id ? colors.accentPurple : colors.borderColor, backgroundColor: selectedBoardId === board.id ? `${colors.accentPurple}18` : "transparent" }]}
+                  >
+                    <Text style={{ color: selectedBoardId === board.id ? colors.accentPurple : colors.textSecondary, fontWeight: "700" }}>{board.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
 
             {/* Title Input */}
             <View style={styles.inputGroup}>
@@ -352,8 +377,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 14,
     justifyContent: "center",
-    marginBottom: 20,
+    marginBottom: 10,
   },
+  boardOptions: { gap: 8, paddingBottom: 20 },
+  boardOption: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 13, minHeight: 36, justifyContent: "center" },
   segmentedTab: {
     flex: 1,
     height: 42,

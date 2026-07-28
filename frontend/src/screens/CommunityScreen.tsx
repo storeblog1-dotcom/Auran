@@ -27,7 +27,7 @@ import { AuraLogoText } from "../components/AuraLogoText";
 
 const { width } = Dimensions.get("window");
 type CommunitySection = "anonymous" | "info" | "partner";
-const ALL_ANONYMOUS_BOARD_ID = "__all_anonymous__";
+const ALL_CHILD_BOARDS_ID = "__all_child_boards__";
 const PARTNER_BOARD_NAME = "\uC81C\uD734\uC5C5\uC18C";
 const ANONYMOUS_CATEGORY_ORDER = [
   { slug: "anonymous-worries", name: "고민상담" },
@@ -68,7 +68,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
   const [viewerIndex, setViewerIndex] = useState<number>(0);
 
   const selectedBoard = boards.find((board) => board.id === selectedBoardId)
-    || (selectedBoardId === ALL_ANONYMOUS_BOARD_ID ? boards.find((board) => board.id === selectedParentId) : undefined);
+    || (selectedBoardId === ALL_CHILD_BOARDS_ID ? boards.find((board) => board.id === selectedParentId) : undefined);
   const isPartnerBoard = Boolean(
     selectedBoard &&
       (String(selectedBoard.slug || "").toLowerCase().includes("partner") ||
@@ -90,9 +90,11 @@ export const CommunityScreen = ({ navigation, route }: any) => {
       return board ? { ...board, name: category.name } : null;
     })
     .filter(Boolean) as any[];
-  const visibleChildBoards = section === "anonymous" && selectedParentId
-    ? [{ id: ALL_ANONYMOUS_BOARD_ID, name: "전체", is_anonymous: true }, ...orderedAnonymousChildBoards]
+  const orderedChildBoards = section === "anonymous" ? orderedAnonymousChildBoards : childBoards;
+  const visibleChildBoards = selectedParentId
+    ? [{ id: ALL_CHILD_BOARDS_ID, name: "전체", is_anonymous: selectedBoard?.is_anonymous }, ...orderedChildBoards]
     : childBoards;
+  const defaultChildBoard = childBoards.find((board) => board.is_default) || childBoards[0];
 
   const selectFirstBoard = (list: any[], nextSection: CommunitySection) => {
     const candidates = list.filter((board) => {
@@ -105,7 +107,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
     const first = candidates.find((board) => !board.parent_id) || candidates[0];
     const firstChild = candidates.find((board) => board.parent_id === first?.id);
     setSelectedParentId(first?.id || null);
-    setSelectedBoardId(nextSection === "anonymous" ? (first?.id ? ALL_ANONYMOUS_BOARD_ID : null) : (firstChild?.id || first?.id || null));
+    setSelectedBoardId(firstChild ? ALL_CHILD_BOARDS_ID : (first?.id || null));
   };
 
   const fetchBoards = async () => {
@@ -132,10 +134,10 @@ export const CommunityScreen = ({ navigation, route }: any) => {
       return;
     }
     try {
-      const isAnonymousAll = boardId === ALL_ANONYMOUS_BOARD_ID;
-      const queryBoardId = isAnonymousAll ? selectedParentId : boardId;
+      const isAllChildren = boardId === ALL_CHILD_BOARDS_ID;
+      const queryBoardId = isAllChildren ? selectedParentId : boardId;
       const [postRes, noticeRes] = await Promise.all([
-        api.get(isAnonymousAll ? "/posts/community?board_type=anonymous" : `/posts/community?board_id=${boardId}`),
+        api.get(isAllChildren ? `/posts/community?parent_board_id=${selectedParentId}` : `/posts/community?board_id=${boardId}`),
         api.get(`/community/notices?board_id=${queryBoardId}`),
       ]);
       if (postRes.data && postRes.data.data) {
@@ -295,6 +297,9 @@ export const CommunityScreen = ({ navigation, route }: any) => {
         {/* Content Section */}
         <View style={styles.cardBodyRow}>
           <View style={{ flex: 1, paddingRight: mediaUrl ? 12 : 0 }}>
+            {selectedBoardId === ALL_CHILD_BOARDS_ID && item.board_name ? (
+              <Text style={[styles.boardLabel, { color: colors.accentPurple }]}>{item.board_name}</Text>
+            ) : null}
             {item.title ? (
               <Text style={[styles.postTitle, { color: colors.textPrimary }]} numberOfLines={1}>
                 {item.title}
@@ -487,8 +492,9 @@ export const CommunityScreen = ({ navigation, route }: any) => {
       <CreateCommunityPostModal
         visible={createModalVisible}
         initialBoardType={selectedBoard?.is_anonymous ? "anonymous" : "info"}
-        boardId={selectedBoardId === ALL_ANONYMOUS_BOARD_ID ? selectedParentId : selectedBoardId}
-        boardName={selectedBoard?.name}
+        boardId={selectedBoardId === ALL_CHILD_BOARDS_ID ? defaultChildBoard?.id || null : selectedBoardId}
+        boardName={selectedBoardId === ALL_CHILD_BOARDS_ID ? defaultChildBoard?.name : selectedBoard?.name}
+        boardOptions={orderedChildBoards}
         editPost={editingPost}
         onClose={() => {
           setCreateModalVisible(false);
@@ -699,6 +705,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 4,
   },
+  boardLabel: { fontSize: 12, fontWeight: "800", marginBottom: 6 },
   postCaption: {
     fontSize: 13,
     lineHeight: 18,

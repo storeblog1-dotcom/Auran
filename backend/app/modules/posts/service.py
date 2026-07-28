@@ -5,7 +5,7 @@ from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.common.exceptions import ForbiddenException, NotFoundException
+from app.common.exceptions import BadRequestException, ForbiddenException, NotFoundException
 from app.modules.auth.models import User
 from app.modules.audit.content_retention import (
     preserve_comment,
@@ -124,6 +124,13 @@ async def _build_post_responses_batch(
         return []
 
     post_ids = [p.id for p in posts]
+    board_ids = {p.board_id for p in posts if p.board_id}
+    board_map: dict[uuid.UUID, CommunityBoard] = {}
+    if board_ids:
+        boards_res = await db.execute(
+            select(CommunityBoard).options(selectinload(CommunityBoard.parent)).where(CommunityBoard.id.in_(board_ids))
+        )
+        board_map = {board.id: board for board in boards_res.scalars().all()}
 
     following_user_ids: set[uuid.UUID] = set()
     if current_user:
@@ -271,6 +278,12 @@ async def _build_post_responses_batch(
                 title=post.title,
                 board_type=post.board_type,
                 board_id=post.board_id,
+                board_name=board_map[post.board_id].name if post.board_id in board_map else None,
+                parent_board_name=(
+                    board_map[post.board_id].parent.name
+                    if post.board_id in board_map and board_map[post.board_id].parent
+                    else None
+                ),
                 caption=post.caption,
                 location=post.location,
                 visibility=post.visibility,
@@ -307,13 +320,17 @@ async def create_post(
     """신규 게시물을 작성하고 미디어를 저장합니다."""
     if data.board_id:
         board = (await db.execute(select(CommunityBoard).where(CommunityBoard.id == data.board_id))).scalar_one_or_none()
-        if board and ("partner" in board.slug.lower() or "제휴업소" in board.name) and not current_user.is_admin:
+        if not board or not board.is_active:
+            raise BadRequestException("사용할 수 없는 게시판입니다.")
+        if not board.parent_id:
+            raise BadRequestException("하위 게시판을 선택해 주세요.")
+        if ("partner" in board.slug.lower() or "제휴업소" in board.name) and not current_user.is_admin:
             raise ForbiddenException("제휴업소 게시판은 관리자만 게시물을 작성할 수 있습니다.")
 
     post = Post(
         user_id=current_user.id,
         title=data.title,
-        board_type=data.board_type,
+        board_type=("anonymous" if board and board.is_anonymous else "info") if data.board_id else data.board_type,
         board_id=data.board_id,
         caption=data.caption,
         location=data.location,
@@ -422,24 +439,32 @@ async def get_community_posts(
     db: AsyncSession,
     board_type: str | None = None,
     board_id: uuid.UUID | None = None,
+    parent_board_id: uuid.UUID | None = None,
     current_user: Optional[User] = None,
     limit: int = 30,
     offset: int = 0,
 ) -> tuple[List[PostResponse], int]:
     """커뮤니티 게시판(익명게시판 / 정보게시판) 게시물 목록 조회"""
     visibility_clause = _post_visibility_clause(current_user)
+    board_filter = (
+        CommunityBoard.parent_id == parent_board_id
+        if parent_board_id
+        else (Post.board_id == board_id) if board_id else (Post.board_type == board_type)
+    )
     count_res = await db.execute(
         select(func.count(Post.id))
         .join(User, Post.user_id == User.id)
-        .where((Post.board_id == board_id) if board_id else (Post.board_type == board_type), visibility_clause)
+        .outerjoin(CommunityBoard, CommunityBoard.id == Post.board_id)
+        .where(board_filter, visibility_clause)
     )
     total = count_res.scalar() or 0
 
     query = (
         select(Post)
         .join(User, Post.user_id == User.id)
+        .outerjoin(CommunityBoard, CommunityBoard.id == Post.board_id)
         .options(selectinload(Post.user), selectinload(Post.media))
-        .where((Post.board_id == board_id) if board_id else (Post.board_type == board_type), visibility_clause)
+        .where(board_filter, visibility_clause)
         .order_by(Post.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -518,10 +543,16 @@ async def update_post(
 
     if data.title is not None:
         post.title = data.title
-    if data.board_type is not None:
-        post.board_type = data.board_type
     if data.board_id is not None:
-        post.board_id = data.board_id
+        board = (await db.execute(select(CommunityBoard).where(CommunityBoard.id == data.board_id))).scalar_one_or_none()
+        if not board or not board.is_active or not board.parent_id:
+            raise BadRequestException("사용할 수 없는 하위 게시판입니다.")
+        if ("partner" in board.slug.lower() or "제휴업소" in board.name) and not current_user.is_admin:
+            raise ForbiddenException("제휴업소 게시판은 관리자만 게시물을 작성할 수 있습니다.")
+        post.board_id = board.id
+        post.board_type = "anonymous" if board.is_anonymous else "info"
+    elif data.board_type is not None:
+        post.board_type = data.board_type
     if data.caption is not None:
         post.caption = data.caption
     if data.location is not None:

@@ -130,6 +130,8 @@ class PostResponse(BaseModel):
     title: Optional[str] = None
     board_type: Optional[str] = None
     board_id: Optional[UUID] = None
+    board_name: Optional[str] = None
+    parent_board_name: Optional[str] = None
     caption: Optional[str] = None
     location: Optional[str] = None
     visibility: str = "public"
