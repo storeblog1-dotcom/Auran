@@ -7,6 +7,13 @@ from sqlalchemy.orm import selectinload
 
 from app.common.exceptions import ForbiddenException, NotFoundException
 from app.modules.auth.models import User
+from app.modules.audit.content_retention import (
+    preserve_comment,
+    preserve_comment_tree_for_deletion,
+    preserve_post,
+    preserve_post_comments_for_deletion,
+)
+from app.modules.audit.service import record
 from app.modules.community.models import CommunityBoard
 from app.modules.posts.models import Comment, CommentLike, Post, PostBookmark, PostLike, PostMedia, PostRepost
 from app.modules.posts.schemas import (
@@ -282,8 +289,6 @@ async def create_post(
     )
     db.add(post)
     await db.flush()
-    from app.modules.audit.service import record
-    await record(db, user_id=current_user.id, event_type="post_created", ip_address=ip_address, target_type="post", target_id=post.id, snapshot={"title": data.title, "caption": data.caption})
 
     for item in data.media:
         media_obj = PostMedia(
@@ -294,6 +299,20 @@ async def create_post(
         )
         db.add(media_obj)
 
+    await db.flush()
+    revision = await preserve_post(
+        db, post, lifecycle_event="created", ip_address=ip_address
+    )
+    await record(
+        db,
+        user_id=current_user.id,
+        event_type="post_created",
+        ip_address=ip_address,
+        target_type="post",
+        target_id=post.id,
+        revision_id=revision.id,
+        snapshot={"title": post.title, "caption": post.caption},
+    )
     await db.commit()
 
     if post.caption:
@@ -455,6 +474,7 @@ async def update_post(
         select(Post)
         .options(selectinload(Post.user), selectinload(Post.media))
         .where(Post.id == post_id)
+        .with_for_update()
     )
     post = result.scalar_one_or_none()
     if not post:
@@ -462,9 +482,6 @@ async def update_post(
 
     if post.user_id != current_user.id and not current_user.is_admin:
         raise ForbiddenException("You can only edit your own posts")
-
-    from app.modules.audit.service import record
-    await record(db, user_id=current_user.id, event_type="post_updated", ip_address=ip_address, target_type="post", target_id=post.id, snapshot={"title": post.title, "caption": post.caption, "location": post.location})
 
     if data.title is not None:
         post.title = data.title
@@ -493,6 +510,20 @@ async def update_post(
             )
             db.add(media_obj)
 
+    await db.flush()
+    revision = await preserve_post(
+        db, post, lifecycle_event="updated", ip_address=ip_address
+    )
+    await record(
+        db,
+        user_id=current_user.id,
+        event_type="post_updated",
+        ip_address=ip_address,
+        target_type="post",
+        target_id=post.id,
+        revision_id=revision.id,
+        snapshot={"title": post.title, "caption": post.caption, "location": post.location},
+    )
     await db.commit()
 
     from app.modules.hashtags.router import update_post_hashtags
@@ -512,9 +543,14 @@ async def delete_post(
     db: AsyncSession,
     post_id: uuid.UUID,
     current_user: User,
+    ip_address: str | None = None,
+    record_audit: bool = True,
 ) -> None:
     """본인이 작성한 게시물을 삭제합니다 (연관 미디어 연쇄 삭제)."""
-    result = await db.execute(select(Post).where(Post.id == post_id))
+    result = await db.execute(
+        select(Post).options(selectinload(Post.media)).where(Post.id == post_id)
+        .with_for_update()
+    )
     post = result.scalar_one_or_none()
     if not post:
         raise NotFoundException("Post")
@@ -522,6 +558,23 @@ async def delete_post(
     if post.user_id != current_user.id and not current_user.is_admin:
         raise ForbiddenException("You can only delete your own posts")
 
+    await preserve_post_comments_for_deletion(
+        db, post.id, ip_address=ip_address
+    )
+    revision = await preserve_post(
+        db, post, lifecycle_event="deleted", ip_address=ip_address
+    )
+    if record_audit:
+        await record(
+            db,
+            user_id=current_user.id,
+            event_type="post_deleted",
+            ip_address=ip_address,
+            target_type="post",
+            target_id=post.id,
+            revision_id=revision.id,
+            snapshot={"title": post.title, "caption": post.caption},
+        )
     await db.delete(post)
     await db.commit()
 
@@ -620,6 +673,7 @@ async def create_comment(
     post_id: uuid.UUID,
     current_user: User,
     data: CommentCreateRequest,
+    ip_address: str | None = None,
 ) -> CommentResponse:
     """특정 게시물에 댓글을 작성합니다."""
     post_res = await db.execute(select(Post.id).where(Post.id == post_id))
@@ -643,6 +697,20 @@ async def create_comment(
         reply_to_display_name=reply_to_display_name,
     )
     db.add(comment)
+    await db.flush()
+    revision = await preserve_comment(
+        db, comment, lifecycle_event="created", ip_address=ip_address
+    )
+    await record(
+        db,
+        user_id=current_user.id,
+        event_type="comment_created",
+        ip_address=ip_address,
+        target_type="comment",
+        target_id=comment.id,
+        revision_id=revision.id,
+        snapshot={"content": comment.content, "post_id": str(comment.post_id)},
+    )
     await db.commit()
 
     # 연관 유저 정보 로딩
@@ -887,10 +955,14 @@ async def update_comment(
     comment_id: uuid.UUID,
     current_user: User,
     data: CommentUpdateRequest,
+    ip_address: str | None = None,
 ) -> CommentResponse:
     """댓글을 수정합니다."""
     result = await db.execute(
-        select(Comment).options(selectinload(Comment.user)).where(Comment.id == comment_id)
+        select(Comment)
+        .options(selectinload(Comment.user))
+        .where(Comment.id == comment_id)
+        .with_for_update()
     )
     comment = result.scalar_one_or_none()
     if not comment:
@@ -900,6 +972,20 @@ async def update_comment(
         raise ForbiddenException("댓글 작성자만 수정할 수 있습니다.")
 
     comment.content = data.content
+    await db.flush()
+    revision = await preserve_comment(
+        db, comment, lifecycle_event="updated", ip_address=ip_address
+    )
+    await record(
+        db,
+        user_id=current_user.id,
+        event_type="comment_updated",
+        ip_address=ip_address,
+        target_type="comment",
+        target_id=comment.id,
+        revision_id=revision.id,
+        snapshot={"content": comment.content, "post_id": str(comment.post_id)},
+    )
     await db.commit()
     await db.refresh(comment)
 
@@ -951,10 +1037,14 @@ async def delete_comment(
     db: AsyncSession,
     comment_id: uuid.UUID,
     current_user: User,
+    ip_address: str | None = None,
 ) -> None:
     """댓글을 삭제합니다 (댓글 작성자 또는 게시물 작성자만 삭제 가능)."""
     result = await db.execute(
-        select(Comment).options(selectinload(Comment.post)).where(Comment.id == comment_id)
+        select(Comment)
+        .options(selectinload(Comment.post))
+        .where(Comment.id == comment_id)
+        .with_for_update()
     )
     comment = result.scalar_one_or_none()
     if not comment:
@@ -967,6 +1057,22 @@ async def delete_comment(
     ):
         raise ForbiddenException("You can only delete your own comments or comments on your post")
 
+    revisions = await preserve_comment_tree_for_deletion(
+        db, comment, ip_address=ip_address
+    )
+    root_revision = next(
+        revision for revision in revisions if revision.comment_id == comment.id
+    )
+    await record(
+        db,
+        user_id=current_user.id,
+        event_type="comment_deleted",
+        ip_address=ip_address,
+        target_type="comment",
+        target_id=comment.id,
+        revision_id=root_revision.id,
+        snapshot={"content": comment.content, "post_id": str(comment.post_id)},
+    )
     await db.delete(comment)
     await db.commit()
 

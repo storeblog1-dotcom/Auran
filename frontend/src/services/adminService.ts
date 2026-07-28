@@ -39,7 +39,50 @@ export interface AdminPostItem {
 
 export interface AdminActivityLog {
   id: string; user_id?: string | null; username?: string; nickname?: string | null; event_type: string; target_type?: string | null;
-  target_id?: string | null; content_number?: string | null; ip_address?: string | null; snapshot?: Record<string, unknown> | null; created_at: string;
+  target_id?: string | null; revision_id?: string | null; content_number?: string | null; ip_address?: string | null; snapshot?: Record<string, unknown> | null; created_at: string;
+}
+
+export interface AdminContentRevision {
+  kind: "post" | "comment";
+  revision_id: string;
+  target_id: string;
+  version: number;
+  lifecycle_event: string;
+  content_number?: string | null;
+  board_label?: string | null;
+  title?: string | null;
+  caption?: string | null;
+  content?: string | null;
+  content_type?: string | null;
+  location?: string | null;
+  visibility?: string | null;
+  media?: Array<{ media_url: string; media_type: string; order: number }>;
+  post?: {
+    id: string;
+    content_number?: string | null;
+    title?: string | null;
+    caption?: string | null;
+    board_label?: string | null;
+  };
+  author: {
+    id: string;
+    username: string;
+    nickname?: string | null;
+    profile_image_url?: string | null;
+  };
+  comments?: Array<{
+    id: string;
+    content_number?: string | null;
+    content_type: string;
+    content: string;
+    lifecycle_event: string;
+    event_ip?: string | null;
+    created_at: string;
+  }>;
+  event_ip?: string | null;
+  event_at: string;
+  retention_until: string;
+  legal_hold: boolean;
 }
 
 export const adminService = {
@@ -84,4 +127,11 @@ export const adminService = {
     (await api.get(`/admin/users/${userId}/content`, {
       params: { post_page: postPage, comment_page: commentPage, size },
     })).data.data,
+  getContentRevision: async (revisionId: string): Promise<AdminContentRevision> =>
+    (await api.get(`/admin/content-revisions/${revisionId}`)).data.data,
+  setContentRevisionLegalHold: async (revisionId: string, enabled: boolean): Promise<void> => {
+    await api.patch(`/admin/content-revisions/${revisionId}/legal-hold`, null, {
+      params: { enabled },
+    });
+  },
 };

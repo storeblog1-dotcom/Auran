@@ -1,0 +1,29 @@
+name: Purge Expired Retained Content
+
+on:
+  schedule:
+    - cron: '25 18 * * *'
+  workflow_dispatch:
+
+jobs:
+  purge:
+    name: Purge expired content revisions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Purge revisions past the three-year retention date
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          cd backend
+          python -m scripts.purge_expired_content_revisions
