@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -19,11 +19,8 @@ import { useTheme } from "../context/ThemeContext";
 import api from "../services/api";
 import { getFullImageUrl } from "../config";
 
-export const EditProfileScreen = ({ navigation, route }: any) => {
+export const EditProfileScreen = ({ navigation }: any) => {
   const { user, refreshProfile, logout } = useAuth();
-  const openWithdrawalOnEntry = Boolean(route?.params?.openWithdrawal);
-  const scrollViewRef = useRef<ScrollView>(null);
-  const shouldScrollToWithdrawalRef = useRef(openWithdrawalOnEntry);
 
   const [fullName, setFullName] = useState(user?.full_name || "");
   const [nickname, setNickname] = useState(user?.nickname || "");
@@ -42,7 +39,7 @@ export const EditProfileScreen = ({ navigation, route }: any) => {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
-  const [showWithdrawalSection, setShowWithdrawalSection] = useState(openWithdrawalOnEntry);
+  const [showWithdrawalSection, setShowWithdrawalSection] = useState(false);
   const [withdrawalPassword, setWithdrawalPassword] = useState("");
   const [withdrawalConfirmation, setWithdrawalConfirmation] = useState("");
   const [withdrawing, setWithdrawing] = useState(false);
@@ -272,17 +269,7 @@ export const EditProfileScreen = ({ navigation, route }: any) => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        ref={scrollViewRef}
-        style={{ flex: 1 }}
-        keyboardShouldPersistTaps="handled"
-        onContentSizeChange={() => {
-          if (showWithdrawalSection && shouldScrollToWithdrawalRef.current) {
-            shouldScrollToWithdrawalRef.current = false;
-            scrollViewRef.current?.scrollToEnd({ animated: false });
-          }
-        }}
-      >
+      <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
         {/* Avatar Section */}
         <TouchableOpacity style={styles.avatarSection} onPress={handlePickProfileImage} activeOpacity={0.8}>
           <Image source={{ uri: currentAvatarUri }} style={styles.avatar} />

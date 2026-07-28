@@ -199,7 +199,6 @@ export const ProfileScreen = ({ navigation }: any) => {
         keyExtractor={(item) => item.id}
         numColumns={3}
         renderItem={renderGridItem}
-        contentContainerStyle={styles.profileListContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={primaryAccent} />
         }
@@ -456,23 +455,6 @@ export const ProfileScreen = ({ navigation }: any) => {
         }
       />
 
-      <TouchableOpacity
-        style={[
-          styles.fixedWithdrawalButton,
-          {
-            backgroundColor: isDark ? "rgba(127, 29, 29, 0.96)" : "rgba(254, 242, 242, 0.98)",
-            borderColor: isDark ? "#f87171" : "#dc2626",
-          },
-        ]}
-        onPress={() => navigation.navigate("EditProfile", { openWithdrawal: true })}
-        activeOpacity={0.85}
-      >
-        <Ionicons name="person-remove-outline" size={18} color={isDark ? "#fecaca" : "#b91c1c"} />
-        <Text style={[styles.fixedWithdrawalButtonText, { color: isDark ? "#fecaca" : "#b91c1c" }]}>
-          계정 탈퇴 신청
-        </Text>
-      </TouchableOpacity>
-
       {/* Post Detail Modal */}
       <PostDetailModal
         visible={detailModalVisible}
@@ -498,32 +480,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#080b18",
-  },
-  profileListContent: {
-    paddingBottom: 76,
-  },
-  fixedWithdrawalButton: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 8,
-    minHeight: 48,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    zIndex: 20,
-    elevation: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-  },
-  fixedWithdrawalButtonText: {
-    fontSize: 15,
-    fontWeight: "800",
   },
   header: {
     height: 54,
@@ -766,3 +722,4 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 });
+
