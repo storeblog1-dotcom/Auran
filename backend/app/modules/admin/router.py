@@ -10,7 +10,6 @@ from app.core.database import get_db
 from app.modules.auth.dependencies import get_current_admin_user
 from app.modules.auth.models import User
 from app.modules.audit.models import AuditEvent
-from app.modules.audit.service import record
 import json
 from app.modules.posts.models import Post, Comment, PostLike
 from app.modules.stories.models import Story
@@ -20,15 +19,47 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 
 @router.get("/activity-logs", summary="관리자 전용 가입·탈퇴 및 게시글 감사 로그")
 async def activity_logs(
+    q: str | None = Query(None, description="아이디 또는 닉네임 검색"),
     page: int = Query(1, ge=1), size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db), admin: User = Depends(get_current_admin_user),
 ) -> ApiResponse[list[dict[str, Any]]]:
-    total = await db.scalar(select(func.count(AuditEvent.id)))
-    rows = (await db.execute(select(AuditEvent).order_by(desc(AuditEvent.created_at)).offset((page - 1) * size).limit(size))).scalars().all()
-    data = [{"id": str(x.id), "user_id": str(x.user_id) if x.user_id else None, "event_type": x.event_type, "target_type": x.target_type, "target_id": x.target_id, "ip_address": x.ip_address, "snapshot": json.loads(x.snapshot) if x.snapshot else None, "created_at": x.created_at.isoformat()} for x in rows]
-    await record(db, user_id=admin.id, event_type="admin_audit_view", ip_address=None, target_type="activity_logs")
-    await db.commit()
+    query = select(AuditEvent)
+    if q:
+        pattern = f"%{q}%"
+        query = query.join(User, User.id == AuditEvent.user_id).where((User.username.ilike(pattern)) | (User.nickname.ilike(pattern)))
+    total = await db.scalar(select(func.count()).select_from(query.subquery()))
+    rows = (await db.execute(query.order_by(desc(AuditEvent.created_at)).offset((page - 1) * size).limit(size))).scalars().all()
+    post_ids = [uuid.UUID(x.target_id) for x in rows if x.target_type == "post" and x.target_id]
+    post_numbers: dict[str, str] = {}
+    if post_ids:
+        posts = (await db.execute(select(Post).where(Post.id.in_(post_ids)))).scalars().all()
+        post_numbers = {str(post.id): f"P-{post.display_number:06d}" for post in posts if post.display_number}
+    user_ids = [x.user_id for x in rows if x.user_id]
+    users = (await db.execute(select(User).where(User.id.in_(user_ids)))).scalars().all() if user_ids else []
+    user_map = {u.id: u for u in users}
+    data = [{"id": str(x.id), "user_id": str(x.user_id) if x.user_id else None, "username": user_map[x.user_id].username if x.user_id in user_map else "알 수 없음", "nickname": user_map[x.user_id].nickname if x.user_id in user_map else None, "event_type": x.event_type, "target_type": x.target_type, "target_id": x.target_id, "content_number": post_numbers.get(x.target_id or ""), "ip_address": x.ip_address, "snapshot": json.loads(x.snapshot) if x.snapshot else None, "created_at": x.created_at.isoformat()} for x in rows if x.event_type != "admin_audit_view"]
     return ApiResponse.paginated(data=data, total=total or 0)
+
+
+@router.get("/users/{user_id}/content", summary="관리자 전용 사용자 작성 콘텐츠")
+async def get_admin_user_content(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+) -> ApiResponse[dict[str, Any]]:
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not user:
+        raise NotFoundException("사용자")
+    posts = (await db.execute(select(Post).where(Post.user_id == user_id).order_by(desc(Post.created_at)))).scalars().all()
+    comments = (await db.execute(select(Comment, Post.display_number).join(Post, Post.id == Comment.post_id).where(Comment.user_id == user_id).order_by(desc(Comment.created_at)))).all()
+    parent_ids = [comment.parent_id for comment, _ in comments if comment.parent_id]
+    parents = (await db.execute(select(Comment).where(Comment.id.in_(parent_ids)))).scalars().all() if parent_ids else []
+    parent_numbers = {parent.id: parent.display_number for parent in parents}
+    return ApiResponse.ok({
+        "user": {"id": str(user.id), "username": user.username, "nickname": user.nickname},
+        "posts": [{"id": str(p.id), "content_number": f"P-{p.display_number:06d}", "caption": p.caption, "created_at": p.created_at.isoformat()} for p in posts],
+        "comments": [{"id": str(c.id), "content_number": f"P-{number:06d}-C-{parent_numbers[c.parent_id]:03d}-R-{c.display_number:03d}" if c.parent_id in parent_numbers else f"P-{number:06d}-C-{c.display_number:03d}", "content": c.content, "created_at": c.created_at.isoformat()} for c, number in comments],
+    })
 
 
 @router.get("/stats", summary="서비스 종합 지표 통계")
@@ -151,6 +182,7 @@ async def get_admin_posts(
 
         post_list.append({
             "id": str(p.id),
+            "content_number": f"P-{p.display_number:06d}" if p.display_number else None,
             "caption": p.caption,
             "media": [
                 {

@@ -22,6 +22,7 @@ export interface AdminUserItem {
 
 export interface AdminPostItem {
   id: string;
+  content_number?: string | null;
   caption?: string;
   media?: Array<{
     media_url?: string;
@@ -37,8 +38,8 @@ export interface AdminPostItem {
 }
 
 export interface AdminActivityLog {
-  id: string; user_id?: string | null; event_type: string; target_type?: string | null;
-  target_id?: string | null; ip_address?: string | null; snapshot?: Record<string, unknown> | null; created_at: string;
+  id: string; user_id?: string | null; username?: string; nickname?: string | null; event_type: string; target_type?: string | null;
+  target_id?: string | null; content_number?: string | null; ip_address?: string | null; snapshot?: Record<string, unknown> | null; created_at: string;
 }
 
 export const adminService = {
@@ -75,8 +76,9 @@ export const adminService = {
   deletePost: async (postId: string): Promise<void> => {
     await api.delete(`/admin/posts/${postId}`);
   },
-  getActivityLogs: async (page: number = 1, size: number = 20) => {
-    const res = await api.get("/admin/activity-logs", { params: { page, size } });
+  getActivityLogs: async (q?: string, page: number = 1, size: number = 20) => {
+    const res = await api.get("/admin/activity-logs", { params: { q, page, size } });
     return { items: res.data.data as AdminActivityLog[], total: res.data.pagination?.total || 0 };
   },
+  getUserContent: async (userId: string) => (await api.get(`/admin/users/${userId}/content`)).data.data,
 };

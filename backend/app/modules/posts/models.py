@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import List, TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,6 +24,8 @@ class Post(Base):
         default=uuid.uuid4,
         index=True,
     )
+    # 관리자 전용 추적 번호. UUID는 외부 응답에 노출하지 않는다.
+    display_number: Mapped[int | None] = mapped_column(Integer, unique=True, index=True, nullable=True, server_default=text("nextval('post_display_number_seq')"))
 
     # ─── FK ──────────────────────────────────────────────────
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -217,6 +219,7 @@ class Comment(Base):
         default=uuid.uuid4,
         index=True,
     )
+    display_number: Mapped[int | None] = mapped_column(Integer, nullable=True, server_default=text("nextval('comment_display_number_seq')"))
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
