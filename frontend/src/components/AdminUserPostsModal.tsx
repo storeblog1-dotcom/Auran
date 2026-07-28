@@ -5,22 +5,17 @@ import {
   View,
   Modal,
   TouchableOpacity,
-  Image,
   FlatList,
   ActivityIndicator,
-  Dimensions,
   SafeAreaView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
 import api from "../services/api";
-import { getFullImageUrl } from "../config";
 import { AdminUserItem } from "../services/adminService";
 import { PostDetailModal } from "./PostDetailModal";
 import { getDisplayName } from "../utils/displayName";
 
-const { width } = Dimensions.get("window");
-const GRID_ITEM_SIZE = (width - 44) / 3;
 
 interface AdminUserPostsModalProps {
   visible: boolean;
@@ -63,16 +58,7 @@ export const AdminUserPostsModal: React.FC<AdminUserPostsModalProps> = ({
     }
   };
 
-  const getMediaUrl = (item: any): string | null => {
-    if (!item) return null;
-    if (item.media && Array.isArray(item.media) && item.media.length > 0) {
-      const first = item.media[0];
-      return first.media_url || first.url || first.image_url || null;
-    }
-    if (item.media_url) return item.media_url;
-    if (item.image_url) return item.image_url;
-    return null;
-  };
+  const getBoardLabel = (item: any) => item.board_type === "anonymous" ? "익명게시판" : item.board_type ? item.board_type : "피드";
 
   useEffect(() => {
     if (visible && user?.username) {
@@ -101,10 +87,6 @@ export const AdminUserPostsModal: React.FC<AdminUserPostsModalProps> = ({
 
         {/* User Info Card */}
         <View style={[styles.userProfileCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
-          <Image
-            source={{ uri: getFullImageUrl(user.profile_image_url) }}
-            style={styles.avatar}
-          />
           <View style={styles.userInfoTextContainer}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
               <Text style={[styles.usernameText, { color: colors.textPrimary }]}>{getDisplayName(user)}</Text>
@@ -162,7 +144,7 @@ export const AdminUserPostsModal: React.FC<AdminUserPostsModalProps> = ({
           </Text>
         </View>
 
-        {/* Posts Grid List */}
+        {/* Posts text list: administrator content review never renders media */}
         {loading ? (
           <View style={styles.centerLoading}>
             <ActivityIndicator size="large" color={primaryAccent} />
@@ -178,39 +160,19 @@ export const AdminUserPostsModal: React.FC<AdminUserPostsModalProps> = ({
           <FlatList
             data={posts}
             keyExtractor={(item) => item.id}
-            numColumns={3}
-            contentContainerStyle={styles.gridContainer}
+            contentContainerStyle={styles.listContainer}
             renderItem={({ item }) => {
-              const mediaUrl = getMediaUrl(item);
               return (
                 <TouchableOpacity
-                  style={[styles.gridItem, { backgroundColor: colors.bgCard }]}
+                  style={[styles.contentListItem, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
                   activeOpacity={0.8}
                   onPress={() => {
                     setSelectedPostId(item.id);
                     setPostDetailModalVisible(true);
                   }}
                 >
-                  {mediaUrl ? (
-                    <Image
-                      source={{ uri: getFullImageUrl(mediaUrl) }}
-                      style={styles.gridImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={[styles.gridNoImage, { backgroundColor: colors.bgCard }]}>
-                      <Ionicons name="document-text-outline" size={24} color={colors.textMuted} style={{ marginBottom: 4 }} />
-                      <Text style={[styles.gridCaptionText, { color: colors.textPrimary }]} numberOfLines={2}>
-                        {item.caption || "(내용 없음)"}
-                      </Text>
-                    </View>
-                  )}
-                  {/* Multiple Media Badge */}
-                  {item.media && item.media.length > 1 && (
-                    <View style={styles.gridBadgeContainer}>
-                      <Ionicons name="copy" size={12} color="#fff" style={styles.badgeIcon} />
-                    </View>
-                  )}
+                  <Text style={[styles.boardLabel, { color: primaryAccent }]}>{getBoardLabel(item)}</Text>
+                  <Text style={[styles.contentTitle, { color: colors.textPrimary }]} numberOfLines={2}>{item.board_type === "anonymous" ? (item.title || "(제목 없음)") : (item.caption || item.title || "(내용 없음)")}</Text>
                 </TouchableOpacity>
               );
             }}
@@ -256,12 +218,6 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 14,
     borderWidth: 1,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#ccc",
   },
   userInfoTextContainer: {
     flex: 1,
@@ -349,40 +305,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
   },
-  gridContainer: {
+  listContainer: {
     paddingHorizontal: 14,
     paddingBottom: 24,
   },
-  gridItem: {
-    width: GRID_ITEM_SIZE,
-    height: GRID_ITEM_SIZE,
-    margin: 2,
-    borderRadius: 8,
-    overflow: "hidden",
-    position: "relative",
-  },
-  gridImage: {
-    width: "100%",
-    height: "100%",
-  },
-  gridNoImage: {
-    width: "100%",
-    height: "100%",
-    padding: 8,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  gridCaptionText: {
-    fontSize: 11,
-    textAlign: "center",
-  },
-  gridBadgeContainer: {
-    position: "absolute",
-    top: 4,
-    right: 4,
-  },
-  badgeIcon: {
-    textShadowColor: "rgba(0, 0, 0, 0.6)",
-    textShadowRadius: 3,
-  },
+  contentListItem: { padding: 14, borderWidth: 1, borderRadius: 10, marginBottom: 8 },
+  boardLabel: { fontSize: 12, fontWeight: "700", marginBottom: 4 },
+  contentTitle: { fontSize: 14, fontWeight: "600" },
 });
