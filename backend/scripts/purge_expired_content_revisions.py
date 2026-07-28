@@ -21,6 +21,7 @@ async def main() -> None:
         f"audit_events={counts['audit_events']}, "
         f"posts={counts['post_revisions']}, "
         f"comments={counts['comment_revisions']}, "
+        f"reports={counts['reports']}, "
         f"finalized_accounts={withdrawal_counts['finalized_accounts']}, "
         f"purged_accounts={withdrawal_counts['purged_accounts']}, "
         f"deleted_profile_images={deleted_profile_images}"

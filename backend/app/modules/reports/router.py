@@ -1,0 +1,279 @@
+import uuid
+from collections import OrderedDict
+from datetime import datetime, timezone
+from typing import Any
+
+from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import desc, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.common.client_ip import get_client_ip
+from app.common.exceptions import NotFoundException
+from app.common.response import ApiResponse
+from app.core.database import get_db
+from app.modules.audit.service import record
+from app.modules.auth.dependencies import get_current_active_user, get_current_admin_user
+from app.modules.auth.models import User
+from app.modules.notifications.models import Notification
+from app.modules.posts import service as post_service
+from app.modules.posts.models import Comment, Post
+from app.modules.reports.models import HiddenContent, Report
+from app.modules.reports.schemas import HideContentRequest, ReportCreate, ReportModerationUpdate
+from app.modules.reports.service import create_report, hide_report_target
+
+
+router = APIRouter(tags=["Reports"])
+
+
+def _report_item(report: Report, *, include_ip: bool = False) -> dict[str, Any]:
+    return {
+        "id": report.id,
+        "reporter_id": report.reporter_id,
+        "reason_code": report.reason_code,
+        "detail": report.detail,
+        "status": report.status,
+        "reporter_ip": report.reporter_ip if include_ip else None,
+        "created_at": report.created_at,
+        "resolution_action": report.resolution_action,
+        "resolution_note": report.resolution_note,
+    }
+
+
+@router.post("/reports", summary="콘텐츠 또는 프로필 신고")
+async def submit_report(
+    body: ReportCreate,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[dict]:
+    report = await create_report(
+        db, reporter=current_user, data=body, reporter_ip=get_client_ip(request)
+    )
+    return ApiResponse.ok(
+        {
+            "id": report.id,
+            "target_type": report.target_type,
+            "target_id": report.target_id,
+            "status": report.status,
+        }
+    )
+
+
+@router.post("/reports/{report_id}/hide", summary="신고한 콘텐츠를 내 화면에서 숨김")
+async def hide_after_report(
+    report_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[dict]:
+    await hide_report_target(db, user=current_user, report_id=report_id)
+    return ApiResponse.ok({"message": "숨김 처리했습니다."})
+
+
+@router.post("/hidden-content", summary="콘텐츠를 내 화면에서 숨김")
+async def hide_content(
+    body: HideContentRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[dict]:
+    existing = await db.scalar(
+        select(HiddenContent).where(
+            HiddenContent.user_id == current_user.id,
+            HiddenContent.target_type == body.target_type,
+            HiddenContent.target_id == body.target_id,
+        )
+    )
+    if not existing:
+        db.add(HiddenContent(user_id=current_user.id, target_type=body.target_type, target_id=body.target_id))
+        await db.commit()
+    return ApiResponse.ok({"message": "숨김 처리했습니다."})
+
+
+@router.get("/admin/reports", summary="관리자 신고 목록")
+async def admin_report_groups(
+    status: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+) -> ApiResponse[list[dict]]:
+    query = select(Report)
+    if status:
+        query = query.where(Report.status == status)
+    rows = (
+        await db.execute(query.order_by(desc(Report.created_at)).limit(2000))
+    ).scalars().all()
+    grouped: OrderedDict[tuple[str, uuid.UUID], list[Report]] = OrderedDict()
+    for report in rows:
+        grouped.setdefault((report.target_type, report.target_id), []).append(report)
+    groups = []
+    for (_, _), reports in grouped.items():
+        latest = reports[0]
+        groups.append(
+            {
+                "target_type": latest.target_type,
+                "target_id": latest.target_id,
+                "target_user_id": latest.target_user_id,
+                "report_count": len(reports),
+                "status": latest.status,
+                "latest_at": latest.created_at,
+                "snapshot": latest.snapshot,
+                "priority": max(report.priority for report in reports),
+            }
+        )
+    total = len(groups)
+    start = (page - 1) * size
+    return ApiResponse.paginated(groups[start : start + size], total=total, has_more=start + size < total)
+
+
+@router.get("/admin/reports/{target_type}/{target_id}", summary="관리자 신고 상세")
+async def admin_report_detail(
+    target_type: str,
+    target_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+) -> ApiResponse[dict]:
+    reports = (
+        await db.execute(
+            select(Report)
+            .where(Report.target_type == target_type, Report.target_id == target_id)
+            .order_by(desc(Report.created_at))
+        )
+    ).scalars().all()
+    if not reports:
+        raise NotFoundException("Report")
+    await record(
+        db,
+        user_id=None,
+        event_type="admin_report_view",
+        ip_address=get_client_ip(request),
+        target_type=target_type,
+        target_id=target_id,
+        snapshot={"admin_id": str(admin.id), "report_ids": [str(item.id) for item in reports]},
+    )
+    await db.commit()
+    return ApiResponse.ok(
+        {
+            "target_type": target_type,
+            "target_id": target_id,
+            "target_user_id": reports[0].target_user_id,
+            "snapshot": reports[0].snapshot,
+            "reports": [_report_item(report, include_ip=True) for report in reports],
+        }
+    )
+
+
+@router.patch("/admin/reports/{target_type}/{target_id}", summary="관리자 신고 처리")
+async def moderate_report_group(
+    target_type: str,
+    target_id: uuid.UUID,
+    body: ReportModerationUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+) -> ApiResponse[dict]:
+    reports = (
+        await db.execute(
+            select(Report).where(Report.target_type == target_type, Report.target_id == target_id)
+        )
+    ).scalars().all()
+    if not reports:
+        raise NotFoundException("Report")
+
+    if body.action == "hide":
+        if target_type == "post":
+            post = await db.scalar(select(Post).where(Post.id == target_id))
+            if post:
+                post.moderation_hidden = True
+        elif target_type == "comment":
+            comment = await db.scalar(select(Comment).where(Comment.id == target_id))
+            if comment:
+                comment.moderation_hidden = True
+    elif body.action == "delete":
+        if target_type == "post":
+            await post_service.delete_post(
+                db, target_id, admin, ip_address=get_client_ip(request)
+            )
+        elif target_type == "comment":
+            await post_service.delete_comment(
+                db, target_id, admin, ip_address=get_client_ip(request)
+            )
+    elif body.action == "suspend" and reports[0].target_user_id:
+        target_user = await db.scalar(select(User).where(User.id == reports[0].target_user_id))
+        if target_user:
+            target_user.is_active = False
+
+    now = datetime.now(timezone.utc)
+    for report in reports:
+        report.status = body.status
+        report.reviewer_id = admin.id
+        report.resolution_action = body.action
+        report.resolution_note = body.note
+        report.reviewed_at = now
+        if report.reporter_id and report.reporter_id != admin.id:
+            db.add(
+                Notification(
+                    recipient_id=report.reporter_id,
+                    sender_id=admin.id,
+                    type="REPORT_RESULT",
+                    message=f"신고 처리 결과: {body.status}",
+                    is_read=False,
+                )
+            )
+    if body.action == "warn" and reports[0].target_user_id and reports[0].target_user_id != admin.id:
+        db.add(
+            Notification(
+                recipient_id=reports[0].target_user_id,
+                sender_id=admin.id,
+                type="MODERATION_WARNING",
+                message=body.note or "커뮤니티 운영정책 위반 신고가 접수되어 경고 조치되었습니다.",
+                is_read=False,
+            )
+        )
+    await record(
+        db,
+        user_id=None,
+        event_type="admin_report_action",
+        ip_address=get_client_ip(request),
+        target_type=target_type,
+        target_id=target_id,
+        snapshot={
+            "admin_id": str(admin.id),
+            "status": body.status,
+            "action": body.action,
+            "note": body.note,
+        },
+    )
+    await db.commit()
+    return ApiResponse.ok({"message": "신고 처리를 저장했습니다."})
+
+
+@router.patch("/admin/reports/{target_type}/{target_id}/legal-hold", summary="신고 증거 법적 보존 설정")
+async def set_report_legal_hold(
+    target_type: str,
+    target_id: uuid.UUID,
+    request: Request,
+    enabled: bool = Query(...),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+) -> ApiResponse[dict]:
+    reports = (
+        await db.execute(
+            select(Report).where(Report.target_type == target_type, Report.target_id == target_id)
+        )
+    ).scalars().all()
+    if not reports:
+        raise NotFoundException("Report")
+    for report in reports:
+        report.legal_hold = enabled
+    await record(
+        db,
+        user_id=None,
+        event_type="admin_report_legal_hold",
+        ip_address=get_client_ip(request),
+        target_type=target_type,
+        target_id=target_id,
+        snapshot={"admin_id": str(admin.id), "enabled": enabled},
+    )
+    await db.commit()
+    return ApiResponse.ok({"message": "법적 보존 상태를 변경했습니다.", "enabled": enabled})

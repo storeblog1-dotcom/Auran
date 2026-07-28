@@ -11,6 +11,7 @@ import {
   RefreshControl,
   Image,
   ScrollView,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,6 +23,8 @@ import {
   AdminPostItem,
   AdminActivityUser,
   AdminContentHistoryItem,
+  AdminReportGroup,
+  AdminReportDetail,
 } from "../services/adminService";
 import { getFullImageUrl } from "../config";
 import {
@@ -32,7 +35,7 @@ import { AdminUserPostsModal } from "../components/AdminUserPostsModal";
 import { AdminContentRevisionModal } from "../components/AdminContentRevisionModal";
 import { getDisplayName } from "../utils/displayName";
 
-type AdminTab = "stats" | "users" | "posts" | "activity";
+type AdminTab = "stats" | "users" | "posts" | "activity" | "reports";
 
 export const AdminScreen = ({ navigation }: any) => {
   const { colors, isDark } = useTheme();
@@ -76,6 +79,11 @@ export const AdminScreen = ({ navigation }: any) => {
   const [activityHistory, setActivityHistory] = useState<AdminContentHistoryItem[]>([]);
   const [activityHistoryLoading, setActivityHistoryLoading] = useState(false);
   const activityHistoryCache = useRef<Map<string, AdminContentHistoryItem[]>>(new Map());
+  const [reports, setReports] = useState<AdminReportGroup[]>([]);
+  const [reportStatus, setReportStatus] = useState("");
+  const [selectedReport, setSelectedReport] = useState<AdminReportDetail | null>(null);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportNote, setReportNote] = useState("");
 
   const loadStats = async () => {
     try {
@@ -114,6 +122,47 @@ export const AdminScreen = ({ navigation }: any) => {
       Alert.alert("오류", "게시물 목록을 불러오는데 실패했습니다.");
     } finally {
       setLoading(false);
+    }
+  };
+  const loadReports = async () => {
+    try {
+      setLoading(true);
+      const result = await adminService.getReports(reportStatus || undefined);
+      setReports(result.items);
+    } catch {
+      Alert.alert("오류", "신고 목록을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  const openReport = async (item: AdminReportGroup) => {
+    try {
+      const detail = await adminService.getReportDetail(item.target_type, item.target_id);
+      setSelectedReport({ ...item, ...detail });
+      setReportNote("");
+      setReportModalVisible(true);
+    } catch {
+      Alert.alert("오류", "신고 상세를 불러오지 못했습니다.");
+    }
+  };
+  const moderateReport = async (
+    status: "reviewing" | "resolved" | "rejected",
+    action: "maintain" | "hide" | "delete" | "warn" | "suspend",
+  ) => {
+    if (!selectedReport) return;
+    try {
+      await adminService.moderateReport(
+        selectedReport.target_type,
+        selectedReport.target_id,
+        status,
+        action,
+        reportNote,
+      );
+      setReportModalVisible(false);
+      setSelectedReport(null);
+      await loadReports();
+    } catch {
+      Alert.alert("오류", "신고 처리 저장에 실패했습니다.");
     }
   };
   const loadActivity = async (
@@ -264,6 +313,8 @@ export const AdminScreen = ({ navigation }: any) => {
       await loadUsers(searchQuery, 1);
     } else if (activeTab === "posts") {
       await loadPosts(1);
+    } else if (activeTab === "reports") {
+      await loadReports();
     } else { await loadActivity(activityQuery, 1);
     }
     setRefreshing(false);
@@ -276,6 +327,8 @@ export const AdminScreen = ({ navigation }: any) => {
       loadUsers(searchQuery, 1);
     } else if (activeTab === "posts") {
       loadPosts(1);
+    } else if (activeTab === "reports") {
+      loadReports();
     } else { loadActivity(activityQuery, 1);
     }
   }, [activeTab]);
@@ -578,6 +631,13 @@ export const AdminScreen = ({ navigation }: any) => {
           <Ionicons name="receipt-outline" size={16} color={activeTab === "activity" ? primaryAccent : colors.textMuted} />
           <Text style={[styles.tabText, { color: activeTab === "activity" ? primaryAccent : colors.textMuted, fontWeight: activeTab === "activity" ? "bold" : "500" }]}>활동 로그</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === "reports" && { borderBottomColor: primaryAccent, borderBottomWidth: 3 }]}
+          onPress={() => setActiveTab("reports")}
+        >
+          <Ionicons name="shield-outline" size={16} color={activeTab === "reports" ? primaryAccent : colors.textMuted} />
+          <Text style={[styles.tabText, { color: activeTab === "reports" ? primaryAccent : colors.textMuted, fontWeight: activeTab === "reports" ? "bold" : "500" }]}>신고 관리</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Main Content Area */}
@@ -850,6 +910,70 @@ export const AdminScreen = ({ navigation }: any) => {
         </View>
       )}
 
+      {activeTab === "reports" && (
+        <View style={{ flex: 1, padding: 16 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
+            {[
+              ["", "전체"],
+              ["received", "접수"],
+              ["reviewing", "검토 중"],
+              ["resolved", "조치 완료"],
+              ["rejected", "기각"],
+            ].map(([value, label]) => (
+              <TouchableOpacity
+                key={value}
+                onPress={() => {
+                  setReportStatus(value);
+                  setTimeout(() => adminService.getReports(value || undefined).then((result) => setReports(result.items)), 0);
+                }}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 9,
+                  borderRadius: 18,
+                  backgroundColor: reportStatus === value ? primaryAccent : colors.bgCard,
+                  borderWidth: 1,
+                  borderColor: reportStatus === value ? primaryAccent : colors.borderColor,
+                }}
+              >
+                <Text style={{ color: reportStatus === value ? "#fff" : colors.textPrimary, fontWeight: "700" }}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          {loading ? (
+            <ActivityIndicator style={{ marginTop: 24 }} color={primaryAccent} />
+          ) : (
+            <FlatList
+              data={reports}
+              keyExtractor={(item) => `${item.target_type}:${item.target_id}`}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={primaryAccent} />}
+              ListEmptyComponent={<Text style={{ color: colors.textMuted, textAlign: "center", marginTop: 28 }}>접수된 신고가 없습니다.</Text>}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  onPress={() => openReport(item)}
+                  style={[styles.userCard, { backgroundColor: colors.bgCard, borderColor: item.priority ? "#ef4444" : colors.borderColor }]}
+                >
+                  <View style={[styles.statIconBadge, { marginBottom: 0, backgroundColor: item.priority ? "rgba(239,68,68,0.12)" : "rgba(124,58,237,0.12)" }]}>
+                    <Ionicons name={item.target_type === "profile" ? "person-outline" : item.target_type === "comment" ? "chatbubble-outline" : "document-text-outline"} size={21} color={item.priority ? "#ef4444" : primaryAccent} />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={{ color: colors.textPrimary, fontWeight: "800" }}>
+                      {item.target_type === "post" ? "게시물" : item.target_type === "comment" ? "댓글·대댓글" : "프로필"} · 신고 {item.report_count}건
+                    </Text>
+                    <Text numberOfLines={2} style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>
+                      {item.snapshot.title || item.snapshot.comment_content || item.snapshot.caption || item.snapshot.bio || "(내용 없음)"}
+                    </Text>
+                    <Text style={{ color: primaryAccent, fontSize: 11, marginTop: 5 }}>
+                      {item.status} · {new Date(item.latest_at).toLocaleString("ko-KR")}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+                </TouchableOpacity>
+              )}
+            />
+          )}
+        </View>
+      )}
+
       {activeTab === "activity" && (
         <View style={{ flex: 1, padding: 16 }}>
           <View style={styles.activitySearchRow}>
@@ -911,6 +1035,69 @@ export const AdminScreen = ({ navigation }: any) => {
           setSelectedRevisionId(null);
         }}
       />
+      <Modal visible={reportModalVisible} animationType="slide" onRequestClose={() => setReportModalVisible(false)}>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
+          <View style={[styles.header, { borderBottomColor: colors.borderColor }]}>
+            <TouchableOpacity onPress={() => setReportModalVisible(false)}><Ionicons name="close" size={25} color={colors.textPrimary} /></TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>신고 상세</Text>
+            <View style={{ width: 25 }} />
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 36 }}>
+            {selectedReport && (
+              <>
+                <View style={[styles.postCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+                  <Text style={{ color: primaryAccent, fontWeight: "900" }}>
+                    {selectedReport.target_type.toUpperCase()} · {selectedReport.report_count}건
+                  </Text>
+                  <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: "800", marginTop: 10 }}>
+                    {selectedReport.snapshot.title || selectedReport.snapshot.comment_content || selectedReport.snapshot.caption || selectedReport.snapshot.bio || "(내용 없음)"}
+                  </Text>
+                  {!!selectedReport.snapshot.content_ip && <Text style={{ color: colors.textMuted, marginTop: 8 }}>작성 IP: {selectedReport.snapshot.content_ip}</Text>}
+                  {!!selectedReport.snapshot.comment_ip && <Text style={{ color: colors.textMuted, marginTop: 8 }}>댓글 IP: {selectedReport.snapshot.comment_ip}</Text>}
+                  <Text style={{ color: colors.textMuted, marginTop: 6 }}>
+                    고유번호: {selectedReport.snapshot.display_number || selectedReport.snapshot.comment_display_number || "-"}
+                  </Text>
+                </View>
+                {selectedReport.reports?.map((report) => (
+                  <View key={report.id} style={[styles.postCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+                    <Text style={{ color: colors.textPrimary, fontWeight: "800" }}>{report.reason_code}</Text>
+                    {!!report.detail && <Text style={{ color: colors.textPrimary, marginTop: 5 }}>{report.detail}</Text>}
+                    <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 7 }}>신고 IP: {report.reporter_ip || "기록 없음"}</Text>
+                    <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 3 }}>{new Date(report.created_at).toLocaleString("ko-KR")}</Text>
+                  </View>
+                ))}
+                <TextInput
+                  value={reportNote}
+                  onChangeText={setReportNote}
+                  multiline
+                  placeholder="처리 메모 또는 경고 내용을 입력하세요."
+                  placeholderTextColor={colors.textMuted}
+                  style={[styles.searchInput, { color: colors.textPrimary, backgroundColor: colors.bgCard, borderColor: colors.borderColor, borderWidth: 1, borderRadius: 12, minHeight: 90, padding: 12, textAlignVertical: "top" }]}
+                />
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
+                  {[
+                    ["reviewing", "maintain", "검토 중"],
+                    ["resolved", "maintain", "유지"],
+                    ["resolved", "hide", "숨김"],
+                    ["resolved", "delete", "삭제"],
+                    ["resolved", "warn", "경고"],
+                    ["resolved", "suspend", "정지"],
+                    ["rejected", "maintain", "기각"],
+                  ].map(([statusValue, actionValue, label]) => (
+                    <TouchableOpacity
+                      key={`${statusValue}:${actionValue}`}
+                      onPress={() => moderateReport(statusValue as any, actionValue as any)}
+                      style={{ backgroundColor: actionValue === "delete" || actionValue === "suspend" ? "#ef4444" : primaryAccent, paddingHorizontal: 14, paddingVertical: 11, borderRadius: 12 }}
+                    >
+                      <Text style={{ color: "#fff", fontWeight: "800" }}>{label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 };

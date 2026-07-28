@@ -15,6 +15,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -25,6 +26,8 @@ import { Comment, CommentNode } from "./CommentsModal";
 
 import { CreateCommunityPostModal } from "./CreateCommunityPostModal";
 import { ImageDetailViewerModal } from "./ImageDetailViewerModal";
+import { PostOptionsSheet } from "./PostOptionsSheet";
+import { ReportSheet } from "./ReportSheet";
 
 const { width } = Dimensions.get("window");
 
@@ -43,11 +46,15 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
 }) => {
   const { user: currentUser } = useAuth();
   const { colors } = useTheme();
+  const navigation = useNavigation<any>();
 
   const [post, setPost] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [editModalVisible, setEditModalVisible] = useState<boolean>(false);
   const [viewerVisible, setViewerVisible] = useState<boolean>(false);
+  const [optionsVisible, setOptionsVisible] = useState(false);
+  const [reportVisible, setReportVisible] = useState(false);
+  const [reportComment, setReportComment] = useState<Comment | null>(null);
 
   // Comments State
   const [comments, setComments] = useState<Comment[]>([]);
@@ -252,6 +259,9 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
                     </TouchableOpacity>
                   </>
                 )}
+                <TouchableOpacity onPress={() => setOptionsVisible(true)} style={{ padding: 4 }}>
+                  <Ionicons name="ellipsis-horizontal" size={22} color={colors.textPrimary} />
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -356,6 +366,7 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
                       onPressReply={handleReplyPress}
                       onDeleteComment={handleDeleteComment}
                       onEditComment={handleEditComment}
+                      onReportComment={setReportComment}
                     />
                   ))
                 )}
@@ -450,6 +461,67 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
           onClose={() => setViewerVisible(false)}
         />
       )}
+      <PostOptionsSheet
+        visible={optionsVisible}
+        post={post}
+        isMine={!!isMe}
+        onClose={() => setOptionsVisible(false)}
+        onEdit={() => setEditModalVisible(true)}
+        onVisibility={async (visibility) => {
+          if (!post) return;
+          await api.patch(`/posts/${post.id}`, { visibility });
+          setPost((previous: any) => previous ? { ...previous, visibility } : previous);
+        }}
+        onProfile={() => {
+          if (!isAnonymous && post?.user?.username) {
+            onClose();
+            navigation.navigate("UserProfile", { username: post.user.username });
+          }
+        }}
+        onFollow={post?.user?.username && !isAnonymous ? async () => {
+          if (post.user.is_following) {
+            await api.delete(`/users/${post.user.username}/follow`);
+          } else {
+            await api.post(`/users/${post.user.username}/follow`);
+          }
+          setPost((previous: any) => previous?.user ? {
+            ...previous,
+            user: { ...previous.user, is_following: !previous.user.is_following },
+          } : previous);
+        } : undefined}
+        onHide={async () => {
+          if (!post) return;
+          await api.post("/hidden-content", { target_type: "post", target_id: post.id });
+          onClose();
+        }}
+        onBlock={post?.user?.username && !isAnonymous ? async () => {
+          await api.post(`/users/${post.user.username}/block`);
+          onClose();
+        } : undefined}
+        onReport={() => setReportVisible(true)}
+        onDelete={async () => {
+          if (!post) return;
+          await api.delete(`/posts/${post.id}`);
+          onPostUpdated?.();
+          onClose();
+        }}
+      />
+      <ReportSheet
+        visible={reportVisible}
+        targetType="post"
+        targetId={post?.id || null}
+        targetUsername={isAnonymous ? null : post?.user?.username}
+        onClose={() => setReportVisible(false)}
+        onHidden={onClose}
+      />
+      <ReportSheet
+        visible={!!reportComment}
+        targetType="comment"
+        targetId={reportComment?.id || null}
+        targetUsername={isAnonymous ? null : reportComment?.user?.username}
+        onClose={() => setReportComment(null)}
+        onHidden={() => post?.id && fetchComments(post.id)}
+      />
     </>
   );
 };

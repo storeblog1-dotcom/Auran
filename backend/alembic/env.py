@@ -15,6 +15,7 @@ from app.modules.users.models import Follow, FollowRequest, UserBlock  # noqa: F
 from app.modules.direct.models import ChatRoom, ChatRoomMember, ChatMessage  # noqa: F401
 from app.modules.hashtags.models import Hashtag, PostHashtag  # noqa: F401
 from app.modules.community.models import CommunityBoard, CommunityNotice  # noqa: F401
+from app.modules.reports.models import HiddenContent, Report  # noqa: F401
 
 
 # ─── Alembic Config ──────────────────────────────────────────

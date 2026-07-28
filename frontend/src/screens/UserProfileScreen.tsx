@@ -19,6 +19,7 @@ import { getFullImageUrl } from "../config";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { UserListModal } from "../components/UserListModal";
 import { getDisplayName } from "../utils/displayName";
+import { ReportSheet } from "../components/ReportSheet";
 
 const { width, height } = Dimensions.get("window");
 const DEVICE_ASPECT_RATIO = height / width;
@@ -37,6 +38,7 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
   // Post Detail Modal
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [reportVisible, setReportVisible] = useState(false);
 
   // User List Modal (Followers / Following)
   const [userListModalVisible, setUserListModalVisible] = useState(false);
@@ -201,7 +203,7 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
           <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{getDisplayName(profile, "프로필")}</Text>
-        <TouchableOpacity style={{ padding: 6 }}>
+        <TouchableOpacity style={{ padding: 6 }} onPress={() => setReportVisible(true)}>
           <Ionicons name="ellipsis-horizontal" size={20} color={colors.textPrimary} />
         </TouchableOpacity>
       </View>
@@ -413,6 +415,14 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
           setSelectedPostId(null);
         }}
         onPostUpdated={fetchProfileData}
+      />
+      <ReportSheet
+        visible={reportVisible}
+        targetType="profile"
+        targetId={profile?.id || null}
+        targetUsername={profile?.username}
+        onClose={() => setReportVisible(false)}
+        onHidden={() => navigation.goBack()}
       />
 
       {/* User List Modal (Followers / Following) */}

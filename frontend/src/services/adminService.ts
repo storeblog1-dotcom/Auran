@@ -116,6 +116,31 @@ export interface AdminContentRevision {
   legal_hold: boolean;
 }
 
+export interface AdminReportGroup {
+  target_type: "post" | "comment" | "profile";
+  target_id: string;
+  target_user_id?: string | null;
+  report_count: number;
+  status: "received" | "reviewing" | "resolved" | "rejected";
+  latest_at: string;
+  priority: number;
+  snapshot: Record<string, any>;
+}
+
+export interface AdminReportDetail extends AdminReportGroup {
+  reports: Array<{
+    id: string;
+    reporter_id?: string | null;
+    reason_code: string;
+    detail?: string | null;
+    status: string;
+    reporter_ip?: string | null;
+    created_at: string;
+    resolution_action?: string | null;
+    resolution_note?: string | null;
+  }>;
+}
+
 export const adminService = {
   getStats: async (): Promise<AdminStats> => {
     const res = await api.get("/admin/stats");
@@ -169,5 +194,26 @@ export const adminService = {
     await api.patch(`/admin/content-revisions/${revisionId}/legal-hold`, null, {
       params: { enabled },
     });
+  },
+  getReports: async (status?: string, page: number = 1, size: number = 20) => {
+    const res = await api.get("/admin/reports", { params: { status: status || undefined, page, size } });
+    return {
+      items: res.data.data as AdminReportGroup[],
+      total: res.data.meta?.total || 0,
+    };
+  },
+  getReportDetail: async (targetType: string, targetId: string): Promise<AdminReportDetail> =>
+    (await api.get(`/admin/reports/${targetType}/${targetId}`)).data.data,
+  moderateReport: async (
+    targetType: string,
+    targetId: string,
+    status: "received" | "reviewing" | "resolved" | "rejected",
+    action: "maintain" | "hide" | "delete" | "warn" | "suspend",
+    note?: string,
+  ): Promise<void> => {
+    await api.patch(`/admin/reports/${targetType}/${targetId}`, { status, action, note: note || null });
+  },
+  setReportLegalHold: async (targetType: string, targetId: string, enabled: boolean): Promise<void> => {
+    await api.patch(`/admin/reports/${targetType}/${targetId}/legal-hold`, null, { params: { enabled } });
   },
 };

@@ -8,6 +8,7 @@ from app.modules.auth.models import User  # Ensures ORM relationship targets are
 from app.modules.audit.models import AuditEvent, CommentRevision, PostRevision
 from app.modules.community.models import CommunityBoard
 from app.modules.posts.models import Comment, Post, PostMedia
+from app.modules.reports.models import Report
 
 
 RETENTION_DAYS = 365
@@ -215,9 +216,18 @@ async def purge_expired_revisions(
         )
         .returning(PostRevision.id)
     )
+    report_result = await db.execute(
+        delete(Report)
+        .where(
+            Report.retention_until < cutoff,
+            Report.legal_hold.is_(False),
+        )
+        .returning(Report.id)
+    )
     await db.commit()
     return {
         "audit_events": len(audit_result.scalars().all()),
         "comment_revisions": len(comment_result.scalars().all()),
         "post_revisions": len(post_result.scalars().all()),
+        "reports": len(report_result.scalars().all()),
     }
