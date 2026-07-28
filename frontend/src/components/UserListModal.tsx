@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../services/api";
+import { getDisplayName } from "../utils/displayName";
 import { getFullImageUrl } from "../config";
 import { useTheme } from "../context/ThemeContext";
 
@@ -105,7 +106,7 @@ export const UserListModal: React.FC<UserListModalProps> = ({
             style={styles.avatar}
           />
           <View>
-            <Text style={[styles.username, { color: colors.textPrimary }]}>{item.username}</Text>
+            <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(item)}</Text>
             <Text style={[styles.fullName, { color: colors.textSecondary }]}>{item.full_name}</Text>
           </View>
         </View>

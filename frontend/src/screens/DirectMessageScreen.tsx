@@ -19,10 +19,12 @@ import api from "../services/api";
 import { getFullImageUrl } from "../config";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { getDisplayName } from "../utils/displayName";
 
 interface UserInfo {
   id: string;
   username: string;
+  nickname?: string | null;
   full_name: string;
   profile_image_url: string | null;
 }
@@ -210,7 +212,7 @@ export const DirectMessageScreen = ({ navigation, route }: any) => {
       >
         <Image source={{ uri: avatarUrl }} style={styles.avatar} />
         <View style={styles.roomInfo}>
-          <Text style={[styles.username, { color: colors.textPrimary }]}>{target?.full_name || target?.username || "대화 상대"}</Text>
+          <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(target, "대화 상대")}</Text>
           <Text
             style={[
               styles.lastMessage,
@@ -285,7 +287,7 @@ export const DirectMessageScreen = ({ navigation, route }: any) => {
           />
           <View style={styles.roomInfo}>
             <Text style={[styles.username, { color: colors.textPrimary }]}>
-              {target?.full_name || target?.username || "요청 보낸 사용자"}
+              {getDisplayName(target, "요청 보낸 사용자")}
             </Text>
             <Text
               style={[styles.lastMessage, { color: colors.textSecondary }]}
@@ -516,7 +518,7 @@ export const DirectMessageScreen = ({ navigation, route }: any) => {
                       style={styles.avatar}
                     />
                     <View style={{ marginLeft: 12 }}>
-                      <Text style={[styles.username, { color: colors.textPrimary }]}>{item.username}</Text>
+                      <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(item)}</Text>
                       {item.full_name ? (
                         <Text style={[styles.userFullName, { color: colors.textSecondary }]}>{item.full_name}</Text>
                       ) : null}

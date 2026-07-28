@@ -11,6 +11,7 @@ export interface AdminStats {
 export interface AdminUserItem {
   id: string;
   username: string;
+  nickname?: string | null;
   email: string;
   full_name: string;
   profile_image_url?: string;
@@ -22,9 +23,15 @@ export interface AdminUserItem {
 export interface AdminPostItem {
   id: string;
   caption?: string;
+  media?: Array<{
+    media_url?: string;
+    url?: string;
+    image_url?: string;
+  }>;
   author: {
     id: string;
     username: string;
+    nickname?: string | null;
   };
   created_at?: string;
 }

@@ -11,6 +11,7 @@ import {
   SafeAreaView,
 } from "react-native";
 import api from "../services/api";
+import { getDisplayName } from "../utils/displayName";
 import { getFullImageUrl } from "../config";
 
 interface FollowRequestItem {
@@ -102,7 +103,7 @@ export const FollowRequestsModal: React.FC<FollowRequestsModalProps> = ({
                   style={styles.avatar}
                 />
                 <View style={styles.info}>
-                  <Text style={styles.username}>{item.requester.username}</Text>
+                  <Text style={styles.username}>{getDisplayName(item.requester)}</Text>
                   <Text style={styles.fullName}>{item.requester.full_name}</Text>
                 </View>
 

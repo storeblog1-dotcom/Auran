@@ -4,6 +4,7 @@ import { WS_BASE_URL } from "../config";
 export interface SenderSummary {
   id: string;
   username: string;
+  nickname?: string | null;
   full_name: string;
   profile_image_url?: string | null;
 }

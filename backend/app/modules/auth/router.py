@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.response import ApiResponse
 from app.core.database import get_db
-from app.modules.auth.dependencies import get_current_active_user
+from app.modules.auth.dependencies import get_current_active_user, get_optional_current_user
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (
     GoogleLoginRequest,
@@ -12,10 +12,24 @@ from app.modules.auth.schemas import (
     RegisterRequest,
     TokenResponse,
     UserMe,
+    NicknameAvailabilityResponse,
 )
 from app.modules.auth import service
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+
+@router.get("/nickname-availability", response_model=ApiResponse[NicknameAvailabilityResponse])
+async def nickname_availability(
+    nickname: str = Query(..., min_length=1, max_length=50),
+    current_user: User | None = Depends(get_optional_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[NicknameAvailabilityResponse]:
+    clean_nickname = nickname.strip()
+    available = await service.is_nickname_available(
+        db, clean_nickname, current_user.id if current_user else None
+    )
+    return ApiResponse.ok(NicknameAvailabilityResponse(nickname=clean_nickname, available=available))
 
 
 @router.post(
@@ -80,4 +94,3 @@ async def me(
     current_user: User = Depends(get_current_active_user),
 ) -> ApiResponse[UserMe]:
     return ApiResponse.ok(UserMe.model_validate(current_user))
-

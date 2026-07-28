@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { getFullImageUrl } from "../config";
 import { ZoomableImage } from "./ImageDetailViewerModal";
 import { useTheme } from "../context/ThemeContext";
+import { getDisplayInitial, getDisplayName } from "../utils/displayName";
 
 const { width, height } = Dimensions.get("window");
 
@@ -80,11 +81,11 @@ export const StoryDetailModal: React.FC<StoryDetailModalProps> = ({
               ) : (
                 <View style={[styles.avatar, styles.avatarPlaceholder]}>
                   <Text style={styles.avatarInitial}>
-                    {story.user?.username ? story.user.username[0].toUpperCase() : "ME"}
+                    {getDisplayInitial(story.user, "ME")}
                   </Text>
                 </View>
               )}
-              <Text style={styles.username}>{story.user?.username || "내 스토리"}</Text>
+              <Text style={styles.username}>{getDisplayName(story.user, "내 스토리")}</Text>
             </View>
 
             <View style={styles.headerActions}>

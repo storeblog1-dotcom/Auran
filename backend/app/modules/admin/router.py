@@ -52,7 +52,11 @@ async def get_admin_users(
     query = select(User)
     if q:
         search_pattern = f"%{q}%"
-        query = query.where((User.username.ilike(search_pattern)) | (User.full_name.ilike(search_pattern)))
+        query = query.where(
+            (User.username.ilike(search_pattern))
+            | (User.nickname.ilike(search_pattern))
+            | (User.full_name.ilike(search_pattern))
+        )
 
     total = await db.scalar(select(func.count()).select_from(query.subquery()))
     query = query.order_by(desc(User.created_at)).offset((page - 1) * size).limit(size)
@@ -64,6 +68,7 @@ async def get_admin_users(
         {
             "id": str(u.id),
             "username": u.username,
+            "nickname": u.nickname,
             "email": u.email,
             "full_name": u.full_name,
             "profile_image_url": u.profile_image_url,
@@ -98,6 +103,7 @@ async def toggle_user_active(
     return ApiResponse.ok({
         "id": str(user.id),
         "username": user.username,
+        "nickname": user.nickname,
         "is_active": user.is_active,
     })
 
@@ -142,6 +148,7 @@ async def get_admin_posts(
             "author": {
                 "id": str(author.id) if author else "",
                 "username": author.username if author else "알 수 없음",
+                "nickname": author.nickname if author else "알 수 없음",
             },
             "created_at": p.created_at.isoformat() if p.created_at else None,
         })

@@ -13,12 +13,14 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { getFullImageUrl } from "../config";
 import { useTheme } from "../context/ThemeContext";
+import { getDisplayName } from "../utils/displayName";
 
 export interface ToastData {
   id: string;
   sender: {
     id: string;
     username: string;
+    nickname?: string | null;
     full_name?: string;
     profile_image_url?: string | null;
   };
@@ -145,7 +147,7 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
 
           <View style={styles.textContainer}>
             <Text style={[styles.title, { color: colors.textPrimary }]}>
-              {toast.sender.username}
+              {getDisplayName(toast.sender)}
             </Text>
             <Text
               style={[styles.message, { color: colors.textSecondary }]}

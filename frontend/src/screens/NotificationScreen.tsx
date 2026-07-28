@@ -18,6 +18,7 @@ import { getFullImageUrl } from "../config";
 import api from "../services/api";
 import { NotificationItem } from "../services/notifications";
 import { PostDetailModal } from "../components/PostDetailModal";
+import { getDisplayName } from "../utils/displayName";
 
 export const NotificationScreen = () => {
   const { colors } = useTheme();
@@ -72,6 +73,7 @@ export const NotificationScreen = () => {
           targetUser: {
             id: item.sender.id,
             username: item.sender.username,
+            nickname: item.sender.nickname,
             full_name: item.sender.full_name,
             profile_image_url: item.sender.profile_image_url,
           },
@@ -188,7 +190,7 @@ export const NotificationScreen = () => {
                 { color: isRead ? colors.textSecondary : colors.textPrimary },
               ]}
             >
-              {item.sender.username}
+              {getDisplayName(item.sender)}
             </Text>{" "}
             {item.message || "새로운 알림이 도착했습니다."}
           </Text>

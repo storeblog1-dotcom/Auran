@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.common.exceptions import ForbiddenException, NotFoundException
 from app.modules.auth.models import User
+from app.modules.community.models import CommunityBoard
 from app.modules.posts.models import Comment, CommentLike, Post, PostBookmark, PostLike, PostMedia, PostRepost
 from app.modules.posts.schemas import (
     CommentCreateRequest,
@@ -168,6 +169,7 @@ async def _build_post_responses_batch(
                     user=PostUserSummary(
                         id=c.user.id,
                         username=c.user.username,
+                        nickname=c.user.nickname,
                         full_name=c.user.full_name,
                         profile_image_url=c.user.profile_image_url,
                     ),
@@ -202,6 +204,7 @@ async def _build_post_responses_batch(
             user_summary = PostUserSummary(
                 id=post.user.id,
                 username=post.user.username,
+                nickname=post.user.nickname,
                 full_name=post.user.full_name,
                 profile_image_url=post.user.profile_image_url,
                 is_following=post.user.id in following_user_ids,
@@ -262,6 +265,11 @@ async def create_post(
     data: PostCreateRequest,
 ) -> PostResponse:
     """신규 게시물을 작성하고 미디어를 저장합니다."""
+    if data.board_id:
+        board = (await db.execute(select(CommunityBoard).where(CommunityBoard.id == data.board_id))).scalar_one_or_none()
+        if board and ("partner" in board.slug.lower() or "제휴업소" in board.name) and not current_user.is_admin:
+            raise ForbiddenException("제휴업소 게시판은 관리자만 게시물을 작성할 수 있습니다.")
+
     post = Post(
         user_id=current_user.id,
         title=data.title,
@@ -555,7 +563,7 @@ async def toggle_like_post(
                 recipient_id=post_obj.user_id,
                 sender_id=current_user.id,
                 type=NotificationType.LIKE.value,
-                message=f"{current_user.username}님이 회원님의 게시물을 좋아합니다.",
+                message=f"{current_user.nickname or current_user.username}님이 회원님의 게시물을 좋아합니다.",
                 post_id=post_id,
             )
 
@@ -589,6 +597,7 @@ async def get_post_likes(
         PostUserSummary(
             id=like.user.id,
             username=like.user.username,
+            nickname=like.user.nickname,
             full_name=like.user.full_name,
             profile_image_url=like.user.profile_image_url,
         )
@@ -638,7 +647,7 @@ async def create_comment(
             recipient_id=post_obj.user_id,
             sender_id=current_user.id,
             type=NotificationType.COMMENT.value,
-            message=f"{current_user.username}님이 댓글을 남겼습니다: {data.content}",
+            message=f"{current_user.nickname or current_user.username}님이 댓글을 남겼습니다: {data.content}",
             post_id=post_id,
             comment_id=str(comment.id),
         )
@@ -657,7 +666,7 @@ async def create_comment(
                         recipient_id=mentioned_user.id,
                         sender_id=current_user.id,
                         type=NotificationType.MENTION.value,
-                        message=f"{current_user.username}님이 댓글에서 회원님을 언급했습니다.",
+                        message=f"{current_user.nickname or current_user.username}님이 댓글에서 회원님을 언급했습니다.",
                         post_id=post_id,
                         comment_id=str(comment.id),
                     )
@@ -665,6 +674,7 @@ async def create_comment(
     user_summary = PostUserSummary(
         id=created_comment.user.id,
         username=created_comment.user.username,
+        nickname=created_comment.user.nickname,
         full_name=created_comment.user.full_name,
         profile_image_url=created_comment.user.profile_image_url,
     )
@@ -752,6 +762,7 @@ async def get_post_comments(
             c_user = PostUserSummary(
                 id=c.user.id,
                 username=c.user.username,
+                nickname=c.user.nickname,
                 full_name=c.user.full_name,
                 profile_image_url=c.user.profile_image_url,
             )
@@ -847,6 +858,7 @@ async def update_comment(
         user_summary = PostUserSummary(
             id=comment.user.id,
             username=comment.user.username,
+            nickname=comment.user.nickname,
             full_name=comment.user.full_name,
             profile_image_url=comment.user.profile_image_url,
         )

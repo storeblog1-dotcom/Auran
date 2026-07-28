@@ -23,6 +23,8 @@ export const EditProfileScreen = ({ navigation }: any) => {
   const { user, refreshProfile } = useAuth();
 
   const [fullName, setFullName] = useState(user?.full_name || "");
+  const [nickname, setNickname] = useState(user?.nickname || "");
+  const [nicknameStatus, setNicknameStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
   const [bio, setBio] = useState(user?.bio || "");
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
   const [profileImageUrl, setProfileImageUrl] = useState(user?.profile_image_url || "");
@@ -41,12 +43,28 @@ export const EditProfileScreen = ({ navigation }: any) => {
   useEffect(() => {
     if (user) {
       setFullName(user.full_name || "");
+      setNickname(user.nickname || "");
       setBio(user.bio || "");
       setProfileImageUrl(user.profile_image_url || "");
       setIsPrivate(user.is_private || false);
       setAllowMessageRequests(user.allow_message_requests !== false);
     }
   }, [user]);
+
+  const checkNickname = async () => {
+    const value = nickname.trim();
+    if (!value) return false;
+    setNicknameStatus("checking");
+    try {
+      const response = await api.get("/auth/nickname-availability", { params: { nickname: value } });
+      const available = response.data?.data?.available === true;
+      setNicknameStatus(available ? "available" : "taken");
+      return available;
+    } catch {
+      setNicknameStatus("idle");
+      return false;
+    }
+  };
 
   const handleTogglePrivacy = async (value: boolean) => {
     setIsPrivate(value);
@@ -98,6 +116,14 @@ export const EditProfileScreen = ({ navigation }: any) => {
   };
 
   const handleSaveProfile = async () => {
+    if (!nickname.trim()) {
+      Alert.alert("닉네임 확인", "닉네임을 입력해 주세요.");
+      return;
+    }
+    if (!(await checkNickname())) {
+      Alert.alert("닉네임 확인", "이미 사용 중인 닉네임이거나 확인에 실패했습니다.");
+      return;
+    }
     setSaving(true);
     try {
       let finalImageUrl = profileImageUrl;
@@ -124,6 +150,7 @@ export const EditProfileScreen = ({ navigation }: any) => {
       }
 
       await api.patch("/users/me", {
+        nickname: nickname.trim(),
         full_name: fullName,
         bio: bio,
         profile_image_url: finalImageUrl,
@@ -196,10 +223,23 @@ export const EditProfileScreen = ({ navigation }: any) => {
         <TouchableOpacity style={styles.avatarSection} onPress={handlePickProfileImage} activeOpacity={0.8}>
           <Image source={{ uri: currentAvatarUri }} style={styles.avatar} />
           <Text style={styles.changeAvatarText}>프로필 사진 변경 (갤러리에서 선택)</Text>
-          <Text style={styles.usernameText}>@{user?.username}</Text>
+          <Text style={styles.usernameText}>{user?.nickname || "닉네임"}</Text>
         </TouchableOpacity>
 
         {/* Profile Inputs Form */}
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>닉네임</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="닉네임을 입력하세요"
+            placeholderTextColor="#8e8e8e"
+            value={nickname}
+            onChangeText={(value) => { setNickname(value); setNicknameStatus("idle"); }}
+            onBlur={checkNickname}
+          />
+          {nicknameStatus !== "idle" ? <Text style={[styles.nicknameStatus, { color: nicknameStatus === "available" ? "#16a34a" : nicknameStatus === "taken" ? "#ef4444" : "#8e8e8e" }]}>{nicknameStatus === "checking" ? "닉네임 확인 중..." : nicknameStatus === "available" ? "사용 가능한 닉네임입니다." : "이미 사용 중인 닉네임입니다."}</Text> : null}
+        </View>
+
         <View style={styles.formGroup}>
           <Text style={styles.label}>이름</Text>
           <TextInput
@@ -372,6 +412,11 @@ const styles = StyleSheet.create({
   formGroup: {
     paddingHorizontal: 20,
     marginBottom: 16,
+  },
+  nicknameStatus: {
+    marginTop: -8,
+    marginBottom: 8,
+    fontSize: 12,
   },
   label: {
     color: "#8e8e8e",

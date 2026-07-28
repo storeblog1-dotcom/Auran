@@ -18,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { getDisplayName } from "../utils/displayName";
 import api from "../services/api";
 import { getFullImageUrl } from "../config";
 import { Comment, CommentNode } from "./CommentsModal";
@@ -273,7 +274,7 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
                   )}
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.authorName, { color: colors.textPrimary }]}>
-                      {isAnonymous ? "익명" : post.user?.username || "사용자"}
+                      {isAnonymous ? "익명" : getDisplayName(post.user)}
                     </Text>
                     <Text style={[styles.timeText, { color: colors.textSecondary }]}>
                       {new Date(post.created_at).toLocaleString("ko-KR", {

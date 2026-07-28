@@ -17,6 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { getDisplayName } from "../utils/displayName";
 import api from "../services/api";
 import { getFullImageUrl } from "../config";
 import { CreateCommunityPostModal } from "../components/CreateCommunityPostModal";
@@ -241,7 +242,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
               />
             )}
             <Text style={[styles.authorText, { color: colors.textPrimary }]}>
-              {isAnonymous ? "익명" : item.user?.username || "사용자"}
+              {isAnonymous ? "익명" : getDisplayName(item.user)}
             </Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>

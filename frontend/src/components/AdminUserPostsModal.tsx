@@ -17,6 +17,7 @@ import api from "../services/api";
 import { getFullImageUrl } from "../config";
 import { AdminUserItem } from "../services/adminService";
 import { PostDetailModal } from "./PostDetailModal";
+import { getDisplayName } from "../utils/displayName";
 
 const { width } = Dimensions.get("window");
 const GRID_ITEM_SIZE = (width - 44) / 3;
@@ -106,7 +107,7 @@ export const AdminUserPostsModal: React.FC<AdminUserPostsModalProps> = ({
           />
           <View style={styles.userInfoTextContainer}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Text style={[styles.usernameText, { color: colors.textPrimary }]}>@{user.username}</Text>
+              <Text style={[styles.usernameText, { color: colors.textPrimary }]}>{getDisplayName(user)}</Text>
               {user.is_admin && (
                 <View style={styles.adminBadge}>
                   <Text style={styles.adminBadgeText}>관리자</Text>

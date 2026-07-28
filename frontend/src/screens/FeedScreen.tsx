@@ -18,6 +18,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import api from "../services/api";
 import { getFullImageUrl } from "../config";
+import { getDisplayName } from "../utils/displayName";
 import { CommentsModal } from "../components/CommentsModal";
 import { StoryBar } from "../components/StoryBar";
 import { StoryViewerModal } from "../components/StoryViewerModal";
@@ -452,7 +453,7 @@ export const FeedScreen = ({ navigation }: any) => {
             />
             <View>
               <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Text style={[styles.username, { color: colors.textPrimary }]}>{item.user?.username || "user"}</Text>
+                <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(item.user)}</Text>
                 {!isMe && (
                   <TouchableOpacity
                     style={[styles.headerFollowBtn, { backgroundColor: colors.bgInput, borderColor: colors.borderColor }]}

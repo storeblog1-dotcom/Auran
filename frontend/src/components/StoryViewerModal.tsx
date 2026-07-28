@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import api from "../services/api";
 import { getFullImageUrl } from "../config";
 import { ZoomableImage } from "./ImageDetailViewerModal";
+import { getDisplayInitial, getDisplayName } from "../utils/displayName";
 
 const { width, height } = Dimensions.get("window");
 const STORY_DURATION = 5000; // 5초
@@ -225,7 +226,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         <SafeAreaView style={{ flex: 1 }}>
           {/* 그리드 헤더 */}
           <View style={styles.gridHeader}>
-            <Text style={styles.gridTitle}>{user.username}의 스토리</Text>
+            <Text style={styles.gridTitle}>{getDisplayName(user)}의 스토리</Text>
             <TouchableOpacity onPress={() => setGridVisible(false)} style={styles.iconBtn}>
               <Ionicons name="close" size={24} color="#fff" />
             </TouchableOpacity>
@@ -317,12 +318,12 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
               ) : (
                 <View style={[styles.avatar, styles.avatarPlaceholder]}>
                   <Text style={styles.avatarInitial}>
-                    {user.username ? user.username[0].toUpperCase() : "?"}
+                    {getDisplayInitial(user)}
                   </Text>
                 </View>
               )}
               <View>
-                <Text style={styles.username}>{user.username}</Text>
+                <Text style={styles.username}>{getDisplayName(user)}</Text>
                 <Text style={styles.timeText}>
                   {getFormattedTime(currentStory.created_at)}
                 </Text>

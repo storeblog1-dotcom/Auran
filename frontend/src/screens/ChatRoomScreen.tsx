@@ -22,10 +22,12 @@ import { WS_BASE_URL, getFullImageUrl } from "../config";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { PostDetailModal } from "../components/PostDetailModal";
+import { getDisplayName } from "../utils/displayName";
 
 interface MessageSender {
   id: string;
   username: string;
+  nickname?: string | null;
   full_name: string;
   profile_image_url: string | null;
 }
@@ -425,7 +427,7 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
 
         <View style={styles.headerTitleContainer}>
           <Text style={[styles.headerUsername, { color: colors.textPrimary }]}>
-            {targetUser?.username || "대화 상대"}
+            {getDisplayName(targetUser, "대화 상대")}
           </Text>
           <Text style={[styles.headerFullName, { color: colors.textSecondary }]}>
             {targetUser?.full_name || ""}

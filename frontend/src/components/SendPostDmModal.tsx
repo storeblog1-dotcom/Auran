@@ -15,10 +15,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
 import api from "../services/api";
 import { getFullImageUrl } from "../config";
+import { getDisplayName } from "../utils/displayName";
 
 interface UserInfo {
   id: string;
   username: string;
+  nickname?: string | null;
   full_name?: string | null;
   profile_image_url?: string | null;
 }
@@ -203,7 +205,7 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
                         <Text
                           style={[styles.username, { color: colors.textPrimary }]}
                         >
-                          {item.user.username}
+                          {getDisplayName(item.user)}
                         </Text>
                         {!!item.user.full_name && (
                           <Text
