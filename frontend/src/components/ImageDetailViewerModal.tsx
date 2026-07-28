@@ -22,6 +22,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 interface MediaItem {
   id?: string;
   media_url: string;
+  detail_media_url?: string | null;
   media_type?: string;
 }
 
@@ -34,6 +35,7 @@ interface ImageDetailViewerModalProps {
 
 interface ZoomableImageProps {
   uri: string;
+  fallbackUri?: string;
   imageWidth: number;
   imageHeight: number;
   onZoomChange?: (zoomed: boolean) => void;
@@ -42,11 +44,13 @@ interface ZoomableImageProps {
 
 export const ZoomableImage = ({
   uri,
+  fallbackUri = uri,
   imageWidth,
   imageHeight,
   onZoomChange = () => {},
   onSwipe,
 }: ZoomableImageProps) => {
+  const [activeUri, setActiveUri] = useState(uri);
   const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
   const transformRef = useRef(transform);
   const onZoomChangeRef = useRef(onZoomChange);
@@ -68,6 +72,7 @@ export const ZoomableImage = ({
   }, [onZoomChange, onSwipe]);
 
   useEffect(() => {
+    setActiveUri(uri);
     const reset = { scale: 1, x: 0, y: 0 };
     transformRef.current = reset;
     setTransform(reset);
@@ -166,7 +171,10 @@ export const ZoomableImage = ({
     <View style={styles.zoomImageHolder}>
       <View style={styles.zoomGestureSurface} {...responder.panHandlers}>
         <Image
-          source={{ uri }}
+          source={{ uri: activeUri }}
+          onError={() => {
+            if (activeUri !== fallbackUri) setActiveUri(fallbackUri);
+          }}
           style={{
             width: imageWidth,
             height: imageHeight,
@@ -198,17 +206,26 @@ export const ImageDetailViewerModal: React.FC<ImageDetailViewerModalProps> = ({
       setCurrentIndex(initialIndex);
       // Fetch natural dimensions for each image to compute accurate aspect ratio
       media.forEach((item, index) => {
-        const fullUri = getFullImageUrl(item.media_url);
+        const detailUri = getFullImageUrl(
+          item.detail_media_url || item.media_url
+        );
+        const fallbackUri = getFullImageUrl(item.media_url);
         Image.getSize(
-          fullUri,
+          detailUri,
           (width, height) => {
             if (width > 0 && height > 0) {
               setImageRatios((prev) => ({ ...prev, [index]: width / height }));
             }
           },
-          (error) => {
-            console.log("Error getting image size:", error);
-          }
+          () => Image.getSize(
+            fallbackUri,
+            (width, height) => {
+              if (width > 0 && height > 0) {
+                setImageRatios((prev) => ({ ...prev, [index]: width / height }));
+              }
+            },
+            (error) => console.log("Error getting image size:", error),
+          ),
         );
       });
     }
@@ -235,7 +252,10 @@ export const ImageDetailViewerModal: React.FC<ImageDetailViewerModalProps> = ({
   };
 
   const renderZoomableImage = (item: MediaItem, index: number) => {
-    const fullUri = getFullImageUrl(item.media_url);
+    const fullUri = getFullImageUrl(
+      item.detail_media_url || item.media_url
+    );
+    const fallbackUri = getFullImageUrl(item.media_url);
     const ratio = imageRatios[index] || 1.0;
 
     // Calculate aspect ratio dimensions inside smartphone bounds (100% full screen area)
@@ -252,6 +272,7 @@ export const ImageDetailViewerModal: React.FC<ImageDetailViewerModalProps> = ({
       <View key={item.id || `view-${index}`} style={styles.slideContainer}>
         <ZoomableImage
           uri={fullUri}
+          fallbackUri={fallbackUri}
           imageWidth={imgWidth}
           imageHeight={imgHeight}
           onSwipe={(dx) => handleMediaSwipe(dx)}

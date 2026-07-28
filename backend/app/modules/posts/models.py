@@ -154,6 +154,7 @@ class PostMedia(Base):
     )
 
     media_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    detail_media_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     media_type: Mapped[str] = mapped_column(String(20), default="image", nullable=False)
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
