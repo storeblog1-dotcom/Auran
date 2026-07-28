@@ -457,8 +457,8 @@ export const FeedScreen = ({ navigation }: any) => {
               }}
               style={styles.avatar}
             />
-            <View>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <View style={styles.authorText}>
+              <View style={styles.authorLine}>
                 <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(item.user)}</Text>
                 {!isMe && (
                   <TouchableOpacity
@@ -934,8 +934,21 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   userInfo: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
+    marginRight: 8,
+  },
+  authorText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  authorLine: {
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
   },
   avatar: {
     width: 38,
@@ -947,6 +960,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
     fontSize: 14,
+    flexShrink: 1,
   },
   headerFollowBtn: {
     paddingHorizontal: 10,
@@ -962,6 +976,9 @@ const styles = StyleSheet.create({
   location: {
     color: "#8e8e8e",
     fontSize: 12,
+    minWidth: 0,
+    flexShrink: 1,
+    flexWrap: "wrap",
   },
   postImage: {
     width: width - 52,
@@ -997,10 +1014,12 @@ const styles = StyleSheet.create({
   },
   postDetails: {
     paddingHorizontal: 0,
+    minWidth: 0,
   },
   captionBlock: {
     paddingVertical: 6,
     paddingHorizontal: 0,
+    minWidth: 0,
   },
   commentsBlock: {
     paddingTop: 6,

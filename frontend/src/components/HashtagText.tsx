@@ -23,7 +23,22 @@ export const HashtagText: React.FC<HashtagTextProps> = ({
   const parts = text.split(/((?:#[a-zA-Z0-9_가-힣]+)|(?:@[a-zA-Z0-9_가-힣\.]+))/g);
 
   return (
-    <Text style={[{ color: colors.textPrimary, fontFamily: Platform.OS === 'web' ? "'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif" : undefined }, style]} numberOfLines={numberOfLines}>
+    <Text
+      style={[
+        {
+          color: colors.textPrimary,
+          minWidth: 0,
+          flexShrink: 1,
+          flexWrap: "wrap",
+          fontFamily:
+            Platform.OS === "web"
+              ? "'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
+              : undefined,
+        },
+        style,
+      ]}
+      numberOfLines={numberOfLines}
+    >
       {parts.map((part, index) => {
         if (part.startsWith("#")) {
           const tagName = part.substring(1);

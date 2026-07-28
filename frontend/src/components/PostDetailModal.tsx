@@ -428,7 +428,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     }}
                     style={styles.avatar}
                   />
-                  <View>
+                  <View style={styles.authorText}>
                     <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(post.user)}</Text>
                     {post.location ? <Text style={[styles.location, { color: colors.textSecondary }]}>{post.location}</Text> : null}
                   </View>
@@ -771,8 +771,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   userInfo: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
+    marginRight: 8,
+  },
+  authorText: {
+    flex: 1,
+    minWidth: 0,
   },
   authorReplyButton: {
     flexDirection: "row",
@@ -801,10 +808,14 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
     fontSize: 14,
+    flexShrink: 1,
   },
   location: {
     color: "#8e8e8e",
     fontSize: 12,
+    minWidth: 0,
+    flexShrink: 1,
+    flexWrap: "wrap",
   },
   adminPostContext: {
     paddingHorizontal: 14,
@@ -847,6 +858,7 @@ const styles = StyleSheet.create({
   postDetails: {
     paddingHorizontal: 18,
     paddingBottom: 20,
+    minWidth: 0,
   },
   likesText: {
     color: "#fff",
