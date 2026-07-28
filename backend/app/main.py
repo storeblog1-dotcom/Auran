@@ -15,6 +15,7 @@ from app.modules.notifications.models import Notification  # noqa: F401
 from app.modules.direct.models import ChatRoom, ChatRoomMember, ChatMessage  # noqa: F401
 from app.modules.community.models import CommunityBoard, CommunityNotice  # noqa: F401
 from app.modules.hashtags.models import Hashtag, PostHashtag  # noqa: F401
+from app.modules.reports.models import HiddenContent, Report  # noqa: F401
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -162,6 +163,7 @@ from app.modules.hashtags.router import router as hashtags_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.admin.router import router as admin_router
 from app.modules.community.router import router as community_router
+from app.modules.reports.router import router as reports_router
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
@@ -174,4 +176,4 @@ app.include_router(hashtags_router, prefix="/api/v1")
 app.include_router(notifications_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 app.include_router(community_router, prefix="/api/v1")
-
+app.include_router(reports_router, prefix="/api/v1")

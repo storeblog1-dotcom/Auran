@@ -26,6 +26,8 @@ import { SendPostDmModal } from "./SendPostDmModal";
 import { PostCarousel } from "./PostCarousel";
 import { HashtagText } from "./HashtagText";
 import { getDisplayName } from "../utils/displayName";
+import { PostOptionsSheet } from "./PostOptionsSheet";
+import { ReportSheet } from "./ReportSheet";
 
 const { width, height } = Dimensions.get("window");
 
@@ -64,6 +66,9 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   const [post, setPost] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [dmModalVisible, setDmModalVisible] = useState<boolean>(false);
+  const [optionsVisible, setOptionsVisible] = useState(false);
+  const [reportVisible, setReportVisible] = useState(false);
+  const [reportComment, setReportComment] = useState<Comment | null>(null);
 
   // Inline Comments State
   const [comments, setComments] = useState<Comment[]>([]);
@@ -154,6 +159,8 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   };
 
   const handleMoreOptions = () => {
+    setOptionsVisible(true);
+    return;
     if (!post || !post.user?.username) return;
     const authorUsername = post.user.username;
     const isMe = post.is_mine || (currentUser && currentUser.username === authorUsername);
@@ -579,6 +586,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                           onPressReply={handlePressReply}
                           onDeleteComment={handleDeleteComment}
                           onEditComment={handleEditComment}
+                          onReportComment={setReportComment}
                         />
                       ))}
                     </View>
@@ -661,6 +669,62 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
+        )}
+
+        {!adminMode && (
+          <>
+            <PostOptionsSheet
+              visible={optionsVisible}
+              post={post}
+              isMine={!!post && (post.is_mine || currentUser?.username === post.user?.username)}
+              onClose={() => setOptionsVisible(false)}
+              onEdit={() => {
+                onClose();
+                navigation.navigate("CreatePost", { editPost: post, onPostUpdated });
+              }}
+              onVisibility={async (visibility) => {
+                if (!post) return;
+                await api.patch(`/posts/${post.id}`, { visibility });
+                setPost((previous: any) => previous ? { ...previous, visibility } : previous);
+                onPostUpdated?.();
+              }}
+              onProfile={() => post?.user?.username && navigation.navigate("UserProfile", { username: post.user.username })}
+              onFollow={() => post?.user?.username && handleToggleFollowUser(post.user.username, !!post.user.is_following)}
+              onHide={async () => {
+                if (!post) return;
+                await api.post("/hidden-content", { target_type: "post", target_id: post.id });
+                onClose();
+              }}
+              onBlock={async () => {
+                if (!post?.user?.username) return;
+                await api.post(`/users/${post.user.username}/block`);
+                onClose();
+              }}
+              onReport={() => setReportVisible(true)}
+              onDelete={async () => {
+                if (!post) return;
+                await api.delete(`/posts/${post.id}`);
+                onPostUpdated?.();
+                onClose();
+              }}
+            />
+            <ReportSheet
+              visible={reportVisible}
+              targetType="post"
+              targetId={post?.id || null}
+              targetUsername={post?.user?.username}
+              onClose={() => setReportVisible(false)}
+              onHidden={onClose}
+            />
+            <ReportSheet
+              visible={!!reportComment}
+              targetType="comment"
+              targetId={reportComment?.id || null}
+              targetUsername={reportComment?.user?.username}
+              onClose={() => setReportComment(null)}
+              onHidden={() => post?.id && fetchComments(post.id)}
+            />
+          </>
         )}
 
         {/* Send Post by DM Modal */}

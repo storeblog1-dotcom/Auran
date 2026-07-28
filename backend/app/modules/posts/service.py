@@ -16,6 +16,7 @@ from app.modules.audit.content_retention import (
 from app.modules.audit.service import record
 from app.modules.community.models import CommunityBoard
 from app.modules.posts.models import Comment, CommentLike, Post, PostBookmark, PostLike, PostMedia, PostRepost
+from app.modules.reports.models import HiddenContent
 from app.modules.posts.schemas import (
     CommentCreateRequest,
     CommentLikeToggleResponse,
@@ -38,7 +39,11 @@ def _post_visibility_clause(current_user: Optional[User]):
     public_author = User.is_private.is_(False)
 
     if current_user is None:
-        return and_(public_author, Post.visibility == "public")
+        return and_(
+            public_author,
+            Post.visibility == "public",
+            Post.moderation_hidden.is_(False),
+        )
     if current_user.is_admin:
         return True
 
@@ -60,13 +65,39 @@ def _post_visibility_clause(current_user: Optional[User]):
         and_(Post.visibility == "followers", is_follower),
         and_(Post.visibility == "private", Post.user_id == current_user_id),
     )
-    return and_(author_visible, post_visible)
+    user_hidden = exists(
+        select(HiddenContent.id).where(
+            HiddenContent.user_id == current_user_id,
+            HiddenContent.target_type == "post",
+            HiddenContent.target_id == Post.id,
+        )
+    )
+    return and_(
+        author_visible,
+        post_visible,
+        Post.moderation_hidden.is_(False),
+        ~user_hidden,
+    )
 
 
 async def _can_view_post(
     db: AsyncSession, post: Post, current_user: Optional[User]
 ) -> bool:
-    if current_user and (current_user.is_admin or post.user_id == current_user.id):
+    if current_user and current_user.is_admin:
+        return True
+    if post.moderation_hidden:
+        return False
+    if current_user:
+        hidden = await db.scalar(
+            select(HiddenContent.id).where(
+                HiddenContent.user_id == current_user.id,
+                HiddenContent.target_type == "post",
+                HiddenContent.target_id == post.id,
+            )
+        )
+        if hidden:
+            return False
+    if current_user and post.user_id == current_user.id:
         return True
     if post.user.is_private:
         return False
@@ -116,7 +147,7 @@ async def _build_post_responses_batch(
     # 2. 게시물별 댓글 개수
     comments_res = await db.execute(
         select(Comment.post_id, func.count(Comment.id))
-        .where(Comment.post_id.in_(post_ids))
+        .where(Comment.post_id.in_(post_ids), Comment.moderation_hidden.is_(False))
         .group_by(Comment.post_id)
     )
     comments_map = dict(comments_res.all())
@@ -159,7 +190,7 @@ async def _build_post_responses_batch(
     comments_preview_res = await db.execute(
         select(Comment)
         .options(selectinload(Comment.user))
-        .where(Comment.post_id.in_(post_ids))
+        .where(Comment.post_id.in_(post_ids), Comment.moderation_hidden.is_(False))
         .order_by(Comment.created_at.asc())
     )
     all_comments = comments_preview_res.scalars().all()
@@ -841,7 +872,19 @@ async def get_post_comments(
             selectinload(Comment.user),
             selectinload(Comment.likes),
         )
-        .where(Comment.post_id == post_id)
+        .where(
+            Comment.post_id == post_id,
+            True if current_user and current_user.is_admin else Comment.moderation_hidden.is_(False),
+            True
+            if not current_user or current_user.is_admin
+            else ~exists(
+                select(HiddenContent.id).where(
+                    HiddenContent.user_id == current_user.id,
+                    HiddenContent.target_type == "comment",
+                    HiddenContent.target_id == Comment.id,
+                )
+            ),
+        )
         .order_by(Comment.created_at.asc())
     )
     all_comments = result.scalars().all()

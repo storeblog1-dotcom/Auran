@@ -20,6 +20,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { getDisplayName } from "../utils/displayName";
 import { HashtagText } from "./HashtagText";
+import { ReportSheet } from "./ReportSheet";
 
 export interface Comment {
   id: string;
@@ -62,6 +63,7 @@ interface CommentNodeProps {
   onPressReply: (comment: Comment) => void;
   onDeleteComment: (commentId: string) => void;
   onEditComment?: (comment: Comment) => void;
+  onReportComment?: (comment: Comment) => void;
 }
 
 export const CommentNode: React.FC<CommentNodeProps> = ({
@@ -72,6 +74,7 @@ export const CommentNode: React.FC<CommentNodeProps> = ({
   onPressReply,
   onDeleteComment,
   onEditComment,
+  onReportComment,
 }) => {
   const isMyComment = (comment as any).is_mine || (currentUser && currentUser.id === comment.user.id);
 
@@ -135,6 +138,11 @@ export const CommentNode: React.FC<CommentNodeProps> = ({
                 <Ionicons name="trash-outline" size={16} color="#ef4444" />
               </TouchableOpacity>
             )}
+            {!isMyComment && onReportComment && (
+              <TouchableOpacity style={styles.commentActionButton} onPress={() => onReportComment(comment)}>
+                <Ionicons name="flag-outline" size={16} color="#ef4444" />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -160,6 +168,7 @@ export const CommentNode: React.FC<CommentNodeProps> = ({
               onPressReply={onPressReply}
               onDeleteComment={onDeleteComment}
               onEditComment={onEditComment}
+              onReportComment={onReportComment}
             />
           ))}
         </View>
@@ -183,6 +192,7 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [replyParentComment, setReplyParentComment] = useState<Comment | null>(null);
   const [editingComment, setEditingComment] = useState<Comment | null>(null);
+  const [reportComment, setReportComment] = useState<Comment | null>(null);
 
   const fetchComments = async () => {
     if (!postId) return;
@@ -294,11 +304,13 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
         onPressReply={handlePressReply}
         onDeleteComment={handleDeleteComment}
         onEditComment={handleEditComment}
+        onReportComment={setReportComment}
       />
     );
   };
 
   return (
+    <>
     <Modal
       visible={visible}
       animationType="slide"
@@ -410,6 +422,15 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
         </KeyboardAvoidingView>
       </View>
     </Modal>
+    <ReportSheet
+      visible={!!reportComment}
+      targetType="comment"
+      targetId={reportComment?.id || null}
+      targetUsername={reportComment?.user?.username}
+      onClose={() => setReportComment(null)}
+      onHidden={() => reportComment && setComments((previous) => previous.filter((item) => item.id !== reportComment.id))}
+    />
+    </>
   );
 };
 

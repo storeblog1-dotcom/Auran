@@ -30,6 +30,8 @@ import { PostCarousel } from "../components/PostCarousel";
 import { HashtagText } from "../components/HashtagText";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { AuraLogoText } from "../components/AuraLogoText";
+import { PostOptionsSheet } from "../components/PostOptionsSheet";
+import { ReportSheet } from "../components/ReportSheet";
 import { useNotification } from "../context/NotificationContext";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -52,6 +54,8 @@ export const FeedScreen = ({ navigation }: any) => {
   const [dmModalVisible, setDmModalVisible] = useState<boolean>(false);
   const [detailPostId, setDetailPostId] = useState<string | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState<boolean>(false);
+  const [optionsPost, setOptionsPost] = useState<any | null>(null);
+  const [reportPost, setReportPost] = useState<any | null>(null);
 
   // 스토리 관련 상태
   const [storyGroups, setStoryGroups] = useState<any[]>([]);
@@ -316,6 +320,8 @@ export const FeedScreen = ({ navigation }: any) => {
   };
 
   const handleMoreOptions = (item: any) => {
+    setOptionsPost(item);
+    return;
     const authorUsername = item.user?.username;
     if (!authorUsername) return;
 
@@ -684,6 +690,47 @@ export const FeedScreen = ({ navigation }: any) => {
           }
         />
       )}
+
+      <PostOptionsSheet
+        visible={!!optionsPost}
+        post={optionsPost}
+        isMine={!!optionsPost && (optionsPost.is_mine || currentUser?.username === optionsPost.user?.username)}
+        onClose={() => setOptionsPost(null)}
+        onEdit={() => navigation.navigate("CreatePost", { editPost: optionsPost })}
+        onVisibility={async (visibility) => {
+          if (!optionsPost) return;
+          await api.patch(`/posts/${optionsPost.id}`, { visibility });
+          setPosts((prev) => prev.map((item) => item.id === optionsPost.id ? { ...item, visibility } : item));
+        }}
+        onProfile={() => optionsPost?.user?.username && navigation.navigate("UserProfile", { username: optionsPost.user.username })}
+        onFollow={() => optionsPost?.user?.username && handleToggleFollowUser(optionsPost.user.username, !!optionsPost.user.is_following)}
+        onHide={async () => {
+          if (!optionsPost) return;
+          await api.post("/hidden-content", { target_type: "post", target_id: optionsPost.id });
+          setPosts((prev) => prev.filter((item) => item.id !== optionsPost.id));
+        }}
+        onBlock={async () => {
+          if (!optionsPost?.user?.username) return;
+          await api.post(`/users/${optionsPost.user.username}/block`);
+          setPosts((prev) => prev.filter((item) => item.user?.username !== optionsPost.user.username));
+        }}
+        onReport={() => setReportPost(optionsPost)}
+        onDelete={async () => {
+          if (!optionsPost) return;
+          await api.delete(`/posts/${optionsPost.id}`);
+          setPosts((prev) => prev.filter((item) => item.id !== optionsPost.id));
+        }}
+      />
+      <ReportSheet
+        visible={!!reportPost}
+        targetType="post"
+        targetId={reportPost?.id || null}
+        targetUsername={reportPost?.user?.username}
+        onClose={() => setReportPost(null)}
+        onHidden={() => {
+          if (reportPost) setPosts((prev) => prev.filter((item) => item.id !== reportPost.id));
+        }}
+      />
 
       {/* Comments Modal */}
       <CommentsModal

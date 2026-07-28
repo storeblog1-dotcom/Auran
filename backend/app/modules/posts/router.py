@@ -408,7 +408,6 @@ async def get_user_reposted_posts(
     return ApiResponse.paginated(data=posts, total=total, has_more=has_more)
 
 
-from app.modules.posts.models import PostReport
 from pydantic import BaseModel
 
 class ReportRequest(BaseModel):
@@ -418,14 +417,22 @@ class ReportRequest(BaseModel):
 async def report_post(
     post_id: UUID,
     body: ReportRequest,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    report = PostReport(
-        reporter_id=current_user.id,
-        post_id=post_id,
-        reason=body.reason,
+    from app.modules.reports.schemas import ReportCreate
+    from app.modules.reports.service import create_report
+
+    report = await create_report(
+        db,
+        reporter=current_user,
+        data=ReportCreate(
+            target_type="post",
+            target_id=post_id,
+            reason_code="other",
+            detail=body.reason,
+        ),
+        reporter_ip=get_client_ip(request),
     )
-    db.add(report)
-    await db.commit()
-    return ApiResponse.ok({"message": "post reported successfully"})
+    return ApiResponse.ok({"message": "post reported successfully", "report_id": report.id})
