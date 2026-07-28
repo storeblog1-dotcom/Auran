@@ -84,13 +84,26 @@ export const CommunityScreen = ({ navigation, route }: any) => {
   });
   const parentBoards = sectionBoards.filter((board) => !board.parent_id);
   const childBoards = sectionBoards.filter((board) => board.parent_id === selectedParentId);
-  const orderedAnonymousChildBoards = ANONYMOUS_CATEGORY_ORDER
-    .map((category) => {
-      const board = childBoards.find((item) => item.slug === category.slug);
-      return board ? { ...board, name: category.name } : null;
+  const orderedChildBoards = [...childBoards]
+    .sort((a, b) => {
+      if (Boolean(a.is_default) !== Boolean(b.is_default)) return a.is_default ? -1 : 1;
+      if (section === "anonymous") {
+        const aIndex = ANONYMOUS_CATEGORY_ORDER.findIndex((category) => category.slug === a.slug);
+        const bIndex = ANONYMOUS_CATEGORY_ORDER.findIndex((category) => category.slug === b.slug);
+        if (aIndex >= 0 || bIndex >= 0) {
+          if (aIndex < 0) return 1;
+          if (bIndex < 0) return -1;
+          if (aIndex !== bIndex) return aIndex - bIndex;
+        }
+      }
+      const sortDifference = Number(a.sort_order || 0) - Number(b.sort_order || 0);
+      if (sortDifference !== 0) return sortDifference;
+      return String(a.name || "").localeCompare(String(b.name || ""), "ko");
     })
-    .filter(Boolean) as any[];
-  const orderedChildBoards = section === "anonymous" ? orderedAnonymousChildBoards : childBoards;
+    .map((board) => {
+      const category = ANONYMOUS_CATEGORY_ORDER.find((item) => item.slug === board.slug);
+      return section === "anonymous" && category ? { ...board, name: category.name } : board;
+    });
   const visibleChildBoards = selectedParentId
     ? [{ id: ALL_CHILD_BOARDS_ID, name: "전체", is_anonymous: selectedBoard?.is_anonymous }, ...orderedChildBoards]
     : childBoards;
