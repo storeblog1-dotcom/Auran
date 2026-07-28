@@ -44,9 +44,24 @@ export interface AdminPostItem {
   created_at?: string;
 }
 
-export interface AdminActivityLog {
-  id: string; user_id?: string | null; username?: string; nickname?: string | null; event_type: string; target_type?: string | null;
-  target_id?: string | null; revision_id?: string | null; content_number?: string | null; ip_address?: string | null; snapshot?: Record<string, unknown> | null; created_at: string;
+export interface AdminActivityUser {
+  user_id: string;
+  username: string;
+  nickname?: string | null;
+  latest_activity_at: string;
+  activity_count: number;
+  withdrawal_status?: "pending" | "finalized" | "purged" | null;
+}
+
+export interface AdminContentHistoryItem {
+  revision_id: string;
+  target_id: string;
+  content_type: "post" | "comment";
+  version: number;
+  lifecycle_event: string;
+  event_at: string;
+  event_ip?: string | null;
+  display_text?: string | null;
 }
 
 export interface AdminContentRevision {
@@ -70,6 +85,9 @@ export interface AdminContentRevision {
     title?: string | null;
     caption?: string | null;
     board_label?: string | null;
+    location?: string | null;
+    visibility?: string | null;
+    media?: Array<{ media_url: string; media_type: string; order: number }>;
   };
   author: {
     id: string;
@@ -85,6 +103,11 @@ export interface AdminContentRevision {
     lifecycle_event: string;
     event_ip?: string | null;
     created_at: string;
+    author?: {
+      id: string;
+      username: string;
+      nickname?: string | null;
+    };
   }>;
   event_ip?: string | null;
   event_at: string;
@@ -126,14 +149,19 @@ export const adminService = {
   deletePost: async (postId: string): Promise<void> => {
     await api.delete(`/admin/posts/${postId}`);
   },
-  getActivityLogs: async (q?: string, page: number = 1, size: number = 20) => {
-    const res = await api.get("/admin/activity-logs", { params: { q, page, size } });
-    return { items: res.data.data as AdminActivityLog[], total: res.data.pagination?.total || 0 };
+  getActivityUsers: async (q?: string, page: number = 1, size: number = 20) => {
+    const res = await api.get("/admin/activity-users", { params: { q, page, size } });
+    return { items: res.data.data as AdminActivityUser[], total: res.data.pagination?.total || 0 };
   },
   getUserContent: async (userId: string, postPage: number = 1, commentPage: number = 1, size: number = 20) =>
     (await api.get(`/admin/users/${userId}/content`, {
       params: { post_page: postPage, comment_page: commentPage, size },
     })).data.data,
+  getContentHistory: async (
+    contentType: "post" | "comment",
+    contentId: string,
+  ): Promise<AdminContentHistoryItem[]> =>
+    (await api.get(`/admin/content-history/${contentType}/${contentId}`)).data.data,
   getContentRevision: async (revisionId: string): Promise<AdminContentRevision> =>
     (await api.get(`/admin/content-revisions/${revisionId}`)).data.data,
   setContentRevisionLegalHold: async (revisionId: string, enabled: boolean): Promise<void> => {

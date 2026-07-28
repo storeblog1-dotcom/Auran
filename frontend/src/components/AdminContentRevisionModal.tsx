@@ -65,6 +65,9 @@ export const AdminContentRevisionModal = ({
   const body = revision?.kind === "comment"
     ? revision.content
     : revision?.caption;
+  const detailMedia = revision?.kind === "comment"
+    ? revision.post?.media
+    : revision?.media;
 
   const toggleLegalHold = () => {
     if (!revision) return;
@@ -156,14 +159,17 @@ export const AdminContentRevisionModal = ({
                   [{revision.post.board_label || "게시물"}] {revision.post.content_number}
                 </Text>
                 <Text style={{ color: colors.textPrimary, marginTop: 5 }}>
-                  {revision.post.title || revision.post.caption || "(내용 없음)"}
+                  {revision.post.title || "(제목 없음)"}
+                </Text>
+                <Text style={{ color: colors.textPrimary, marginTop: 5 }}>
+                  {revision.post.caption || "(내용 없음)"}
                 </Text>
               </View>
             )}
 
-            {!!revision.media?.length && (
+            {!!detailMedia?.length && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mediaRow}>
-                {revision.media.map((media, index) => (
+                {detailMedia.map((media, index) => (
                   <Image
                     key={`${media.media_url}-${index}`}
                     source={{ uri: getFullImageUrl(media.media_url) }}
@@ -177,6 +183,11 @@ export const AdminContentRevisionModal = ({
             <View style={[styles.section, { borderBottomColor: colors.borderColor }]}>
               {!!revision.title && (
                 <Text style={[styles.title, { color: colors.textPrimary }]}>{revision.title}</Text>
+              )}
+              {revision.kind === "comment" && (
+                <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
+                  선택한 {revision.content_type || "댓글"}
+                </Text>
               )}
               <Text style={[styles.body, { color: colors.textPrimary }]}>
                 {body || "(내용 없음)"}
@@ -195,7 +206,9 @@ export const AdminContentRevisionModal = ({
                     </Text>
                     <Text style={{ color: colors.textPrimary, marginTop: 4 }}>{comment.content}</Text>
                     <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 4 }}>
-                      {comment.lifecycle_event} · IP {comment.event_ip || "기록 없음"}
+                      {comment.author?.username || "알 수 없음"}
+                      {comment.author?.nickname ? ` (${comment.author.nickname})` : ""}
+                      {" · "}{comment.lifecycle_event} · IP {comment.event_ip || "기록 없음"}
                     </Text>
                   </View>
                 ))}

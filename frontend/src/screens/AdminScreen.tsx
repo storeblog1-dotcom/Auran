@@ -15,7 +15,14 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
-import { adminService, AdminStats, AdminUserItem, AdminPostItem, AdminActivityLog } from "../services/adminService";
+import {
+  adminService,
+  AdminStats,
+  AdminUserItem,
+  AdminPostItem,
+  AdminActivityUser,
+  AdminContentHistoryItem,
+} from "../services/adminService";
 import { getFullImageUrl } from "../config";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { AdminUserPostsModal } from "../components/AdminUserPostsModal";
@@ -46,16 +53,24 @@ export const AdminScreen = ({ navigation }: any) => {
   const [postPage, setPostPage] = useState(1);
   const [totalPosts, setTotalPosts] = useState(0);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [selectedPostBoardLabel, setSelectedPostBoardLabel] = useState<string | null>(null);
   const [postDetailModalVisible, setPostDetailModalVisible] = useState(false);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
   const [revisionModalVisible, setRevisionModalVisible] = useState(false);
-  const [activityLogs, setActivityLogs] = useState<AdminActivityLog[]>([]);
-  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [activityUsers, setActivityUsers] = useState<AdminActivityUser[]>([]);
+  const [activityPage, setActivityPage] = useState(1);
+  const [totalActivityUsers, setTotalActivityUsers] = useState(0);
+  const [activityLoadingMore, setActivityLoadingMore] = useState(false);
+  const [expandedActivityUserId, setExpandedActivityUserId] = useState<string | null>(null);
   const [activityQuery, setActivityQuery] = useState("");
   const [activityContent, setActivityContent] = useState<any>(null);
   const [activityContentLoading, setActivityContentLoading] = useState(false);
   const activityContentCache = useRef<Map<string, any>>(new Map());
   const activityRequestId = useRef(0);
+  const [expandedHistoryKey, setExpandedHistoryKey] = useState<string | null>(null);
+  const [activityHistory, setActivityHistory] = useState<AdminContentHistoryItem[]>([]);
+  const [activityHistoryLoading, setActivityHistoryLoading] = useState(false);
+  const activityHistoryCache = useRef<Map<string, AdminContentHistoryItem[]>>(new Map());
 
   const loadStats = async () => {
     try {
@@ -96,32 +111,38 @@ export const AdminScreen = ({ navigation }: any) => {
       setLoading(false);
     }
   };
-  const loadActivity = async (q: string = activityQuery) => {
+  const loadActivity = async (
+    q: string = activityQuery,
+    page: number = 1,
+    append: boolean = false,
+  ) => {
     try {
-      setLoading(true);
-      activityContentCache.current.clear();
-      setActivityContent(null);
-      const res = await adminService.getActivityLogs(q);
-      setActivityLogs(res.items);
+      append ? setActivityLoadingMore(true) : setLoading(true);
+      if (!append) {
+        activityContentCache.current.clear();
+        activityHistoryCache.current.clear();
+        setActivityContent(null);
+        setExpandedActivityUserId(null);
+        setExpandedHistoryKey(null);
+      }
+      const res = await adminService.getActivityUsers(q, page);
+      setActivityUsers((previous) => append ? [...previous, ...res.items] : res.items);
+      setActivityPage(page);
+      setTotalActivityUsers(res.total);
     }
     catch { Alert.alert("오류", "활동 로그를 불러오는데 실패했습니다."); }
-    finally { setLoading(false); }
+    finally {
+      setLoading(false);
+      setActivityLoadingMore(false);
+    }
   };
 
-  const toggleActivityLog = async (item: AdminActivityLog) => {
-    if (item.revision_id) {
-      setSelectedRevisionId(item.revision_id);
-      setRevisionModalVisible(true);
-      return;
-    }
-    if (item.target_type === "post" && item.target_id) {
-      setSelectedPostId(item.target_id);
-      setPostDetailModalVisible(true);
-      return;
-    }
-    const opening = expandedLogId !== item.id;
-    setExpandedLogId(opening ? item.id : null);
-    if (!opening || !item.user_id) {
+  const toggleActivityUser = async (item: AdminActivityUser) => {
+    const opening = expandedActivityUserId !== item.user_id;
+    setExpandedActivityUserId(opening ? item.user_id : null);
+    setExpandedHistoryKey(null);
+    setActivityHistory([]);
+    if (!opening) {
       activityRequestId.current += 1;
       setActivityContentLoading(false);
       setActivityContent(null);
@@ -143,6 +164,59 @@ export const AdminScreen = ({ navigation }: any) => {
       Alert.alert("오류", "사용자 콘텐츠를 불러오는데 실패했습니다.");
     } finally {
       if (requestId === activityRequestId.current) setActivityContentLoading(false);
+    }
+  };
+
+  const openActivityContent = (
+    item: any,
+    contentType: "post" | "comment",
+  ) => {
+    if (item.revision_id || item.deleted) {
+      if (!item.revision_id) {
+        Alert.alert("알림", "보존된 상세 버전을 찾을 수 없습니다.");
+        return;
+      }
+      setSelectedRevisionId(item.revision_id);
+      setRevisionModalVisible(true);
+      return;
+    }
+    const postId = contentType === "post" ? item.id : item.post_id;
+    if (!postId) {
+      Alert.alert("알림", "연결된 원 게시물을 찾을 수 없습니다.");
+      return;
+    }
+    setSelectedPostId(postId);
+    setSelectedPostBoardLabel(item.board_label || null);
+    setPostDetailModalVisible(true);
+  };
+
+  const toggleContentHistory = async (
+    contentType: "post" | "comment",
+    contentId: string,
+  ) => {
+    const key = `${contentType}:${contentId}`;
+    if (expandedHistoryKey === key) {
+      setExpandedHistoryKey(null);
+      setActivityHistory([]);
+      return;
+    }
+    setExpandedHistoryKey(key);
+    const cached = activityHistoryCache.current.get(key);
+    if (cached) {
+      setActivityHistory(cached);
+      return;
+    }
+    setActivityHistory([]);
+    setActivityHistoryLoading(true);
+    try {
+      const history = await adminService.getContentHistory(contentType, contentId);
+      activityHistoryCache.current.set(key, history);
+      setActivityHistory(history);
+    } catch {
+      setExpandedHistoryKey(null);
+      Alert.alert("오류", "콘텐츠 변경 이력을 불러오지 못했습니다.");
+    } finally {
+      setActivityHistoryLoading(false);
     }
   };
 
@@ -178,7 +252,7 @@ export const AdminScreen = ({ navigation }: any) => {
       await loadUsers(searchQuery, 1);
     } else if (activeTab === "posts") {
       await loadPosts(1);
-    } else { await loadActivity();
+    } else { await loadActivity(activityQuery, 1);
     }
     setRefreshing(false);
   };
@@ -190,7 +264,7 @@ export const AdminScreen = ({ navigation }: any) => {
       loadUsers(searchQuery, 1);
     } else if (activeTab === "posts") {
       loadPosts(1);
-    } else { loadActivity();
+    } else { loadActivity(activityQuery, 1);
     }
   }, [activeTab]);
 
@@ -244,49 +318,173 @@ export const AdminScreen = ({ navigation }: any) => {
   const primaryAccent = isDark ? "#a855f7" : "#7c3aed";
   const cyanBorder = isDark ? "#06b6d4" : "#0284c7";
 
-  const renderActivityLog = ({ item }: { item: AdminActivityLog }) => {
-    const isExpanded = expandedLogId === item.id;
+  const renderContentHistory = (historyKey: string) => {
+    if (expandedHistoryKey !== historyKey) return null;
+    return (
+      <View style={[styles.historyPanel, { borderColor: colors.borderColor }]}>
+        {activityHistoryLoading ? (
+          <ActivityIndicator style={{ marginVertical: 8 }} color={primaryAccent} />
+        ) : activityHistory.length === 0 ? (
+          <Text style={{ color: colors.textMuted, fontSize: 12 }}>보존된 변경 이력이 없습니다.</Text>
+        ) : activityHistory.map((history) => (
+          <TouchableOpacity
+            key={history.revision_id}
+            activeOpacity={0.75}
+            onPress={(event) => {
+              event.stopPropagation();
+              setSelectedRevisionId(history.revision_id);
+              setRevisionModalVisible(true);
+            }}
+            style={[styles.historyRow, { borderBottomColor: colors.borderColor }]}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: primaryAccent, fontWeight: "700", fontSize: 12 }}>
+                버전 {history.version} · {history.lifecycle_event}
+              </Text>
+              <Text numberOfLines={2} style={{ color: colors.textPrimary, marginTop: 3, fontSize: 12 }}>
+                {history.display_text || "(내용 없음)"}
+              </Text>
+              <Text style={{ color: colors.textMuted, marginTop: 3, fontSize: 11 }}>
+                {new Date(history.event_at).toLocaleString()} · IP {history.event_ip || "기록 없음"}
+              </Text>
+            </View>
+            <Text style={{ color: primaryAccent, fontSize: 11, fontWeight: "700" }}>상세 보기</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+
+  const renderActivityContentRow = (
+    content: any,
+    contentType: "post" | "comment",
+  ) => {
+    const historyKey = `${contentType}:${content.id}`;
+    return (
+      <View key={historyKey}>
+        <TouchableOpacity
+          activeOpacity={0.75}
+          onPress={(event) => {
+            event.stopPropagation();
+            openActivityContent(content, contentType);
+          }}
+          style={[styles.activityContentRow, { borderColor: colors.borderColor }]}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: primaryAccent, fontWeight: "700" }}>
+              [{content.content_type}] [{content.board_label}] {content.content_number}
+            </Text>
+            <Text
+              numberOfLines={3}
+              style={{ color: colors.textPrimary, marginTop: 3 }}
+            >
+              {content.display_text || "(내용 없음)"}
+            </Text>
+            <TouchableOpacity
+              onPress={(event) => {
+                event.stopPropagation();
+                toggleContentHistory(contentType, content.id);
+              }}
+              style={styles.historyButton}
+            >
+              <Ionicons name="time-outline" size={14} color={primaryAccent} />
+              <Text style={{ color: primaryAccent, fontSize: 12, fontWeight: "700" }}>
+                변경 이력 {content.revision_count || 0}건
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.detailLabel}>
+            <Text style={{ color: primaryAccent, fontSize: 11, fontWeight: "700" }}>상세 보기</Text>
+            <Ionicons name="chevron-forward" size={15} color={primaryAccent} />
+          </View>
+        </TouchableOpacity>
+        {renderContentHistory(historyKey)}
+      </View>
+    );
+  };
+
+  const renderActivityUser = ({ item }: { item: AdminActivityUser }) => {
+    const isExpanded = expandedActivityUserId === item.user_id;
     const hasMore = activityContent?.pagination?.posts_has_more || activityContent?.pagination?.comments_has_more;
+    const withdrawalLabel =
+      item.withdrawal_status === "pending"
+        ? "탈퇴 대기"
+        : item.withdrawal_status === "finalized"
+        ? "최종 탈퇴"
+        : item.withdrawal_status === "purged"
+        ? "개인정보 파기"
+        : "가입 회원";
     return (
       <TouchableOpacity
         activeOpacity={0.8}
-        onPress={() => toggleActivityLog(item)}
+        onPress={() => toggleActivityUser(item)}
         style={[styles.activityLogCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
       >
-        <View>
-          <Text style={[styles.usernameText, { color: colors.textPrimary }]}>
-            {item.username} {item.nickname ? `(${item.nickname})` : ""}
-          </Text>
-          <Text style={{ color: colors.textMuted, fontSize: 12 }}>
-            {item.event_type} · {new Date(item.created_at).toLocaleString()}
-          </Text>
+        <View style={styles.activityUserHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.usernameText, { color: colors.textPrimary }]}>
+              {item.username} {item.nickname ? `(${item.nickname})` : ""}
+            </Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 3 }}>
+              최근 활동 {new Date(item.latest_activity_at).toLocaleString()} · 총 {item.activity_count}건
+            </Text>
+            <Text style={{ color: item.withdrawal_status ? "#ef4444" : "#16a34a", fontSize: 11, marginTop: 3 }}>
+                {withdrawalLabel}
+            </Text>
+          </View>
+          <View style={styles.detailLabel}>
+            <Text style={{ color: primaryAccent, fontSize: 11, fontWeight: "700" }}>
+              {isExpanded ? "접기" : "콘텐츠 보기"}
+            </Text>
+            <Ionicons
+              name={isExpanded ? "chevron-up" : "chevron-down"}
+              size={16}
+              color={primaryAccent}
+            />
+          </View>
         </View>
         {isExpanded && (
           <View style={[styles.activityDetail, { borderTopColor: colors.borderColor }]}>
-            <Text style={{ color: colors.textPrimary }}>IP: {item.ip_address || "기록 없음"}</Text>
             {activityContentLoading && !activityContent && (
               <ActivityIndicator style={{ marginVertical: 14 }} color={primaryAccent} />
             )}
-            {activityContent?.posts?.map((post: any) => (
-              <View key={post.id} style={styles.activityContentRow}>
-                <Text style={{ color: primaryAccent, fontWeight: "700" }}>
-                  [{post.content_type}] [{post.board_label}] {post.content_number}
+            {!!activityContent?.account_events?.length && (
+              <View style={[styles.accountEvents, { borderColor: colors.borderColor }]}>
+                <Text style={{ color: colors.textPrimary, fontWeight: "800", fontSize: 12 }}>
+                  가입·탈퇴 기록
                 </Text>
-                <Text style={{ color: colors.textPrimary, marginTop: 2 }}>{post.display_text || "(내용 없음)"}</Text>
+                {activityContent.account_events.map((event: any) => (
+                  <View key={event.id} style={styles.accountEventRow}>
+                    <Text style={{ color: primaryAccent, fontWeight: "700", fontSize: 12 }}>
+                      {event.event_type}
+                    </Text>
+                    <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+                      {new Date(event.created_at).toLocaleString()} · IP {event.ip_address || "기록 없음"}
+                    </Text>
+                  </View>
+                ))}
               </View>
-            ))}
-            {activityContent?.comments?.map((comment: any) => (
-              <View key={comment.id} style={styles.activityContentRow}>
-                <Text style={{ color: primaryAccent, fontWeight: "700" }}>
-                  [{comment.content_type}] [{comment.board_label}] {comment.content_number}
+            )}
+            {activityContent?.posts?.map((post: any) =>
+              renderActivityContentRow(post, "post")
+            )}
+            {activityContent?.comments?.map((comment: any) =>
+              renderActivityContentRow(comment, "comment")
+            )}
+            {activityContent &&
+              !activityContent.posts?.length &&
+              !activityContent.comments?.length && (
+                <Text style={{ color: colors.textMuted, textAlign: "center", marginVertical: 14 }}>
+                  작성한 콘텐츠가 없습니다.
                 </Text>
-                <Text style={{ color: colors.textMuted, marginTop: 2 }}>{comment.display_text}</Text>
-              </View>
-            ))}
-            {activityContent && hasMore && item.user_id && (
+              )}
+            {activityContent && hasMore && (
               <TouchableOpacity
                 disabled={activityContentLoading}
-                onPress={() => loadMoreActivityContent(item.user_id!)}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  loadMoreActivityContent(item.user_id);
+                }}
                 style={[styles.loadMoreButton, { borderColor: primaryAccent }]}
               >
                 {activityContentLoading
@@ -643,11 +841,22 @@ export const AdminScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
           <FlatList
-            data={activityLogs}
-            keyExtractor={(item) => item.id}
+            data={activityUsers}
+            keyExtractor={(item) => item.user_id}
             contentContainerStyle={{ paddingTop: 12 }}
-            ListEmptyComponent={<Text style={{ color: colors.textMuted, textAlign: "center", marginTop: 24 }}>표시할 가입·탈퇴·게시물 활동 로그가 없습니다.</Text>}
-            renderItem={renderActivityLog}
+            ListEmptyComponent={<Text style={{ color: colors.textMuted, textAlign: "center", marginTop: 24 }}>표시할 사용자 활동 기록이 없습니다.</Text>}
+            ListFooterComponent={
+              activityLoadingMore
+                ? <ActivityIndicator style={{ marginVertical: 14 }} color={primaryAccent} />
+                : null
+            }
+            onEndReachedThreshold={0.35}
+            onEndReached={() => {
+              if (!activityLoadingMore && activityUsers.length < totalActivityUsers) {
+                loadActivity(activityQuery, activityPage + 1, true);
+              }
+            }}
+            renderItem={renderActivityUser}
           />
         </View>
       )}
@@ -663,7 +872,12 @@ export const AdminScreen = ({ navigation }: any) => {
       <PostDetailModal
         visible={postDetailModalVisible}
         postId={selectedPostId}
-        onClose={() => setPostDetailModalVisible(false)}
+        adminMode
+        adminBoardLabel={selectedPostBoardLabel}
+        onClose={() => {
+          setPostDetailModalVisible(false);
+          setSelectedPostBoardLabel(null);
+        }}
         onPostUpdated={() => loadPosts(postPage)}
       />
       <AdminContentRevisionModal
@@ -769,8 +983,22 @@ const styles = StyleSheet.create({
   activitySearchContainer: { flex: 1, marginBottom: 0 },
   activitySearchButton: { height: 42, paddingHorizontal: 14, borderRadius: 10, justifyContent: "center", alignItems: "center" },
   activityLogCard: { padding: 12, borderRadius: 14, borderWidth: 1, marginBottom: 10 },
+  activityUserHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  detailLabel: { flexDirection: "row", alignItems: "center", gap: 2, marginLeft: 8 },
   activityDetail: { marginTop: 10, paddingTop: 10, borderTopWidth: 1 },
-  activityContentRow: { marginTop: 10 },
+  activityContentRow: {
+    marginTop: 10,
+    padding: 11,
+    borderWidth: 1,
+    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  historyButton: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 8, alignSelf: "flex-start", minHeight: 28 },
+  historyPanel: { marginTop: 6, marginLeft: 10, padding: 9, borderWidth: 1, borderRadius: 10 },
+  historyRow: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth },
+  accountEvents: { padding: 10, borderWidth: 1, borderRadius: 10, marginBottom: 4 },
+  accountEventRow: { marginTop: 7, gap: 2 },
   loadMoreButton: { height: 38, marginTop: 14, borderWidth: 1, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   countText: {
     fontSize: 12,
