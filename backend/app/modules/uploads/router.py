@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 from io import BytesIO
@@ -19,9 +20,11 @@ UPLOAD_DIR = os.path.abspath(os.path.join(BASE_DIR, "static", "uploads"))
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 MAX_DIMENSION = 1080  # 모바일 인스타그램 표준 최대 너비/높이
+DETAIL_MAX_DIMENSION = 2048
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 MAX_FILE_SIZE = 15 * 1024 * 1024
 MAX_OUTPUT_SIZE = 400 * 1024
+DETAIL_MAX_OUTPUT_SIZE = 1 * 1024 * 1024
 
 
 async def upload_to_supabase_storage(image_bytes: bytes, filename: str) -> str | None:
@@ -94,7 +97,12 @@ async def delete_supabase_storage_urls(urls: list[str]) -> int:
     return deleted
 
 
-def process_and_resize_image(file_bytes: bytes, original_filename: str) -> tuple[bytes, str]:
+def process_and_resize_image(
+    file_bytes: bytes,
+    original_filename: str,
+    *,
+    include_detail: bool = False,
+) -> tuple[bytes, str, bytes | None, str | None]:
     ext = os.path.splitext(original_filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         ext = ".jpg"
@@ -105,41 +113,60 @@ def process_and_resize_image(file_bytes: bytes, original_filename: str) -> tuple
         # EXIF 회전값 자동 보정 (스마트폰 카메라 세로/가로 직립 보정)
         image = ImageOps.exif_transpose(image)
 
-        # RGBA/Paletted -> RGB 변환 (JPEG 저장 표준화)
-        if image.mode in ("RGBA", "P"):
+        # JPEG 저장을 위해 색상 모드 표준화
+        if image.mode != "RGB":
             image = image.convert("RGB")
 
-        # 모바일용 비율 유지 다운스케일링 (1080px)
-        image.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.Resampling.LANCZOS)
-
-        filename = f"{uuid.uuid4().hex}.jpg"
-        
-        compressed_bytes = _encode_for_display(image)
+        display_image = image.copy()
+        display_image.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.Resampling.LANCZOS)
+        base_name = uuid.uuid4().hex
+        filename = f"{base_name}_display.jpg"
+        compressed_bytes = _encode_with_limit(display_image, MAX_OUTPUT_SIZE)
 
         # 로컬 폴백 저장
         save_path = os.path.join(UPLOAD_DIR, filename)
         with open(save_path, "wb") as f:
             f.write(compressed_bytes)
 
-        return compressed_bytes, filename
+        detail_bytes = None
+        detail_filename = None
+        if include_detail:
+            detail_image = image.copy()
+            detail_image.thumbnail(
+                (DETAIL_MAX_DIMENSION, DETAIL_MAX_DIMENSION),
+                Image.Resampling.LANCZOS,
+            )
+            detail_filename = f"{base_name}_detail.jpg"
+            detail_bytes = _encode_with_limit(
+                detail_image,
+                DETAIL_MAX_OUTPUT_SIZE,
+            )
+            detail_save_path = os.path.join(UPLOAD_DIR, detail_filename)
+            with open(detail_save_path, "wb") as f:
+                f.write(detail_bytes)
+
+        return compressed_bytes, filename, detail_bytes, detail_filename
     except Exception as e:
         raise BadRequestException(f"이미지 처리 중 오류가 발생했습니다: {str(e)}")
 
 
-def _encode_for_display(image: Image.Image) -> bytes:
+def _encode_with_limit(image: Image.Image, max_output_size: int) -> bytes:
     working = image.copy()
     while True:
         for quality in range(85, 4, -5):
             buffer = BytesIO()
             working.save(buffer, format="JPEG", quality=quality, optimize=True, progressive=True)
             encoded = buffer.getvalue()
-            if len(encoded) <= MAX_OUTPUT_SIZE:
+            if len(encoded) <= max_output_size:
                 return encoded
 
         width, height = working.size
-        if max(width, height) <= 320:
+        if max(width, height) <= 64:
             return encoded
-        working.thumbnail((max(320, int(width * 0.85)), max(320, int(height * 0.85))), Image.Resampling.LANCZOS)
+        working.thumbnail(
+            (max(64, int(width * 0.85)), max(64, int(height * 0.85))),
+            Image.Resampling.LANCZOS,
+        )
 
 
 @router.post(
@@ -160,20 +187,40 @@ async def upload_image(
     if len(contents) > MAX_FILE_SIZE:
         raise BadRequestException("원본 이미지는 15MB 이하만 업로드할 수 있습니다.")
 
-    compressed_bytes, filename = process_and_resize_image(
+    compressed_bytes, filename, detail_bytes, detail_filename = process_and_resize_image(
         contents,
         file.filename or "image.jpg",
+        include_detail=purpose == "post",
     )
-    
-    # 1. Supabase Storage 업로드 시도
-    supabase_public_url = await upload_to_supabase_storage(compressed_bytes, filename)
-    
+
+    upload_tasks = [upload_to_supabase_storage(compressed_bytes, filename)]
+    if detail_bytes is not None and detail_filename is not None:
+        upload_tasks.append(
+            upload_to_supabase_storage(detail_bytes, detail_filename)
+        )
+    uploaded_urls = await asyncio.gather(*upload_tasks)
+    supabase_public_url = uploaded_urls[0]
+    detail_public_url = uploaded_urls[1] if len(uploaded_urls) > 1 else None
+
     if supabase_public_url:
         final_url = supabase_public_url
     else:
         final_url = f"/static/uploads/{filename}"
+    if detail_filename:
+        detail_url = (
+            detail_public_url
+            or (
+                f"/static/uploads/{detail_filename}"
+                if not supabase_public_url
+                else final_url
+            )
+        )
+    else:
+        detail_url = final_url
 
     return ApiResponse.ok({
         "url": final_url,
-        "filename": filename
+        "filename": filename,
+        "detail_url": detail_url,
+        "detail_filename": detail_filename,
     })

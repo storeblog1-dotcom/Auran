@@ -192,6 +192,7 @@ async def _build_post_responses_batch(
             PostMediaResponse(
                 id=m.id,
                 media_url=m.media_url,
+                detail_media_url=m.detail_media_url or m.media_url,
                 media_type=m.media_type,
                 order=m.order,
             )
@@ -294,6 +295,7 @@ async def create_post(
         media_obj = PostMedia(
             post_id=post.id,
             media_url=item.media_url,
+            detail_media_url=item.detail_media_url or item.media_url,
             media_type=item.media_type,
             order=item.order,
         )
@@ -505,6 +507,7 @@ async def update_post(
             media_obj = PostMedia(
                 post_id=post.id,
                 media_url=item.media_url,
+                detail_media_url=item.detail_media_url or item.media_url,
                 media_type=item.media_type,
                 order=item.order,
             )

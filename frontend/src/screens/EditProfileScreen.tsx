@@ -148,6 +148,7 @@ export const EditProfileScreen = ({ navigation }: any) => {
 
         const uploadRes = await api.post("/uploads/image", formData, {
           headers: { "Content-Type": "multipart/form-data" },
+          params: { purpose: "profile" },
         });
 
         if (uploadRes.data && uploadRes.data.data) {

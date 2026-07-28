@@ -33,6 +33,7 @@ export interface AdminPostItem {
   caption?: string;
   media?: Array<{
     media_url?: string;
+    detail_media_url?: string | null;
     url?: string;
     image_url?: string;
   }>;
@@ -78,7 +79,7 @@ export interface AdminContentRevision {
   content_type?: string | null;
   location?: string | null;
   visibility?: string | null;
-  media?: Array<{ media_url: string; media_type: string; order: number }>;
+  media?: Array<{ media_url: string; detail_media_url?: string | null; media_type: string; order: number }>;
   post?: {
     id: string;
     content_number?: string | null;
@@ -87,7 +88,7 @@ export interface AdminContentRevision {
     board_label?: string | null;
     location?: string | null;
     visibility?: string | null;
-    media?: Array<{ media_url: string; media_type: string; order: number }>;
+    media?: Array<{ media_url: string; detail_media_url?: string | null; media_type: string; order: number }>;
   };
   author: {
     id: string;

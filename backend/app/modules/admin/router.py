@@ -896,6 +896,7 @@ async def get_admin_posts(
                 {
                     "id": str(m.id),
                     "media_url": m.media_url,
+                    "detail_media_url": m.detail_media_url or m.media_url,
                     "media_type": m.media_type,
                     "order": m.order,
                 }

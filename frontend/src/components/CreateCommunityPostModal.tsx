@@ -53,7 +53,11 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
         setTitle(editPost.title || "");
         setCaption(editPost.caption || "");
         if (editPost.media && editPost.media.length > 0) {
-          setSelectedAsset({ uri: editPost.media[0].media_url });
+          setSelectedAsset({
+            uri: editPost.media[0].media_url,
+            detailMediaUrl:
+              editPost.media[0].detail_media_url || editPost.media[0].media_url,
+          });
         } else {
           setSelectedAsset(null);
         }
@@ -134,6 +138,8 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
         if (uploadRes.data && uploadRes.data.data) {
           mediaList.push({
             media_url: uploadRes.data.data.url,
+            detail_media_url:
+              uploadRes.data.data.detail_url || uploadRes.data.data.url,
             media_type: "image",
             order: 0,
           });
@@ -141,6 +147,8 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
       } else if (selectedAsset && selectedAsset.uri) {
         mediaList.push({
           media_url: selectedAsset.uri,
+          detail_media_url:
+            selectedAsset.detailMediaUrl || selectedAsset.uri,
           media_type: "image",
           order: 0,
         });

@@ -276,6 +276,8 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
             if (uploadRes.data?.data?.url) {
               uploadedMediaList.push({
                 media_url: uploadRes.data.data.url,
+                detail_media_url:
+                  uploadRes.data.data.detail_url || uploadRes.data.data.url,
                 media_type: "image",
                 order: i,
               });

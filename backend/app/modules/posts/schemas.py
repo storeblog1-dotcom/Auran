@@ -9,6 +9,11 @@ class PostMediaCreate(BaseModel):
     """게시물 미디어 생성 스키마"""
 
     media_url: str = Field(..., max_length=500, description="미디어 URL")
+    detail_media_url: Optional[str] = Field(
+        None,
+        max_length=500,
+        description="상세 원본보기용 미디어 URL",
+    )
     media_type: str = Field(default="image", description="미디어 타입 (image/video)")
     order: int = Field(default=0, description="표시 순서")
 
@@ -18,6 +23,7 @@ class PostMediaResponse(BaseModel):
 
     id: UUID
     media_url: str
+    detail_media_url: Optional[str] = None
     media_type: str
     order: int
 
