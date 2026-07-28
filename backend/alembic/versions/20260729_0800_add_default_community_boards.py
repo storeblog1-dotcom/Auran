@@ -1,7 +1,7 @@
 """add default child board for each community board
 
-Revision ID: 20260729_default_community_boards
-Revises: 20260729_reports_moderation
+Revision ID: 20260729_default_boards
+Revises: 20260729_reports
 """
 
 import uuid
@@ -10,7 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "20260729_default_community_boards"
+revision = "20260729_default_boards"
 down_revision = "20260729_reports"
 branch_labels = None
 depends_on = None
