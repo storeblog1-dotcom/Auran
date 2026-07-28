@@ -28,9 +28,18 @@ export interface Comment {
   user: {
     id: string;
     username: string;
+    nickname?: string | null;
     full_name: string;
     profile_image_url?: string;
   };
+  reply_to_user?: {
+    id: string;
+    username: string;
+    nickname?: string | null;
+    full_name: string;
+    profile_image_url?: string;
+  } | null;
+  reply_to_display_name?: string | null;
   content: string;
   created_at: string;
   updated_at: string;
@@ -101,6 +110,14 @@ export const CommentNode: React.FC<CommentNodeProps> = ({
           </View>
 
           {/* Row 2: Comment Content on the Next Line */}
+          {(comment.reply_to_user || comment.reply_to_display_name) && (
+            <View style={styles.replyTargetRow}>
+              <Ionicons name="arrow-undo-outline" size={12} color={colors.textMuted} />
+              <Text style={[styles.replyTargetText, { color: colors.textSecondary }]}>
+                {getDisplayName(comment.reply_to_user, comment.reply_to_display_name || "탈퇴한 사용자")}님에게
+              </Text>
+            </View>
+          )}
           <View style={{ marginTop: 2, marginBottom: 2 }}>
             <HashtagText text={comment.content} style={{ fontSize: 14, lineHeight: 20, color: colors.textPrimary }} />
           </View>
@@ -518,6 +535,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     marginTop: 6,
+  },
+  replyTargetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 3,
+  },
+  replyTargetText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   commentActionButton: {
     minWidth: 32,

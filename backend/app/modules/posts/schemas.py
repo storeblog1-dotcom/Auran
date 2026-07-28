@@ -91,6 +91,8 @@ class CommentResponse(BaseModel):
     post_id: UUID
     parent_id: Optional[UUID] = None
     user: PostUserSummary
+    reply_to_user: Optional[PostUserSummary] = None
+    reply_to_display_name: Optional[str] = None
     content: str
     created_at: datetime
     updated_at: datetime
