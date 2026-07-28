@@ -26,12 +26,16 @@ class AuditEvent(Base):
 class WithdrawnAccount(Base):
     __tablename__ = "withdrawn_accounts"
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), primary_key=True)
-    withdrawn_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    cancelable_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     retention_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    legal_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    personal_data_purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class PostRevision(Base):
-    """Administrator-only immutable post state retained for three years."""
+    """Administrator-only immutable post state retained for up to 365 days."""
 
     __tablename__ = "post_revisions"
     __table_args__ = (
@@ -61,7 +65,7 @@ class PostRevision(Base):
 
 
 class CommentRevision(Base):
-    """Administrator-only immutable comment/reply state retained for three years."""
+    """Administrator-only immutable comment/reply state retained for up to 365 days."""
 
     __tablename__ = "comment_revisions"
     __table_args__ = (

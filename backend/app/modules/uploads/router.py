@@ -43,12 +43,55 @@ async def upload_to_supabase_storage(image_bytes: bytes, filename: str) -> str |
             resp = await client.post(target_url, content=image_bytes, headers=headers)
             if resp.status_code in (200, 201):
                 return f"{settings.supabase_url.rstrip('/')}/storage/v1/object/public/{bucket}/{filename}"
-            else:
-                print(f"[Supabase Storage Warning] Status {resp.status_code}: {resp.text}")
-                return None
+            print(f"[Supabase Storage Warning] Status {resp.status_code}: {resp.text}")
+            return None
     except Exception as e:
         print(f"[Supabase Storage Error] {e}")
         return None
+
+
+async def delete_supabase_storage_urls(urls: list[str]) -> int:
+    """Delete verified unreferenced objects that belong to this Supabase bucket."""
+    if not settings.supabase_key or not urls:
+        return 0
+    public_prefix = (
+        f"{settings.supabase_url.rstrip('/')}/storage/v1/object/public/"
+        f"{settings.supabase_storage_bucket}/"
+    )
+    object_paths = [
+        url[len(public_prefix):]
+        for url in urls
+        if url.startswith(public_prefix) and url[len(public_prefix):]
+    ]
+    if not object_paths:
+        return 0
+    target_url = (
+        f"{settings.supabase_url.rstrip('/')}/storage/v1/object/"
+        f"{settings.supabase_storage_bucket}"
+    )
+    headers = {
+        "Authorization": f"Bearer {settings.supabase_key}",
+        "apiKey": settings.supabase_key,
+        "Content-Type": "application/json",
+    }
+    deleted = 0
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        for index in range(0, len(object_paths), 1000):
+            batch = object_paths[index:index + 1000]
+            response = await client.request(
+                "DELETE",
+                target_url,
+                headers=headers,
+                json={"prefixes": batch},
+            )
+            if response.status_code == 200:
+                deleted += len(batch)
+            else:
+                print(
+                    "[Supabase Storage Delete Warning] "
+                    f"Status {response.status_code}: {response.text}"
+                )
+    return deleted
 
 
 def process_and_resize_image(file_bytes: bytes, original_filename: str) -> tuple[bytes, str]:

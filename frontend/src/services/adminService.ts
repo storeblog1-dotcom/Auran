@@ -18,6 +18,13 @@ export interface AdminUserItem {
   is_active: boolean;
   is_admin: boolean;
   created_at?: string;
+  withdrawal_status?: "pending" | "finalized" | "purged" | null;
+  withdrawal_requested_at?: string | null;
+  withdrawal_cancelable_until?: string | null;
+  withdrawal_finalized_at?: string | null;
+  personal_data_retention_until?: string | null;
+  personal_data_legal_hold?: boolean;
+  personal_data_purged_at?: string | null;
 }
 
 export interface AdminPostItem {

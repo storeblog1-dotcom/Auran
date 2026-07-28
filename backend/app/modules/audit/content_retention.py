@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import uuid
 
 from sqlalchemy import delete, func, select
@@ -10,19 +10,12 @@ from app.modules.community.models import CommunityBoard
 from app.modules.posts.models import Comment, Post, PostMedia
 
 
-RETENTION_YEARS = 3
+RETENTION_DAYS = 365
 
 
 def retention_deadline(event_at: datetime | None = None) -> datetime:
     base = event_at or datetime.now(timezone.utc)
-    try:
-        return base.replace(year=base.year + RETENTION_YEARS)
-    except ValueError:
-        return base.replace(
-            year=base.year + RETENTION_YEARS,
-            month=2,
-            day=28,
-        )
+    return base + timedelta(days=RETENTION_DAYS)
 
 
 async def preserve_post(

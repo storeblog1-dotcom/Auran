@@ -51,7 +51,8 @@ class RefreshRequest(BaseModel):
 
 
 class WithdrawalRequest(BaseModel):
-    password: str = Field(..., min_length=1)
+    password: str | None = Field(None, min_length=1)
+    google_token: str | None = None
     confirmation: str = Field(..., pattern="^탈퇴$")
 
 
@@ -70,6 +71,8 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+    withdrawal_pending: bool = False
+    withdrawal_deadline: datetime | None = None
 
 
 class UserMe(BaseModel):

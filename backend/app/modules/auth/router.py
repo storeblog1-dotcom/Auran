@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query, Request, status
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from app.common.client_ip import get_client_ip
 from app.modules.audit.service import record
 from app.modules.audit.models import WithdrawnAccount
@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.response import ApiResponse
 from app.core.database import get_db
-from app.modules.auth.dependencies import get_current_active_user, get_optional_current_user
+from app.modules.auth.dependencies import (
+    get_current_active_user,
+    get_current_withdrawal_user,
+    get_optional_current_user,
+)
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (
     GoogleLoginRequest,
@@ -112,11 +116,72 @@ async def withdraw(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[dict]:
-    if not current_user.hashed_password or not verify_password(body.password, current_user.hashed_password):
+    password_verified = bool(
+        body.password
+        and current_user.hashed_password
+        and verify_password(body.password, current_user.hashed_password)
+    )
+    google_verified = bool(
+        body.google_token
+        and await service.verify_google_token_for_user(
+            current_user,
+            body.google_token,
+        )
+    )
+    if not password_verified and not google_verified:
         from app.common.exceptions import UnauthorizedException
-        raise UnauthorizedException("비밀번호가 올바르지 않습니다")
+        raise UnauthorizedException("비밀번호 또는 Google 재인증이 올바르지 않습니다")
+    from app.modules.audit.withdrawal import (
+        PERSONAL_DATA_RETENTION_DAYS,
+        WITHDRAWAL_GRACE_DAYS,
+    )
+    now = datetime.now(timezone.utc)
+    cancelable_until = now + timedelta(days=WITHDRAWAL_GRACE_DAYS)
     current_user.is_active = False
-    db.add(WithdrawnAccount(user_id=current_user.id, retention_until=__import__("datetime").datetime.now(__import__("datetime").timezone.utc) + timedelta(days=365 * 3)))
-    await record(db, user_id=current_user.id, event_type="withdrawal", ip_address=get_client_ip(request), target_type="user", target_id=current_user.id)
+    db.add(
+        WithdrawnAccount(
+            user_id=current_user.id,
+            requested_at=now,
+            cancelable_until=cancelable_until,
+            finalized_at=None,
+            retention_until=cancelable_until
+            + timedelta(days=PERSONAL_DATA_RETENTION_DAYS),
+        )
+    )
+    await record(
+        db,
+        user_id=current_user.id,
+        event_type="withdrawal_requested",
+        ip_address=get_client_ip(request),
+        target_type="user",
+        target_id=current_user.id,
+        snapshot={"cancelable_until": cancelable_until.isoformat()},
+    )
     await db.commit()
-    return ApiResponse.ok({"message": "탈퇴 처리되었습니다. 보존된 기록은 관리자만 열람할 수 있습니다."})
+    return ApiResponse.ok({
+        "message": "탈퇴 신청이 접수되었습니다. 7일 안에는 로그인 후 취소할 수 있습니다.",
+        "cancelable_until": cancelable_until.isoformat(),
+    })
+
+
+@router.post(
+    "/withdraw/cancel",
+    response_model=ApiResponse[TokenResponse],
+    summary="7일 이내 계정 탈퇴 취소",
+)
+async def cancel_withdrawal(
+    request: Request,
+    current_user: User = Depends(get_current_withdrawal_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[TokenResponse]:
+    tokens = await service.cancel_withdrawal(db, current_user)
+    await record(
+        db,
+        user_id=current_user.id,
+        event_type="withdrawal_cancelled",
+        ip_address=get_client_ip(request),
+        target_type="user",
+        target_id=current_user.id,
+    )
+    await db.commit()
+    return ApiResponse.ok(tokens)

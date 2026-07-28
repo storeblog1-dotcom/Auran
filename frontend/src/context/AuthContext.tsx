@@ -23,10 +23,13 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
+  withdrawalPending: { deadline: string } | null;
   login: (data: any) => Promise<void>;
   register: (data: any) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  cancelWithdrawal: () => Promise<void>;
+  leaveWithdrawalScreen: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -35,6 +38,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [withdrawalPending, setWithdrawalPending] = useState<{ deadline: string } | null>(null);
   const mountedRef = useRef(true);
 
   const fetchCurrentUser = async (): Promise<boolean> => {
@@ -60,6 +64,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const initAuth = async () => {
       try {
+        const withdrawalToken = await AsyncStorage.getItem("withdrawal_token");
+        const withdrawalDeadline = await AsyncStorage.getItem("withdrawal_deadline");
+        if (
+          withdrawalToken
+          && withdrawalDeadline
+          && new Date(withdrawalDeadline).getTime() > Date.now()
+        ) {
+          if (mountedRef.current) {
+            setWithdrawalPending({ deadline: withdrawalDeadline });
+            setToken(null);
+            setUser(null);
+          }
+          return;
+        }
+        await AsyncStorage.removeItem("withdrawal_token");
+        await AsyncStorage.removeItem("withdrawal_deadline");
         const storedToken = await AsyncStorage.getItem("access_token");
         if (!storedToken) {
           if (mountedRef.current) {
@@ -114,11 +134,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const res = await api.post("/auth/login", loginData);
     const tokenData = res.data.data;
     const accessToken = tokenData.access_token;
+    if (tokenData.withdrawal_pending) {
+      await AsyncStorage.removeItem("access_token");
+      await AsyncStorage.removeItem("refresh_token");
+      await AsyncStorage.setItem("withdrawal_token", accessToken);
+      await AsyncStorage.setItem(
+        "withdrawal_deadline",
+        tokenData.withdrawal_deadline,
+      );
+      setToken(null);
+      setUser(null);
+      setWithdrawalPending({ deadline: tokenData.withdrawal_deadline });
+      return;
+    }
     await AsyncStorage.setItem("access_token", accessToken);
     if (tokenData.refresh_token) {
       await AsyncStorage.setItem("refresh_token", tokenData.refresh_token);
     }
     setToken(accessToken);
+    setWithdrawalPending(null);
     await fetchCurrentUser();
   };
 
@@ -131,8 +165,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     await AsyncStorage.removeItem("access_token");
     await AsyncStorage.removeItem("refresh_token");
+    await AsyncStorage.removeItem("withdrawal_token");
+    await AsyncStorage.removeItem("withdrawal_deadline");
     setToken(null);
     setUser(null);
+    setWithdrawalPending(null);
+  };
+
+  const leaveWithdrawalScreen = async () => {
+    await AsyncStorage.removeItem("withdrawal_token");
+    await AsyncStorage.removeItem("withdrawal_deadline");
+    setWithdrawalPending(null);
+  };
+
+  const cancelWithdrawal = async () => {
+    const withdrawalToken = await AsyncStorage.getItem("withdrawal_token");
+    if (!withdrawalToken) throw new Error("탈퇴 취소 인증이 만료되었습니다.");
+    const response = await api.post(
+      "/auth/withdraw/cancel",
+      {},
+      { headers: { Authorization: `Bearer ${withdrawalToken}` } },
+    );
+    const tokenData = response.data.data;
+    await AsyncStorage.setItem("access_token", tokenData.access_token);
+    await AsyncStorage.setItem("refresh_token", tokenData.refresh_token);
+    await AsyncStorage.removeItem("withdrawal_token");
+    await AsyncStorage.removeItem("withdrawal_deadline");
+    setWithdrawalPending(null);
+    setToken(tokenData.access_token);
+    await fetchCurrentUser();
   };
 
   return (
@@ -141,9 +202,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         token,
         isLoading,
+        withdrawalPending,
         login,
         register,
         logout,
+        cancelWithdrawal,
+        leaveWithdrawalScreen,
         refreshProfile: async () => {
           await fetchCurrentUser();
         },

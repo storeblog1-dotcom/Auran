@@ -2,7 +2,7 @@ name: Purge Expired Retained Content
 
 on:
   schedule:
-    - cron: '25 18 * * *'
+    - cron: '25 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -21,9 +21,12 @@ jobs:
       - name: Install Dependencies
         run: pip install -r backend/requirements.txt
 
-      - name: Purge revisions past the three-year retention date
+      - name: Finalize withdrawals and purge expired personal data
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_STORAGE_BUCKET: uploads
         run: |
           cd backend
           python -m scripts.purge_expired_content_revisions

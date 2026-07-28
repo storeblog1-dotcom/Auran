@@ -20,7 +20,7 @@ import api from "../services/api";
 import { getFullImageUrl } from "../config";
 
 export const EditProfileScreen = ({ navigation }: any) => {
-  const { user, refreshProfile } = useAuth();
+  const { user, refreshProfile, logout } = useAuth();
 
   const [fullName, setFullName] = useState(user?.full_name || "");
   const [nickname, setNickname] = useState(user?.nickname || "");
@@ -39,6 +39,10 @@ export const EditProfileScreen = ({ navigation }: any) => {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  const [showWithdrawalSection, setShowWithdrawalSection] = useState(false);
+  const [withdrawalPassword, setWithdrawalPassword] = useState("");
+  const [withdrawalConfirmation, setWithdrawalConfirmation] = useState("");
+  const [withdrawing, setWithdrawing] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -197,6 +201,53 @@ export const EditProfileScreen = ({ navigation }: any) => {
     }
   };
 
+  const handleWithdrawal = () => {
+    if (!withdrawalPassword || withdrawalConfirmation !== "탈퇴") {
+      Alert.alert(
+        "입력 확인",
+        "현재 비밀번호를 입력하고 확인란에 ‘탈퇴’를 정확히 입력해주세요.",
+      );
+      return;
+    }
+    Alert.alert(
+      "탈퇴 신청 최종 확인",
+      "신청 즉시 로그아웃되며 서비스 이용이 중단됩니다. 7일 안에는 다시 로그인해 탈퇴를 취소할 수 있습니다.",
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "탈퇴 신청",
+          style: "destructive",
+          onPress: async () => {
+            setWithdrawing(true);
+            try {
+              const response = await api.post("/auth/withdraw", {
+                password: withdrawalPassword,
+                confirmation: withdrawalConfirmation,
+              });
+              const deadline = response.data?.data?.cancelable_until;
+              await logout();
+              Alert.alert(
+                "탈퇴 대기 상태로 전환되었습니다",
+                deadline
+                  ? `${new Date(deadline).toLocaleString()}까지 로그인 후 취소할 수 있습니다.`
+                  : "7일 안에는 로그인 후 취소할 수 있습니다.",
+              );
+            } catch (err: any) {
+              Alert.alert(
+                "탈퇴 신청 실패",
+                err.response?.data?.error?.message
+                  || err.response?.data?.detail
+                  || "비밀번호를 확인해주세요.",
+              );
+            } finally {
+              setWithdrawing(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const currentAvatarUri = selectedAsset
     ? selectedAsset.uri
     : getFullImageUrl(profileImageUrl);
@@ -353,6 +404,56 @@ export const EditProfileScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
         ) : null}
+
+        <TouchableOpacity
+          style={styles.withdrawalToggleBtn}
+          onPress={() => setShowWithdrawalSection(!showWithdrawalSection)}
+        >
+          <Text style={styles.withdrawalToggleText}>계정 탈퇴 신청</Text>
+          <Ionicons
+            name={showWithdrawalSection ? "chevron-up" : "chevron-down"}
+            size={16}
+            color="#ef4444"
+          />
+        </TouchableOpacity>
+
+        {showWithdrawalSection ? (
+          <View style={styles.withdrawalContainer}>
+            <Text style={styles.withdrawalNotice}>
+              탈퇴 신청 즉시 로그아웃되고 일반 서비스를 이용할 수 없습니다. 7일 안에는 다시 로그인해 계정을 복구할 수 있으며, 7일 후 최종 탈퇴됩니다.
+            </Text>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>현재 비밀번호</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="현재 비밀번호"
+                placeholderTextColor="#8e8e8e"
+                secureTextEntry
+                value={withdrawalPassword}
+                onChangeText={setWithdrawalPassword}
+              />
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>확인을 위해 ‘탈퇴’를 입력하세요</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="탈퇴"
+                placeholderTextColor="#8e8e8e"
+                value={withdrawalConfirmation}
+                onChangeText={setWithdrawalConfirmation}
+              />
+            </View>
+            <TouchableOpacity
+              style={styles.withdrawalButton}
+              onPress={handleWithdrawal}
+              disabled={withdrawing}
+            >
+              {withdrawing
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={styles.withdrawalButtonText}>7일 탈퇴 대기 시작</Text>}
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -495,5 +596,49 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     marginRight: 10,
+  },
+  withdrawalToggleBtn: {
+    minHeight: 46,
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.55)",
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  withdrawalToggleText: {
+    color: "#ef4444",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  withdrawalContainer: {
+    borderTopWidth: 0.5,
+    borderTopColor: "#262626",
+    paddingTop: 16,
+    paddingBottom: 40,
+  },
+  withdrawalNotice: {
+    color: "#fca5a5",
+    fontSize: 13,
+    lineHeight: 20,
+    marginHorizontal: 20,
+    marginBottom: 16,
+  },
+  withdrawalButton: {
+    minHeight: 48,
+    backgroundColor: "#dc2626",
+    marginHorizontal: 20,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  withdrawalButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "800",
   },
 });
