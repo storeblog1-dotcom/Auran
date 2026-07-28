@@ -20,7 +20,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 MAX_DIMENSION = 1080  # 모바일 인스타그램 표준 최대 너비/높이
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
-MAX_FILE_SIZE = 1 * 1024 * 1024
+MAX_FILE_SIZE = 15 * 1024 * 1024
 MAX_OUTPUT_SIZE = 400 * 1024
 
 
@@ -158,7 +158,7 @@ async def upload_image(
 
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE:
-        raise BadRequestException("Upload file must be 1MB or less.")
+        raise BadRequestException("원본 이미지는 15MB 이하만 업로드할 수 있습니다.")
 
     compressed_bytes, filename = process_and_resize_image(
         contents,
