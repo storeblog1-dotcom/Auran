@@ -40,12 +40,24 @@ REQUEST_NEW = "NEW_REQUEST"
 MESSAGE_REQUEST_LIMIT = 5
 
 
-def message_request_allowed(is_mutual: bool, recipient_allows_requests: bool) -> bool:
-    return is_mutual or recipient_allows_requests
+def message_request_allowed(
+    is_mutual: bool,
+    recipient_allows_requests: bool,
+    sender_is_admin: bool = False,
+) -> bool:
+    return sender_is_admin or is_mutual or recipient_allows_requests
 
 
 def pending_request_has_capacity(message_count: int) -> bool:
     return message_count < MESSAGE_REQUEST_LIMIT
+
+
+def admin_message_access(sender_is_admin: bool) -> bool:
+    return sender_is_admin
+
+
+def room_starts_accepted(is_mutual: bool, sender_is_admin: bool) -> bool:
+    return is_mutual or sender_is_admin
 
 
 @router.post("/rooms", response_model=ChatRoomResponse, status_code=status.HTTP_201_CREATED)
@@ -63,7 +75,10 @@ async def create_or_get_direct_room(
     # 상대방 존재 여부 확인
     target_user = await get_user_by_id(db, target_user_id)
 
-    if await _users_are_blocked(db, current_user.id, target_user_id):
+    if (
+        not admin_message_access(current_user.is_admin)
+        and await _users_are_blocked(db, current_user.id, target_user_id)
+    ):
         raise ForbiddenException("차단된 사용자와는 메시지를 주고받을 수 없습니다.")
 
     is_mutual = await _users_are_mutual_followers(
@@ -83,7 +98,10 @@ async def create_or_get_direct_room(
     existing_room = result.scalars().first()
 
     if existing_room:
-        if is_mutual and existing_room.request_status != REQUEST_ACCEPTED:
+        if (
+            (is_mutual or admin_message_access(current_user.is_admin))
+            and existing_room.request_status != REQUEST_ACCEPTED
+        ):
             existing_room.request_status = REQUEST_ACCEPTED
             existing_room.request_sender_id = None
             await db.commit()
@@ -91,8 +109,12 @@ async def create_or_get_direct_room(
             raise ForbiddenException("거절된 메시지 요청입니다.")
         room_id = existing_room.id
     else:
-        if not message_request_allowed(
-            is_mutual, target_user.allow_message_requests
+        if (
+            not message_request_allowed(
+                is_mutual,
+                target_user.allow_message_requests,
+                sender_is_admin=current_user.is_admin,
+            )
         ):
             raise ForbiddenException(
                 "상대방이 메시지 요청을 받지 않습니다."
@@ -101,8 +123,16 @@ async def create_or_get_direct_room(
         # 새로 생성
         new_room = ChatRoom(
             is_group=False,
-            request_status=REQUEST_ACCEPTED if is_mutual else REQUEST_PENDING,
-            request_sender_id=None if is_mutual else current_user.id,
+            request_status=(
+                REQUEST_ACCEPTED
+                if room_starts_accepted(is_mutual, current_user.is_admin)
+                else REQUEST_PENDING
+            ),
+            request_sender_id=(
+                None
+                if room_starts_accepted(is_mutual, current_user.is_admin)
+                else current_user.id
+            ),
         )
         db.add(new_room)
         await db.flush()
@@ -137,6 +167,22 @@ async def get_direct_message_eligibility(
             can_send_message=False,
             can_share_post=False,
             message_permission_reason="내 게시물에는 메시지를 보낼 수 없습니다.",
+        )
+
+    if admin_message_access(current_user.is_admin):
+        existing_room = await _find_direct_room(
+            db, current_user.id, target_user_id
+        )
+        if existing_room and existing_room.request_status != REQUEST_ACCEPTED:
+            existing_room.request_status = REQUEST_ACCEPTED
+            existing_room.request_sender_id = None
+            await db.commit()
+        return DirectMessageEligibilityResponse(
+            target_user=target_response,
+            room_id=existing_room.id if existing_room else None,
+            request_status=REQUEST_ACCEPTED,
+            can_send_message=True,
+            can_share_post=True,
         )
 
     if await _users_are_blocked(db, current_user.id, target_user_id):
@@ -256,7 +302,10 @@ async def list_user_rooms(
             continue
         if (
             r.request_status == REQUEST_PENDING
-            and await _room_members_are_mutual(db, r.id)
+            and (
+                await _room_members_are_mutual(db, r.id)
+                or await _room_has_admin(db, r.id)
+            )
         ):
             r.request_status = REQUEST_ACCEPTED
             r.request_sender_id = None
@@ -302,7 +351,10 @@ async def list_message_requests(
     for room in result.scalars().all():
         if await _users_are_blocked_in_room(db, room, current_user.id):
             continue
-        if await _room_members_are_mutual(db, room.id):
+        if (
+            await _room_members_are_mutual(db, room.id)
+            or await _room_has_admin(db, room.id)
+        ):
             room.request_status = REQUEST_ACCEPTED
             room.request_sender_id = None
             changed = True
@@ -663,6 +715,20 @@ async def _room_member_ids(
     return list(result.scalars().all())
 
 
+async def _room_has_admin(
+    db: AsyncSession, room_id: uuid.UUID
+) -> bool:
+    result = await db.execute(
+        select(func.count(User.id))
+        .join(ChatRoomMember, ChatRoomMember.user_id == User.id)
+        .where(
+            ChatRoomMember.room_id == room_id,
+            User.is_admin.is_(True),
+        )
+    )
+    return (result.scalar() or 0) > 0
+
+
 async def _find_direct_room(
     db: AsyncSession,
     first_user_id: uuid.UUID,
@@ -761,6 +827,8 @@ async def _room_members_are_mutual(
 async def _users_are_blocked_in_room(
     db: AsyncSession, room: ChatRoom, current_user_id: uuid.UUID
 ) -> bool:
+    if await _room_has_admin(db, room.id):
+        return False
     member_ids = await _room_member_ids(db, room.id)
     target_user_id = next(
         (member_id for member_id in member_ids if member_id != current_user_id),
@@ -793,6 +861,12 @@ async def _authorize_message_send(
     body: ChatMessageCreate,
 ) -> ChatRoom:
     room = await _get_room(db, room_id)
+    if await _room_has_admin(db, room.id):
+        if room.request_status != REQUEST_ACCEPTED:
+            room.request_status = REQUEST_ACCEPTED
+            room.request_sender_id = None
+        return room
+
     if await _users_are_blocked_in_room(db, room, sender_id):
         raise ForbiddenException(
             "차단된 사용자와는 메시지를 주고받을 수 없습니다."
