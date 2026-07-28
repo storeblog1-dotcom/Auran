@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 import { getFullImageUrl } from "../config";
 import { getDisplayName } from "../utils/displayName";
@@ -29,11 +30,35 @@ interface ChatRoom {
   id: string;
   target_user?: UserInfo | null;
   request_status?: string;
+  is_outgoing_request?: boolean;
+  request_message_count?: number;
+  request_message_limit?: number;
+  can_send_message?: boolean;
+  can_share_post?: boolean;
+  message_permission_reason?: string | null;
 }
 
 interface Recipient {
   user: UserInfo;
   roomId?: string;
+  requestStatus: string;
+  requestMessageCount: number;
+  requestMessageLimit: number;
+  canSendMessage: boolean;
+  canSharePost: boolean;
+  permissionReason?: string | null;
+  isAuthor?: boolean;
+}
+
+interface DirectMessageEligibility {
+  target_user: UserInfo;
+  room_id?: string | null;
+  request_status: string;
+  request_message_count: number;
+  request_message_limit: number;
+  can_send_message: boolean;
+  can_share_post: boolean;
+  message_permission_reason?: string | null;
 }
 
 interface SendPostDmModalProps {
@@ -48,8 +73,11 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
   onClose,
 }) => {
   const { colors } = useTheme();
+  const { user: currentUser } = useAuth();
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [mutualFollowers, setMutualFollowers] = useState<UserInfo[]>([]);
+  const [authorEligibility, setAuthorEligibility] =
+    useState<DirectMessageEligibility | null>(null);
   const [loading, setLoading] = useState(false);
   const [sendingUserId, setSendingUserId] = useState<string | null>(null);
   const [sentUserIds, setSentUserIds] = useState<Record<string, boolean>>({});
@@ -62,15 +90,29 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
       setLoading(true);
       setSentUserIds({});
       setMessage("");
+      setAuthorEligibility(null);
       try {
-        const [roomsResponse, followersResponse] = await Promise.all([
+        const authorId = post.user?.id;
+        const isOwnPost =
+          post.is_mine ||
+          authorId === currentUser?.id ||
+          post.user?.username === currentUser?.username;
+        const [roomsResponse, followersResponse, eligibilityResponse] = await Promise.all([
           api.get("/direct/rooms"),
           api.get("/users/me/mutual-followers"),
+          authorId && !isOwnPost
+            ? api.get(`/direct/eligibility/${authorId}`)
+            : Promise.resolve(null),
         ]);
         const roomItems = roomsResponse.data?.data || roomsResponse.data;
         const followerItems = followersResponse.data?.data || followersResponse.data;
         setChatRooms(Array.isArray(roomItems) ? roomItems : []);
         setMutualFollowers(Array.isArray(followerItems) ? followerItems : []);
+        if (eligibilityResponse) {
+          const eligibility =
+            eligibilityResponse.data?.data || eligibilityResponse.data;
+          setAuthorEligibility(eligibility);
+        }
       } catch (error) {
         console.error("Failed to load DM recipients", error);
         Alert.alert("오류", "메시지를 보낼 사용자를 불러오지 못했습니다.");
@@ -80,28 +122,63 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
     };
 
     fetchRecipients();
-  }, [visible, post]);
+  }, [visible, post, currentUser?.id, currentUser?.username]);
 
   const recipients = useMemo<Recipient[]>(() => {
     const recipientMap = new Map<string, Recipient>();
 
     mutualFollowers.forEach((user) => {
-      recipientMap.set(user.id, { user });
+      recipientMap.set(user.id, {
+        user,
+        requestStatus: "ACCEPTED",
+        requestMessageCount: 0,
+        requestMessageLimit: 5,
+        canSendMessage: true,
+        canSharePost: true,
+      });
     });
     chatRooms.forEach((room) => {
-      if (!room.target_user || room.request_status === "PENDING") return;
+      if (!room.target_user) return;
       recipientMap.set(room.target_user.id, {
         user: room.target_user,
         roomId: room.id,
+        requestStatus: room.request_status || "ACCEPTED",
+        requestMessageCount: room.request_message_count || 0,
+        requestMessageLimit: room.request_message_limit || 5,
+        canSendMessage: room.can_send_message !== false,
+        canSharePost: room.can_share_post !== false,
+        permissionReason: room.message_permission_reason,
       });
     });
 
-    return Array.from(recipientMap.values());
-  }, [chatRooms, mutualFollowers]);
+    if (authorEligibility) {
+      recipientMap.set(authorEligibility.target_user.id, {
+        user: authorEligibility.target_user,
+        roomId: authorEligibility.room_id || undefined,
+        requestStatus: authorEligibility.request_status,
+        requestMessageCount: authorEligibility.request_message_count || 0,
+        requestMessageLimit: authorEligibility.request_message_limit || 5,
+        canSendMessage: authorEligibility.can_send_message,
+        canSharePost: authorEligibility.can_share_post,
+        permissionReason: authorEligibility.message_permission_reason,
+        isAuthor: true,
+      });
+    }
+
+    const items = Array.from(recipientMap.values());
+    return items.sort((first, second) => Number(second.isAuthor) - Number(first.isAuthor));
+  }, [authorEligibility, chatRooms, mutualFollowers]);
 
   const handleSendDm = async (recipient: Recipient) => {
     const note = message.trim();
-    if (!post || !note || sendingUserId || sentUserIds[recipient.user.id]) return;
+    const needsRequestText = !recipient.canSharePost;
+    if (
+      !post ||
+      !recipient.canSendMessage ||
+      (needsRequestText && !note) ||
+      sendingUserId ||
+      sentUserIds[recipient.user.id]
+    ) return;
 
     setSendingUserId(recipient.user.id);
     try {
@@ -114,18 +191,32 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
         roomId = room.id;
       }
 
-      await api.post(`/direct/rooms/${roomId}/messages`, {
-        content: note,
-        message_type: "TEXT",
-      });
+      await api.post(
+        `/direct/rooms/${roomId}/messages`,
+        recipient.canSharePost
+          ? {
+              content: note || "게시물을 공유했습니다.",
+              message_type: "POST",
+              shared_post_id: post.id,
+            }
+          : {
+              content: note,
+              message_type: "TEXT",
+            }
+      );
 
       setSentUserIds((previous) => ({
         ...previous,
         [recipient.user.id]: true,
       }));
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to send post by DM", error);
-      Alert.alert("전송 실패", "게시물을 메시지로 보내지 못했습니다.");
+      Alert.alert(
+        "전송 실패",
+        error.response?.data?.error?.message ||
+          error.response?.data?.detail ||
+          "게시물을 메시지로 보내지 못했습니다."
+      );
     } finally {
       setSendingUserId(null);
     }
@@ -186,6 +277,20 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
               renderItem={({ item }) => {
                 const isSending = sendingUserId === item.user.id;
                 const isSent = Boolean(sentUserIds[item.user.id]);
+                const needsRequestText = !item.canSharePost;
+                const isDisabled =
+                  !item.canSendMessage || (needsRequestText && !message.trim());
+                const statusText = item.isAuthor
+                  ? item.requestStatus === "PENDING"
+                    ? `작성자 · 승인 대기 · ${item.requestMessageCount}/${item.requestMessageLimit}`
+                    : item.requestStatus === "NEW_REQUEST"
+                      ? "작성자 · 메시지 요청"
+                      : item.requestStatus === "ACCEPTED"
+                        ? "작성자"
+                        : `작성자 · ${item.permissionReason || "전송 불가"}`
+                  : item.requestStatus === "PENDING"
+                    ? `승인 대기 · ${item.requestMessageCount}/${item.requestMessageLimit}`
+                    : item.permissionReason;
 
                 return (
                   <View
@@ -217,6 +322,14 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
                             {item.user.full_name}
                           </Text>
                         )}
+                        {!!statusText && (
+                          <Text
+                            style={[styles.statusText, { color: colors.textMuted }]}
+                            numberOfLines={1}
+                          >
+                            {statusText}
+                          </Text>
+                        )}
                       </View>
                     </View>
 
@@ -226,12 +339,12 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
                         {
                           backgroundColor: isSent
                             ? colors.bgInput
-                            : message.trim()
+                            : !isDisabled
                               ? colors.accentBlue
                               : colors.bgInput,
                         },
                       ]}
-                      disabled={isSending || isSent || !message.trim()}
+                      disabled={isSending || isSent || isDisabled}
                       onPress={() => handleSendDm(item)}
                     >
                       {isSending ? (
@@ -240,7 +353,7 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
                         <Text
                           style={[
                             styles.sendButtonText,
-                            (isSent || !message.trim()) && { color: colors.textMuted },
+                            (isSent || isDisabled) && { color: colors.textMuted },
                           ]}
                         >
                           {isSent ? "보냄" : "보내기"}
@@ -338,6 +451,10 @@ const styles = StyleSheet.create({
   },
   fullName: {
     fontSize: 12,
+    marginTop: 2,
+  },
+  statusText: {
+    fontSize: 11,
     marginTop: 2,
   },
   sendButton: {

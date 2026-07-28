@@ -50,6 +50,10 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
     targetUser,
     requestStatus = "ACCEPTED",
     isOutgoingRequest = false,
+    requestMessageCount: initialRequestMessageCount = 0,
+    requestMessageLimit = 5,
+    canSendMessage: initialCanSendMessage = true,
+    messagePermissionReason,
   } = route.params;
   const { user: currentUser } = useAuth();
   const { colors } = useTheme();
@@ -61,7 +65,10 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [postModalVisible, setPostModalVisible] = useState(false);
   const [roomRequestStatus, setRoomRequestStatus] = useState(requestStatus);
-  const [hasSentRequestMessage, setHasSentRequestMessage] = useState(false);
+  const [requestMessageCount, setRequestMessageCount] = useState(
+    initialRequestMessageCount
+  );
+  const [canSendMessage, setCanSendMessage] = useState(initialCanSendMessage);
 
   const ws = useRef<WebSocket | null>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -89,7 +96,13 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
             ? messageItems
             : [];
           setMessages(normalizedMessages);
-          setHasSentRequestMessage(normalizedMessages.length > 0);
+          if (roomRequestStatus === "PENDING" && isOutgoingRequest) {
+            setRequestMessageCount(
+              normalizedMessages.filter(
+                (message) => message.sender.id === currentUser?.id
+              ).length
+            );
+          }
         }
       } catch (error) {
         console.error("Failed to load room messages", error);
@@ -161,11 +174,14 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
     if (!inputText.trim()) return;
     if (
       roomRequestStatus === "PENDING" &&
-      (!isOutgoingRequest || hasSentRequestMessage)
+      (!isOutgoingRequest ||
+        !canSendMessage ||
+        requestMessageCount >= requestMessageLimit)
     ) {
       Alert.alert(
         "요청 승인 대기 중",
-        "상대방이 메시지 요청을 승인할 때까지 추가 메시지를 보낼 수 없습니다."
+        messagePermissionReason ||
+          `상대방이 메시지 요청을 승인할 때까지 메시지는 ${requestMessageLimit}개까지만 보낼 수 있습니다.`
       );
       return;
     }
@@ -204,7 +220,13 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
             message.id === tempId ? savedMessage : message
           )
         );
-        setHasSentRequestMessage(true);
+        setRequestMessageCount((previous) => {
+          const nextCount = previous + 1;
+          if (nextCount >= requestMessageLimit) {
+            setCanSendMessage(false);
+          }
+          return nextCount;
+        });
       } else if (ws.current && ws.current.readyState === WebSocket.OPEN) {
         ws.current.send(
           JSON.stringify({
@@ -410,7 +432,8 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
     roomRequestStatus === "ACCEPTED" ||
     (roomRequestStatus === "PENDING" &&
       isOutgoingRequest &&
-      !hasSentRequestMessage);
+      canSendMessage &&
+      requestMessageCount < requestMessageLimit);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bgPrimary, paddingTop: insets.top }]}>
@@ -440,9 +463,7 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
         <View style={[styles.requestBanner, { backgroundColor: colors.bgInput }]}>
           <Text style={[styles.requestBannerText, { color: colors.textSecondary }]}>
             {isOutgoingRequest
-              ? hasSentRequestMessage
-                ? "메시지 요청을 보냈습니다. 상대방의 승인을 기다리고 있습니다."
-                : "비팔로워에게는 첫 텍스트 메시지 1개만 보낼 수 있습니다."
+              ? `승인 대기 · ${requestMessageCount}/${requestMessageLimit} · 텍스트 메시지만 보낼 수 있습니다.`
               : "이 메시지 요청을 승인해야 대화를 계속할 수 있습니다."}
           </Text>
           {!isOutgoingRequest && (
