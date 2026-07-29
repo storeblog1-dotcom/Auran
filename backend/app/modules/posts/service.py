@@ -605,6 +605,9 @@ async def update_post(
             db.add(media_obj)
 
     await db.flush()
+    # `updated_at` is server-managed. Refresh it explicitly before the audit
+    # snapshot reads it so async SQLAlchemy does not attempt implicit IO.
+    await db.refresh(post, attribute_names=["updated_at"])
     revision = await preserve_post(
         db, post, lifecycle_event="updated", ip_address=ip_address
     )
