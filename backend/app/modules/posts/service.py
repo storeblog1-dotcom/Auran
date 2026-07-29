@@ -34,6 +34,11 @@ from app.modules.posts.schemas import (
 from app.modules.users.models import Follow
 
 
+def should_anonymize_user(board_type: str | None, is_admin: bool) -> bool:
+    """익명 게시판에서도 관리자 신원은 서비스 운영 주체로 공개한다."""
+    return board_type == "anonymous" and not is_admin
+
+
 def _post_visibility_clause(current_user: Optional[User]):
     """계정 공개 설정과 게시물 공개 범위를 함께 적용한다."""
     public_author = User.is_private.is_(False)
@@ -217,6 +222,7 @@ async def _build_post_responses_batch(
                         nickname=c.user.nickname,
                         full_name=c.user.full_name,
                         profile_image_url=c.user.profile_image_url,
+                        is_admin=c.user.is_admin,
                     ),
                     content=c.content,
                     created_at=c.created_at,
@@ -239,7 +245,7 @@ async def _build_post_responses_batch(
         is_mine = current_user is not None and (
             current_user.is_admin or post.user_id == current_user.id
         )
-        if post.board_type == "anonymous":
+        if should_anonymize_user(post.board_type, post.user.is_admin):
             user_summary = PostUserSummary(
                 id=uuid.UUID(int=0),
                 username="익명",
@@ -254,13 +260,14 @@ async def _build_post_responses_batch(
                 full_name=post.user.full_name,
                 profile_image_url=post.user.profile_image_url,
                 is_following=post.user.id in following_user_ids,
+                is_admin=post.user.is_admin,
             )
         
         raw_previews = preview_comments_map.get(post.id, [])
         final_previews = []
         for pc in raw_previews:
             pc_copy = pc.model_copy()
-            if post.board_type == "anonymous":
+            if should_anonymize_user(post.board_type, pc.user.is_admin):
                 pc_copy.user = PostUserSummary(
                     id=uuid.UUID(int=0),
                     username="익명",
@@ -725,6 +732,7 @@ async def get_post_likes(
             nickname=like.user.nickname,
             full_name=like.user.full_name,
             profile_image_url=like.user.profile_image_url,
+            is_admin=like.user.is_admin,
         )
         for like in likes
     ]
@@ -841,22 +849,46 @@ async def create_comment(
                 comment_id=str(comment.id),
             )
 
-    user_summary = PostUserSummary(
-        id=created_comment.user.id,
-        username=created_comment.user.username,
-        nickname=created_comment.user.nickname,
-        full_name=created_comment.user.full_name,
-        profile_image_url=created_comment.user.profile_image_url,
-    )
+    if should_anonymize_user(
+        post_obj.board_type if post_obj else None,
+        created_comment.user.is_admin,
+    ):
+        user_summary = PostUserSummary(
+            id=uuid.UUID(int=0),
+            username="익명",
+            full_name="익명 사용자",
+            profile_image_url=None,
+        )
+    else:
+        user_summary = PostUserSummary(
+            id=created_comment.user.id,
+            username=created_comment.user.username,
+            nickname=created_comment.user.nickname,
+            full_name=created_comment.user.full_name,
+            profile_image_url=created_comment.user.profile_image_url,
+            is_admin=created_comment.user.is_admin,
+        )
     reply_to_user_summary = None
     if created_comment.reply_to_user:
-        reply_to_user_summary = PostUserSummary(
-            id=created_comment.reply_to_user.id,
-            username=created_comment.reply_to_user.username,
-            nickname=created_comment.reply_to_user.nickname,
-            full_name=created_comment.reply_to_user.full_name,
-            profile_image_url=created_comment.reply_to_user.profile_image_url,
-        )
+        if should_anonymize_user(
+            post_obj.board_type if post_obj else None,
+            created_comment.reply_to_user.is_admin,
+        ):
+            reply_to_user_summary = PostUserSummary(
+                id=uuid.UUID(int=0),
+                username="익명",
+                full_name="익명 사용자",
+                profile_image_url=None,
+            )
+        else:
+            reply_to_user_summary = PostUserSummary(
+                id=created_comment.reply_to_user.id,
+                username=created_comment.reply_to_user.username,
+                nickname=created_comment.reply_to_user.nickname,
+                full_name=created_comment.reply_to_user.full_name,
+                profile_image_url=created_comment.reply_to_user.profile_image_url,
+                is_admin=created_comment.reply_to_user.is_admin,
+            )
 
     return CommentResponse(
         id=created_comment.id,
@@ -944,7 +976,7 @@ async def get_post_comments(
             current_user.is_admin or c.user_id == current_user.id
         )
 
-        if is_anon:
+        if should_anonymize_user(post_obj.board_type, c.user.is_admin):
             c_user = PostUserSummary(
                 id=uuid.UUID(int=0),
                 username="익명",
@@ -958,6 +990,7 @@ async def get_post_comments(
                 nickname=c.user.nickname,
                 full_name=c.user.full_name,
                 profile_image_url=c.user.profile_image_url,
+                is_admin=c.user.is_admin,
             )
 
         return CommentResponse(
@@ -967,16 +1000,58 @@ async def get_post_comments(
             user=c_user,
             reply_to_user=(
                 PostUserSummary(
-                    id=(uuid.UUID(int=0) if post.board_type == "anonymous" else c.reply_to_user.id),
-                    username=("익명" if post.board_type == "anonymous" else c.reply_to_user.username),
-                    nickname=("익명" if post.board_type == "anonymous" else c.reply_to_user.nickname),
-                    full_name=("익명 사용자" if post.board_type == "anonymous" else c.reply_to_user.full_name),
-                    profile_image_url=(None if post.board_type == "anonymous" else c.reply_to_user.profile_image_url),
+                    id=(
+                        uuid.UUID(int=0)
+                        if should_anonymize_user(
+                            post_obj.board_type, c.reply_to_user.is_admin
+                        )
+                        else c.reply_to_user.id
+                    ),
+                    username=(
+                        "익명"
+                        if should_anonymize_user(
+                            post_obj.board_type, c.reply_to_user.is_admin
+                        )
+                        else c.reply_to_user.username
+                    ),
+                    nickname=(
+                        "익명"
+                        if should_anonymize_user(
+                            post_obj.board_type, c.reply_to_user.is_admin
+                        )
+                        else c.reply_to_user.nickname
+                    ),
+                    full_name=(
+                        "익명 사용자"
+                        if should_anonymize_user(
+                            post_obj.board_type, c.reply_to_user.is_admin
+                        )
+                        else c.reply_to_user.full_name
+                    ),
+                    profile_image_url=(
+                        None
+                        if should_anonymize_user(
+                            post_obj.board_type, c.reply_to_user.is_admin
+                        )
+                        else c.reply_to_user.profile_image_url
+                    ),
+                    is_admin=c.reply_to_user.is_admin,
                 )
                 if c.reply_to_user
                 else None
             ),
-            reply_to_display_name=("익명" if post.board_type == "anonymous" and c.reply_to_display_name else c.reply_to_display_name),
+            reply_to_display_name=(
+                "익명"
+                if (
+                    post_obj.board_type == "anonymous"
+                    and c.reply_to_display_name
+                    and (
+                        not c.reply_to_user
+                        or not c.reply_to_user.is_admin
+                    )
+                )
+                else c.reply_to_display_name
+            ),
             content=c.content,
             created_at=c.created_at,
             updated_at=c.updated_at,
@@ -1070,7 +1145,7 @@ async def update_comment(
     board_type = post_res.scalar_one_or_none()
     is_anon = board_type == "anonymous"
 
-    if is_anon:
+    if should_anonymize_user(board_type, comment.user.is_admin):
         user_summary = PostUserSummary(
             id=uuid.UUID(int=0),
             username="익명",
@@ -1084,6 +1159,7 @@ async def update_comment(
             nickname=comment.user.nickname,
             full_name=comment.user.full_name,
             profile_image_url=comment.user.profile_image_url,
+            is_admin=comment.user.is_admin,
         )
 
     return CommentResponse(
@@ -1098,6 +1174,7 @@ async def update_comment(
                 nickname=comment.reply_to_user.nickname,
                 full_name=comment.reply_to_user.full_name,
                 profile_image_url=comment.reply_to_user.profile_image_url,
+                is_admin=comment.reply_to_user.is_admin,
             )
             if comment.reply_to_user
             else None

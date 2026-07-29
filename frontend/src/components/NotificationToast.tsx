@@ -3,7 +3,6 @@ import {
   StyleSheet,
   Text,
   View,
-  Image,
   TouchableOpacity,
   Animated,
   SafeAreaView,
@@ -11,9 +10,9 @@ import {
   StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { getFullImageUrl } from "../config";
 import { useTheme } from "../context/ThemeContext";
 import { getDisplayName } from "../utils/displayName";
+import { AdminAvatar, AdminBadge } from "./AdminIdentity";
 
 export interface ToastData {
   id: string;
@@ -23,6 +22,7 @@ export interface ToastData {
     nickname?: string | null;
     full_name?: string;
     profile_image_url?: string | null;
+    is_admin?: boolean;
   };
   type: string;
   message?: string | null;
@@ -131,8 +131,8 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
           }}
         >
           <View style={styles.avatarWrapper}>
-            <Image
-              source={{ uri: getFullImageUrl(toast.sender.profile_image_url) }}
+            <AdminAvatar
+              user={toast.sender}
               style={styles.avatar}
             />
             <View
@@ -146,9 +146,12 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
           </View>
 
           <View style={styles.textContainer}>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>
-              {getDisplayName(toast.sender)}
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={[styles.title, { color: colors.textPrimary }]}>
+                {getDisplayName(toast.sender)}
+              </Text>
+              {toast.sender.is_admin && <AdminBadge />}
+            </View>
             <Text
               style={[styles.message, { color: colors.textSecondary }]}
               numberOfLines={2}

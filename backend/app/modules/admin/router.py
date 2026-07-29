@@ -906,6 +906,7 @@ async def get_admin_posts(
                 "id": str(author.id) if author else "",
                 "username": author.username if author else "알 수 없음",
                 "nickname": author.nickname if author else "알 수 없음",
+                "is_admin": author.is_admin if author else False,
             },
             "created_at": p.created_at.isoformat() if p.created_at else None,
         })

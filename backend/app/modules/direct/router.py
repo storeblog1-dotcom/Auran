@@ -605,6 +605,7 @@ async def websocket_endpoint(
                 "nickname": user.nickname,
                 "full_name": user.full_name,
                 "profile_image_url": user.profile_image_url,
+                "is_admin": user.is_admin,
             }
         except Exception:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
@@ -770,6 +771,7 @@ def _format_sender(user: User) -> SenderResponse:
         nickname=user.nickname,
         full_name=user.full_name,
         profile_image_url=user.profile_image_url,
+        is_admin=user.is_admin,
     )
 
 
@@ -978,6 +980,7 @@ async def _format_room_response(db: AsyncSession, room_id: uuid.UUID, current_us
                 nickname=last_msg.sender.nickname,
                 full_name=last_msg.sender.full_name,
                 profile_image_url=last_msg.sender.profile_image_url,
+                is_admin=last_msg.sender.is_admin,
             ),
             content=last_msg.content,
             message_type=last_msg.message_type,

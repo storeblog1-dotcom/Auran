@@ -6,15 +6,18 @@ import {
   Modal,
   TouchableOpacity,
   FlatList,
-  Image,
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../services/api";
 import { getDisplayName } from "../utils/displayName";
-import { getFullImageUrl } from "../config";
 import { useTheme } from "../context/ThemeContext";
+import {
+  AdminAvatar,
+  AdminBadge,
+  showAdminProfilePrivateAlert,
+} from "./AdminIdentity";
 
 interface UserListModalProps {
   visible: boolean;
@@ -96,17 +99,21 @@ export const UserListModal: React.FC<UserListModalProps> = ({
         style={[styles.userCard, { borderBottomColor: colors.borderColor }]}
         activeOpacity={0.7}
         onPress={() => {
+          if (item.is_admin) {
+            showAdminProfilePrivateAlert();
+            return;
+          }
           onClose();
           if (onSelectUser) onSelectUser(item.username);
         }}
       >
         <View style={styles.userLeft}>
-          <Image
-            source={{ uri: getFullImageUrl(item.profile_image_url) }}
-            style={styles.avatar}
-          />
+          <AdminAvatar user={item} style={styles.avatar} />
           <View>
-            <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(item)}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(item)}</Text>
+              {item.is_admin && <AdminBadge />}
+            </View>
             <Text style={[styles.fullName, { color: colors.textSecondary }]}>{item.full_name}</Text>
           </View>
         </View>

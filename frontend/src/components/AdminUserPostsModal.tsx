@@ -15,6 +15,7 @@ import api from "../services/api";
 import { AdminUserItem } from "../services/adminService";
 import { PostDetailModal } from "./PostDetailModal";
 import { getDisplayName } from "../utils/displayName";
+import { AdminBadge } from "./AdminIdentity";
 
 
 interface AdminUserPostsModalProps {
@@ -90,11 +91,7 @@ export const AdminUserPostsModal: React.FC<AdminUserPostsModalProps> = ({
           <View style={styles.userInfoTextContainer}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
               <Text style={[styles.usernameText, { color: colors.textPrimary }]}>{getDisplayName(user)}</Text>
-              {user.is_admin && (
-                <View style={styles.adminBadge}>
-                  <Text style={styles.adminBadgeText}>관리자</Text>
-                </View>
-              )}
+              {user.is_admin && <AdminBadge />}
             </View>
             <Text style={[styles.fullNameText, { color: colors.textMuted }]}>{user.full_name}</Text>
             <Text style={[styles.emailText, { color: colors.textMuted }]}>{user.email}</Text>

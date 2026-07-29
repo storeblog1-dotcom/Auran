@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   FlatList,
   TextInput,
-  Image,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -21,6 +20,7 @@ import { useTheme } from "../context/ThemeContext";
 import { getDisplayName } from "../utils/displayName";
 import { HashtagText } from "./HashtagText";
 import { ReportSheet } from "./ReportSheet";
+import { AdminAvatar, AdminBadge } from "./AdminIdentity";
 
 export interface Comment {
   id: string;
@@ -32,6 +32,7 @@ export interface Comment {
     nickname?: string | null;
     full_name: string;
     profile_image_url?: string;
+    is_admin?: boolean;
   };
   reply_to_user?: {
     id: string;
@@ -39,6 +40,7 @@ export interface Comment {
     nickname?: string | null;
     full_name: string;
     profile_image_url?: string;
+    is_admin?: boolean;
   } | null;
   reply_to_display_name?: string | null;
   content: string;
@@ -81,12 +83,8 @@ export const CommentNode: React.FC<CommentNodeProps> = ({
   return (
     <View style={styles.commentContainer}>
       <View style={styles.commentItem}>
-        <Image
-          source={{
-            uri:
-              comment.user.profile_image_url ||
-              "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
-          }}
+        <AdminAvatar
+          user={comment.user}
           style={depth > 0 ? styles.replyAvatar : styles.avatar}
         />
         <View style={styles.commentContentContainer}>
@@ -101,6 +99,7 @@ export const CommentNode: React.FC<CommentNodeProps> = ({
               <Text style={[styles.username, { color: colors.textPrimary, marginRight: 8 }]}>
                 {getDisplayName(comment.user)}
               </Text>
+              {comment.user.is_admin && <AdminBadge />}
               <Text style={[styles.timeText, { color: colors.textMuted }]}>
                 {new Date(comment.created_at).toLocaleDateString("ko-KR", {
                   month: "short",
@@ -378,12 +377,8 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
 
           {/* Input Bar */}
           <View style={[styles.inputContainer, { backgroundColor: colors.bgPrimary, borderTopColor: colors.borderColor }]}>
-            <Image
-              source={{
-                uri:
-                  currentUser?.profile_image_url ||
-                  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
-              }}
+            <AdminAvatar
+              user={currentUser}
               style={styles.inputAvatar}
             />
             <TextInput

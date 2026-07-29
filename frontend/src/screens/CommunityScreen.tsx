@@ -24,6 +24,7 @@ import { CreateCommunityPostModal } from "../components/CreateCommunityPostModal
 import { CommunityPostDetailModal } from "../components/CommunityPostDetailModal";
 import { ImageDetailViewerModal } from "../components/ImageDetailViewerModal";
 import { AuraLogoText } from "../components/AuraLogoText";
+import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
 
 const { width } = Dimensions.get("window");
 type CommunitySection = "anonymous" | "info" | "partner";
@@ -226,6 +227,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
 
   const renderPostItem = ({ item }: { item: any }) => {
     const isAnonymous = item.board_type === "anonymous";
+    const hideIdentity = isAnonymous && !item.user?.is_admin;
     const mediaUrl = item.media && item.media.length > 0 ? item.media[0].media_url : null;
     const isMe = item.is_mine || (currentUser && item.user?.username === currentUser.username);
 
@@ -247,19 +249,17 @@ export const CommunityScreen = ({ navigation, route }: any) => {
         {/* Header (Author & Date & Edit/Delete for Owner) */}
         <View style={styles.cardHeader}>
           <View style={styles.authorGroup}>
-            {isAnonymous ? (
+            {hideIdentity ? (
               <View style={[styles.anonAvatarBadge, { backgroundColor: "rgba(139, 92, 246, 0.15)" }]}>
                 <Ionicons name="eye-off" size={14} color={colors.accentPurple || "#a855f7"} />
               </View>
             ) : (
-              <Image
-                source={{ uri: getFullImageUrl(item.user?.profile_image_url) }}
-                style={styles.userAvatar}
-              />
+              <AdminAvatar user={item.user} style={styles.userAvatar} />
             )}
             <Text style={[styles.authorText, { color: colors.textPrimary }]}>
-              {isAnonymous ? "익명" : getDisplayName(item.user)}
+              {hideIdentity ? "익명" : getDisplayName(item.user)}
             </Text>
+            {item.user?.is_admin && <AdminBadge />}
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
             {isMe && (

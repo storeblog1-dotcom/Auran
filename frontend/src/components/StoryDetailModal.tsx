@@ -5,7 +5,6 @@ import {
   View,
   Modal,
   TouchableOpacity,
-  Image,
   Dimensions,
   Alert,
   Platform,
@@ -17,6 +16,7 @@ import { getFullImageUrl } from "../config";
 import { ZoomableImage } from "./ImageDetailViewerModal";
 import { useTheme } from "../context/ThemeContext";
 import { getDisplayInitial, getDisplayName } from "../utils/displayName";
+import { AdminAvatar, AdminBadge } from "./AdminIdentity";
 
 const { width, height } = Dimensions.get("window");
 
@@ -73,9 +73,9 @@ export const StoryDetailModal: React.FC<StoryDetailModalProps> = ({
           {/* 헤더: 아이디 + 닫기/삭제 버튼 */}
           <View style={styles.header}>
             <View style={styles.userInfo}>
-              {story.user?.profile_image_url ? (
-                <Image
-                  source={{ uri: getFullImageUrl(story.user.profile_image_url) }}
+              {story.user?.is_admin || story.user?.profile_image_url ? (
+                <AdminAvatar
+                  user={story.user}
                   style={styles.avatar}
                 />
               ) : (
@@ -86,6 +86,7 @@ export const StoryDetailModal: React.FC<StoryDetailModalProps> = ({
                 </View>
               )}
               <Text style={styles.username}>{getDisplayName(story.user, "내 스토리")}</Text>
+              {story.user?.is_admin && <AdminBadge />}
             </View>
 
             <View style={styles.headerActions}>

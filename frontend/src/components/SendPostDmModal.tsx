@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Image,
   Modal,
   StyleSheet,
   Text,
@@ -15,8 +14,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
-import { getFullImageUrl } from "../config";
 import { getDisplayName } from "../utils/displayName";
+import { AdminAvatar, AdminBadge } from "./AdminIdentity";
 
 interface UserInfo {
   id: string;
@@ -24,6 +23,7 @@ interface UserInfo {
   nickname?: string | null;
   full_name?: string | null;
   profile_image_url?: string | null;
+  is_admin?: boolean;
 }
 
 interface ChatRoom {
@@ -300,18 +300,16 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
                     ]}
                   >
                     <View style={styles.userInfo}>
-                      <Image
-                        source={{
-                          uri: getFullImageUrl(item.user.profile_image_url),
-                        }}
-                        style={styles.avatar}
-                      />
+                      <AdminAvatar user={item.user} style={styles.avatar} />
                       <View style={styles.userText}>
-                        <Text
-                          style={[styles.username, { color: colors.textPrimary }]}
-                        >
-                          {getDisplayName(item.user)}
-                        </Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                          <Text
+                            style={[styles.username, { color: colors.textPrimary }]}
+                          >
+                            {getDisplayName(item.user)}
+                          </Text>
+                          {item.user.is_admin && <AdminBadge />}
+                        </View>
                         {!!item.user.full_name && (
                           <Text
                             style={[

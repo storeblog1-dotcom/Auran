@@ -70,6 +70,7 @@ class PostUserSummary(BaseModel):
     full_name: str
     profile_image_url: Optional[str] = None
     is_following: bool = False
+    is_admin: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

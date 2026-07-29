@@ -20,6 +20,7 @@ import { PostDetailModal } from "../components/PostDetailModal";
 import { UserListModal } from "../components/UserListModal";
 import { getDisplayName } from "../utils/displayName";
 import { ReportSheet } from "../components/ReportSheet";
+import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
 
 const { width, height } = Dimensions.get("window");
 const DEVICE_ASPECT_RATIO = height / width;
@@ -66,8 +67,17 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
       if (repostsRes.data && repostsRes.data.data) {
         setRepostedPosts(repostsRes.data.data);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.log("Error fetching user profile", err);
+      if (err.response?.status === 403) {
+        Alert.alert(
+          "관리자 계정",
+          err.response?.data?.error?.message ||
+            err.response?.data?.detail ||
+            "관리자 계정의 프로필은 공개되지 않습니다.",
+          [{ text: "확인", onPress: () => navigation.goBack() }]
+        );
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -139,6 +149,7 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
           nickname: profile.nickname,
           full_name: profile.full_name,
           profile_image_url: profile.profile_image_url,
+          is_admin: profile.is_admin,
         },
       });
     } catch (err: any) {
@@ -236,10 +247,8 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
                     },
                   ]}
                 >
-                  <Image
-                    source={{
-                      uri: getFullImageUrl(profile.profile_image_url),
-                    }}
+                  <AdminAvatar
+                    user={profile}
                     style={styles.profileAvatarHero}
                   />
                 </View>
@@ -251,7 +260,11 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
                   <Text style={[styles.fullNameText, { color: colors.textPrimary }]}>
                     {getDisplayName(profile)}
                   </Text>
-                  <Ionicons name="checkmark-circle" size={18} color={primaryAccent} />
+                  {profile.is_admin ? (
+                    <AdminBadge />
+                  ) : (
+                    <Ionicons name="checkmark-circle" size={18} color={primaryAccent} />
+                  )}
                 </View>
                 {profile.bio ? <Text style={[styles.bioSubText, { color: colors.textSecondary }]}>{profile.bio}</Text> : null}
               </View>

@@ -28,6 +28,11 @@ import { CreateCommunityPostModal } from "./CreateCommunityPostModal";
 import { ImageDetailViewerModal } from "./ImageDetailViewerModal";
 import { PostOptionsSheet } from "./PostOptionsSheet";
 import { ReportSheet } from "./ReportSheet";
+import {
+  AdminAvatar,
+  AdminBadge,
+  openUserProfile,
+} from "./AdminIdentity";
 
 const { width } = Dimensions.get("window");
 
@@ -228,6 +233,7 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
   };
 
   const isAnonymous = post?.board_type === "anonymous";
+  const hideIdentity = isAnonymous && !post?.user?.is_admin;
   const isMe = post?.is_mine || (currentUser && post?.user?.username === currentUser.username);
 
   return (
@@ -273,20 +279,20 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
               <ScrollView contentContainerStyle={styles.scrollContent}>
                 {/* Author & Timestamp */}
                 <View style={styles.authorRow}>
-                  {isAnonymous ? (
+                  {hideIdentity ? (
                     <View style={[styles.anonAvatar, { backgroundColor: colors.bgCard || "#27272a" }]}>
                       <Ionicons name="eye-off" size={20} color={colors.accentPurple || "#a855f7"} />
                     </View>
                   ) : (
-                    <Image
-                      source={{ uri: getFullImageUrl(post.user?.profile_image_url) }}
-                      style={styles.userAvatar}
-                    />
+                    <AdminAvatar user={post.user} style={styles.userAvatar} />
                   )}
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.authorName, { color: colors.textPrimary }]}>
-                      {isAnonymous ? "익명" : getDisplayName(post.user)}
-                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={[styles.authorName, { color: colors.textPrimary }]}>
+                        {hideIdentity ? "익명" : getDisplayName(post.user)}
+                      </Text>
+                      {post.user?.is_admin && <AdminBadge />}
+                    </View>
                     <Text style={[styles.timeText, { color: colors.textSecondary }]}>
                       {new Date(post.created_at).toLocaleString("ko-KR", {
                         month: "short",
@@ -482,12 +488,16 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
           setPost((previous: any) => previous ? { ...previous, visibility } : previous);
         }}
         onProfile={() => {
-          if (!isAnonymous && post?.user?.username) {
+          if (!hideIdentity && post?.user?.username) {
+            if (post.user.is_admin) {
+              openUserProfile(navigation, post.user);
+              return;
+            }
             onClose();
-            navigation.navigate("UserProfile", { username: post.user.username });
+            openUserProfile(navigation, post.user);
           }
         }}
-        onFollow={post?.user?.username && !isAnonymous ? async () => {
+        onFollow={post?.user?.username && !hideIdentity ? async () => {
           if (post.user.is_following) {
             await api.delete(`/users/${post.user.username}/follow`);
           } else {
@@ -503,7 +513,7 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
           await api.post("/hidden-content", { target_type: "post", target_id: post.id });
           onClose();
         }}
-        onBlock={post?.user?.username && !isAnonymous ? async () => {
+        onBlock={post?.user?.username && !hideIdentity ? async () => {
           await api.post(`/users/${post.user.username}/block`);
           onClose();
         } : undefined}
@@ -519,7 +529,7 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
         visible={reportVisible}
         targetType="post"
         targetId={post?.id || null}
-        targetUsername={isAnonymous ? null : post?.user?.username}
+        targetUsername={hideIdentity ? null : post?.user?.username}
         onClose={() => setReportVisible(false)}
         onHidden={onClose}
       />
@@ -527,7 +537,11 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
         visible={!!reportComment}
         targetType="comment"
         targetId={reportComment?.id || null}
-        targetUsername={isAnonymous ? null : reportComment?.user?.username}
+        targetUsername={
+          isAnonymous && !reportComment?.user?.is_admin
+            ? null
+            : reportComment?.user?.username
+        }
         onClose={() => setReportComment(null)}
         onHidden={() => post?.id && fetchComments(post.id)}
       />

@@ -34,6 +34,7 @@ import {
 import { AdminUserPostsModal } from "../components/AdminUserPostsModal";
 import { AdminContentRevisionModal } from "../components/AdminContentRevisionModal";
 import { getDisplayName } from "../utils/displayName";
+import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
 
 type AdminTab = "stats" | "users" | "posts" | "activity" | "reports";
 
@@ -737,19 +738,12 @@ export const AdminScreen = ({ navigation }: any) => {
                     setUserPostsModalVisible(true);
                   }}
                 >
-                  <Image
-                    source={{ uri: getFullImageUrl(item.profile_image_url) }}
-                    style={styles.userAvatar}
-                  />
+                  <AdminAvatar user={item} style={styles.userAvatar} />
 
                   <View style={{ flex: 1, marginLeft: 12 }}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                       <Text style={[styles.usernameText, { color: colors.textPrimary }]}>{getDisplayName(item)}</Text>
-                      {item.is_admin && (
-                        <View style={styles.adminBadge}>
-                          <Text style={styles.adminBadgeText}>관리자</Text>
-                        </View>
-                      )}
+                      {item.is_admin && <AdminBadge />}
                     </View>
                     <Text style={[styles.fullNameText, { color: colors.textMuted }]}>{item.full_name}</Text>
                     <Text style={[styles.emailText, { color: colors.textMuted }]}>{item.email}</Text>
@@ -856,6 +850,7 @@ export const AdminScreen = ({ navigation }: any) => {
                         <Text style={[styles.postAuthor, { color: primaryAccent }]}>
                           {getDisplayName(item.author, "알 수 없음")}
                         </Text>
+                        {item.author.is_admin && <AdminBadge />}
                       </View>
                       <Text style={{ color: colors.textMuted, fontSize: 11 }}>
                         {item.created_at ? new Date(item.created_at).toLocaleDateString() : ""}

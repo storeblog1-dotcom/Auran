@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.exceptions import (
     BadRequestException,
     ConflictException,
+    ForbiddenException,
     NotFoundException,
 )
 from app.core.security import hash_password, verify_password
@@ -37,6 +38,10 @@ async def get_user_profile(
 ) -> UserProfileResponse:
     """사용자의 상세 프로필 정보를 조회합니다."""
     target_user = await get_user_by_username(db, target_username)
+    if target_user.is_admin and (
+        current_user is None or not current_user.is_admin
+    ):
+        raise ForbiddenException("관리자 계정의 프로필은 공개되지 않습니다.")
 
     # 게시글 수, 팔로워 수 및 팔로잉 수 구하기
     posts_count_res = await db.execute(
@@ -206,6 +211,7 @@ async def search_users(
                 full_name=user.full_name,
                 profile_image_url=user.profile_image_url,
                 is_following=(user.id in following_ids),
+                is_admin=user.is_admin,
             )
         )
     return summaries
@@ -324,6 +330,7 @@ async def get_followers(
             full_name=u.full_name,
             profile_image_url=u.profile_image_url,
             is_following=(u.id in following_ids),
+            is_admin=u.is_admin,
         )
         for u in followers
     ]
@@ -370,6 +377,7 @@ async def get_following(
             full_name=u.full_name,
             profile_image_url=u.profile_image_url,
             is_following=(u.id in following_ids),
+            is_admin=u.is_admin,
         )
         for u in following_users
     ]
@@ -406,6 +414,7 @@ async def get_mutual_followers(
             full_name=u.full_name,
             profile_image_url=u.profile_image_url,
             is_following=True,
+            is_admin=u.is_admin,
         )
         for u in users
     ]

@@ -10,6 +10,7 @@ class SenderResponse(BaseModel):
     nickname: str | None = None
     full_name: str
     profile_image_url: str | None = None
+    is_admin: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

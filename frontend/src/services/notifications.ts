@@ -7,6 +7,7 @@ export interface SenderSummary {
   nickname?: string | null;
   full_name: string;
   profile_image_url?: string | null;
+  is_admin?: boolean;
 }
 
 export interface NotificationItem {

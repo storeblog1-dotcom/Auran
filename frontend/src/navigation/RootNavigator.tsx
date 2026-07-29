@@ -9,6 +9,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { NotificationProvider, useNotification } from "../context/NotificationContext";
 import { NotificationToast, ToastData } from "../components/NotificationToast";
+import { openUserProfile } from "../components/AdminIdentity";
 import { SplashScreen } from "../components/SplashScreen";
 import api from "../services/api";
 
@@ -167,7 +168,7 @@ const AppContent = () => {
   const handlePressToast = async (toast: ToastData) => {
     if (!navigationRef.current) return;
     if (toast.type === "FOLLOW") {
-      navigationRef.current.navigate("UserProfile", { username: toast.sender.username });
+      openUserProfile(navigationRef.current, toast.sender);
     } else if (toast.type === "DIRECT_MESSAGE") {
       try {
         const res = await api.post("/direct/rooms", { target_user_id: toast.sender.id });
@@ -181,6 +182,7 @@ const AppContent = () => {
             username: toast.sender.username,
             full_name: toast.sender.full_name || toast.sender.username,
             profile_image_url: toast.sender.profile_image_url,
+            is_admin: toast.sender.is_admin,
           },
         });
       } catch (err) {

@@ -6,13 +6,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  Image,
   ActivityIndicator,
   SafeAreaView,
 } from "react-native";
 import api from "../services/api";
 import { getDisplayName } from "../utils/displayName";
-import { getFullImageUrl } from "../config";
+import { AdminAvatar, AdminBadge } from "./AdminIdentity";
 
 interface FollowRequestItem {
   id: string;
@@ -21,6 +20,7 @@ interface FollowRequestItem {
     username: string;
     full_name: string;
     profile_image_url: string | null;
+    is_admin?: boolean;
   };
   created_at: string;
 }
@@ -98,12 +98,12 @@ export const FollowRequestsModal: React.FC<FollowRequestsModalProps> = ({
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
               <View style={styles.row}>
-                <Image
-                  source={{ uri: getFullImageUrl(item.requester.profile_image_url) }}
-                  style={styles.avatar}
-                />
+                <AdminAvatar user={item.requester} style={styles.avatar} />
                 <View style={styles.info}>
-                  <Text style={styles.username}>{getDisplayName(item.requester)}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Text style={styles.username}>{getDisplayName(item.requester)}</Text>
+                    {item.requester.is_admin && <AdminBadge />}
+                  </View>
                   <Text style={styles.fullName}>{item.requester.full_name}</Text>
                 </View>
 

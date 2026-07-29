@@ -37,6 +37,7 @@ class UserSummaryResponse(BaseModel):
     full_name: str
     profile_image_url: str | None = None
     is_following: bool = False
+    is_admin: bool = False
 
     model_config = {"from_attributes": True}
 

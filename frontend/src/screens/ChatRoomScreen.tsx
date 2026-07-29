@@ -24,6 +24,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { getDisplayName } from "../utils/displayName";
+import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
 
 interface MessageSender {
   id: string;
@@ -31,6 +32,7 @@ interface MessageSender {
   nickname?: string | null;
   full_name: string;
   profile_image_url: string | null;
+  is_admin?: boolean;
 }
 
 interface ChatMessage {
@@ -203,6 +205,7 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
         username: currentUser?.username || "",
         full_name: currentUser?.full_name || "",
         profile_image_url: currentUser?.profile_image_url || null,
+        is_admin: currentUser?.is_admin,
       },
       content: contentToSend,
       message_type: "TEXT",
@@ -372,10 +375,7 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
         ]}
       >
         {!isMine && (
-          <Image
-            source={{ uri: getFullImageUrl(item.sender.profile_image_url) }}
-            style={styles.senderAvatar}
-          />
+          <AdminAvatar user={item.sender} style={styles.senderAvatar} />
         )}
         <View
           style={[
@@ -456,15 +456,15 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
           <Ionicons name="chevron-back" size={26} color={colors.textPrimary} />
         </TouchableOpacity>
 
-        <Image
-          source={{ uri: getFullImageUrl(targetUser?.profile_image_url) }}
-          style={styles.headerAvatar}
-        />
+        <AdminAvatar user={targetUser} style={styles.headerAvatar} />
 
         <View style={styles.headerTitleContainer}>
-          <Text style={[styles.headerUsername, { color: colors.textPrimary }]}>
-            {getDisplayName(targetUser, "대화 상대")}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Text style={[styles.headerUsername, { color: colors.textPrimary }]}>
+              {getDisplayName(targetUser, "대화 상대")}
+            </Text>
+            {targetUser?.is_admin && <AdminBadge />}
+          </View>
           <Text style={[styles.headerFullName, { color: colors.textSecondary }]}>
             {targetUser?.full_name || ""}
           </Text>

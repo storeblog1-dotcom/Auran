@@ -4,7 +4,6 @@ import {
   Text,
   View,
   FlatList,
-  Image,
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
@@ -17,7 +16,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import api from "../services/api";
-import { getFullImageUrl } from "../config";
 import { getDisplayName } from "../utils/displayName";
 import { CommentsModal } from "../components/CommentsModal";
 import { StoryBar } from "../components/StoryBar";
@@ -34,6 +32,11 @@ import { PostOptionsSheet } from "../components/PostOptionsSheet";
 import { ReportSheet } from "../components/ReportSheet";
 import { useNotification } from "../context/NotificationContext";
 import { Ionicons } from "@expo/vector-icons";
+import {
+  AdminAvatar,
+  AdminBadge,
+  openUserProfile,
+} from "../components/AdminIdentity";
 
 const { width, height } = Dimensions.get("window");
 const DEVICE_ASPECT_RATIO = height / width;
@@ -404,7 +407,7 @@ export const FeedScreen = ({ navigation }: any) => {
         },
         {
           text: "프로필 보기",
-          onPress: () => navigation.navigate("UserProfile", { username: authorUsername }),
+          onPress: () => openUserProfile(navigation, item.user),
         },
         {
           text: "🚨 게시물 신고하기",
@@ -445,21 +448,13 @@ export const FeedScreen = ({ navigation }: any) => {
         <View style={styles.postHeader}>
           <TouchableOpacity
             style={styles.userInfo}
-            onPress={() => {
-              if (item.user?.username) {
-                navigation.navigate("UserProfile", { username: item.user.username });
-              }
-            }}
+            onPress={() => openUserProfile(navigation, item.user)}
           >
-            <Image
-              source={{
-                uri: getFullImageUrl(item.user?.profile_image_url),
-              }}
-              style={styles.avatar}
-            />
+            <AdminAvatar user={item.user} style={styles.avatar} />
             <View style={styles.authorText}>
               <View style={styles.authorLine}>
                 <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(item.user)}</Text>
+                {item.user?.is_admin && <AdminBadge />}
                 {!isMe && (
                   <TouchableOpacity
                     style={[styles.headerFollowBtn, { backgroundColor: colors.bgInput, borderColor: colors.borderColor }]}
@@ -702,7 +697,7 @@ export const FeedScreen = ({ navigation }: any) => {
           await api.patch(`/posts/${optionsPost.id}`, { visibility });
           setPosts((prev) => prev.map((item) => item.id === optionsPost.id ? { ...item, visibility } : item));
         }}
-        onProfile={() => optionsPost?.user?.username && navigation.navigate("UserProfile", { username: optionsPost.user.username })}
+        onProfile={() => openUserProfile(navigation, optionsPost?.user)}
         onFollow={() => optionsPost?.user?.username && handleToggleFollowUser(optionsPost.user.username, !!optionsPost.user.is_following)}
         onHide={async () => {
           if (!optionsPost) return;

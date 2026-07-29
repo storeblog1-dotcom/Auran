@@ -20,6 +20,7 @@ import api from "../services/api";
 import { getFullImageUrl } from "../config";
 import { ZoomableImage } from "./ImageDetailViewerModal";
 import { getDisplayInitial, getDisplayName } from "../utils/displayName";
+import { AdminAvatar, AdminBadge } from "./AdminIdentity";
 
 const { width, height } = Dimensions.get("window");
 const STORY_DURATION = 5000; // 5초
@@ -226,7 +227,10 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         <SafeAreaView style={{ flex: 1 }}>
           {/* 그리드 헤더 */}
           <View style={styles.gridHeader}>
-            <Text style={styles.gridTitle}>{getDisplayName(user)}의 스토리</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={styles.gridTitle}>{getDisplayName(user)}의 스토리</Text>
+              {user.is_admin && <AdminBadge />}
+            </View>
             <TouchableOpacity onPress={() => setGridVisible(false)} style={styles.iconBtn}>
               <Ionicons name="close" size={24} color="#fff" />
             </TouchableOpacity>
@@ -310,9 +314,9 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
           {/* 유저 헤더 */}
           <View style={styles.header}>
             <View style={styles.userInfo}>
-              {user.profile_image_url ? (
-                <Image
-                  source={{ uri: getFullImageUrl(user.profile_image_url) }}
+              {user.is_admin || user.profile_image_url ? (
+                <AdminAvatar
+                  user={user}
                   style={styles.avatar}
                 />
               ) : (
@@ -323,7 +327,10 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                 </View>
               )}
               <View>
-                <Text style={styles.username}>{getDisplayName(user)}</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text style={styles.username}>{getDisplayName(user)}</Text>
+                  {user.is_admin && <AdminBadge />}
+                </View>
                 <Text style={styles.timeText}>
                   {getFormattedTime(currentStory.created_at)}
                 </Text>
