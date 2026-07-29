@@ -176,6 +176,17 @@ export const CommunityScreen = ({ navigation, route }: any) => {
     setSection(requestedSection);
   }, [requestedSection]);
 
+  useEffect(() => {
+    if (!route?.params?.composeNonce) return;
+    navigation.setParams({ composeNonce: undefined });
+    if (selectedIsPartnerBoard && !currentUser?.is_admin) {
+      Alert.alert("글쓰기 제한", "제휴업소 게시판은 관리자만 글을 작성할 수 있습니다.");
+      return;
+    }
+    setEditingPost(null);
+    setCreateModalVisible(true);
+  }, [route?.params?.composeNonce, navigation, selectedIsPartnerBoard, currentUser?.is_admin]);
+
   const changeSection = (nextSection: CommunitySection) => {
     setSection(nextSection);
     navigation.setParams({ section: nextSection });
@@ -489,25 +500,6 @@ export const CommunityScreen = ({ navigation, route }: any) => {
           }
         />
       )}
-
-      {/* Floating Action Button (FAB) */}
-      {(!selectedIsPartnerBoard || currentUser?.is_admin) && <TouchableOpacity
-        style={styles.fab}
-        onPress={() => {
-          setEditingPost(null);
-          setCreateModalVisible(true);
-        }}
-        activeOpacity={0.9}
-      >
-        <LinearGradient
-          colors={colors.auraGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.fabGradient}
-        >
-          <Ionicons name="create-outline" size={24} color="#ffffff" />
-        </LinearGradient>
-      </TouchableOpacity>}
 
       {/* Modals */}
       <CreateCommunityPostModal

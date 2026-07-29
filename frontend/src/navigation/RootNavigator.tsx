@@ -115,7 +115,38 @@ const MainTabs = () => {
       <Tab.Screen
         name="CreatePost"
         component={CreatePostScreen}
-        options={{
+        options={({ navigation }) => ({
+          tabBarButton: ({ children, style, accessibilityState, testID }) => (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityState={accessibilityState}
+              testID={testID}
+              style={style}
+              onPress={() => {
+                const tabState = navigation.getState();
+                const activeTab = tabState.routes[tabState.index] as any;
+                const nestedState = activeTab?.state;
+                const activeNestedRoute = nestedState?.routes?.[nestedState.index ?? 0];
+                const composeNonce = Date.now();
+
+                if (activeTab?.name === "Feed" && activeNestedRoute?.name === "Community") {
+                  navigation.navigate("Feed", { screen: "Community", params: { composeNonce } });
+                  return;
+                }
+                if (activeTab?.name === "Messages") {
+                  navigation.navigate("Messages", { screen: "DirectMessageHome", params: { composeNonce } });
+                  return;
+                }
+                navigation.navigate({
+                  name: "CreatePost",
+                  params: { mode: "create", editPost: null, onPostUpdated: undefined },
+                  merge: false,
+                });
+              }}
+            >
+              {children}
+            </TouchableOpacity>
+          ),
           tabBarIcon: () => (
             <LinearGradient
               colors={colors.auraGradient}
@@ -138,7 +169,7 @@ const MainTabs = () => {
               <Ionicons name="add" size={28} color="#ffffff" />
             </LinearGradient>
           ),
-        }}
+        })}
       />
       <Tab.Screen
         name="Messages"

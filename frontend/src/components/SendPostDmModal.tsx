@@ -75,10 +75,9 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
 }) => {
   const { colors } = useTheme();
   const { user: currentUser } = useAuth();
-  const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
-  const [mutualFollowers, setMutualFollowers] = useState<UserInfo[]>([]);
   const [authorEligibility, setAuthorEligibility] =
     useState<DirectMessageEligibility | null>(null);
+  const [isOwnPost, setIsOwnPost] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sendingUserId, setSendingUserId] = useState<string | null>(null);
   const [sentUserIds, setSentUserIds] = useState<Record<string, boolean>>({});
@@ -94,28 +93,18 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
       setMessage("");
       clientMessageIdsRef.current = {};
       setAuthorEligibility(null);
+      setIsOwnPost(false);
       try {
         const authorId = post.user?.id;
         const isOwnPost =
           post.is_mine ||
           authorId === currentUser?.id ||
           post.user?.username === currentUser?.username;
-        const [roomsResponse, followersResponse, eligibilityResponse] = await Promise.all([
-          api.get("/direct/rooms"),
-          api.get("/users/me/mutual-followers"),
-          authorId && !isOwnPost
-            ? api.get(`/direct/eligibility/${authorId}`)
-            : Promise.resolve(null),
-        ]);
-        const roomItems = roomsResponse.data?.data || roomsResponse.data;
-        const followerItems = followersResponse.data?.data || followersResponse.data;
-        setChatRooms(Array.isArray(roomItems) ? roomItems : []);
-        setMutualFollowers(Array.isArray(followerItems) ? followerItems : []);
-        if (eligibilityResponse) {
-          const eligibility =
-            eligibilityResponse.data?.data || eligibilityResponse.data;
-          setAuthorEligibility(eligibility);
-        }
+        setIsOwnPost(Boolean(isOwnPost));
+        if (!authorId || isOwnPost) return;
+        const eligibilityResponse = await api.get(`/direct/eligibility/${authorId}`);
+        const eligibility = eligibilityResponse.data?.data || eligibilityResponse.data;
+        setAuthorEligibility(eligibility);
       } catch (error) {
         console.error("Failed to load DM recipients", error);
         Alert.alert("오류", "메시지를 보낼 사용자를 불러오지 못했습니다.");
@@ -128,34 +117,8 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
   }, [visible, post, currentUser?.id, currentUser?.username]);
 
   const recipients = useMemo<Recipient[]>(() => {
-    const recipientMap = new Map<string, Recipient>();
-
-    mutualFollowers.forEach((user) => {
-      recipientMap.set(user.id, {
-        user,
-        requestStatus: "ACCEPTED",
-        requestMessageCount: 0,
-        requestMessageLimit: 5,
-        canSendMessage: true,
-        canSharePost: true,
-      });
-    });
-    chatRooms.forEach((room) => {
-      if (!room.target_user) return;
-      recipientMap.set(room.target_user.id, {
-        user: room.target_user,
-        roomId: room.id,
-        requestStatus: room.request_status || "ACCEPTED",
-        requestMessageCount: room.request_message_count || 0,
-        requestMessageLimit: room.request_message_limit || 5,
-        canSendMessage: room.can_send_message !== false,
-        canSharePost: room.can_share_post !== false,
-        permissionReason: room.message_permission_reason,
-      });
-    });
-
-    if (authorEligibility) {
-      recipientMap.set(authorEligibility.target_user.id, {
+    if (!authorEligibility) return [];
+    return [{
         user: authorEligibility.target_user,
         roomId: authorEligibility.room_id || undefined,
         requestStatus: authorEligibility.request_status,
@@ -165,12 +128,8 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
         canSharePost: authorEligibility.can_share_post,
         permissionReason: authorEligibility.message_permission_reason,
         isAuthor: true,
-      });
-    }
-
-    const items = Array.from(recipientMap.values());
-    return items.sort((first, second) => Number(second.isAuthor) - Number(first.isAuthor));
-  }, [authorEligibility, chatRooms, mutualFollowers]);
+    }];
+  }, [authorEligibility]);
 
   const handleSendDm = async (recipient: Recipient) => {
     const note = message;
@@ -381,7 +340,7 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
               }}
               ListEmptyComponent={
                 <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                  메시지를 보낼 수 있는 사용자가 없습니다.
+                  {isOwnPost ? "내 게시물은 자신에게 메시지로 보낼 수 없습니다." : "작성자에게 메시지를 보낼 수 없습니다."}
                 </Text>
               }
             />

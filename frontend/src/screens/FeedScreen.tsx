@@ -682,12 +682,6 @@ export const FeedScreen = ({ navigation }: any) => {
             <View style={styles.emptyContainer}>
               <Text style={[styles.emptyText, { color: colors.textPrimary }]}>아직 피드 게시물이 없습니다.</Text>
               <Text style={[styles.emptySubText, { color: colors.textSecondary }]}>첫 번째 게시물을 작성해보세요!</Text>
-              <TouchableOpacity
-                style={styles.emptyBtn}
-                onPress={() => navigation.navigate("CreatePost")}
-              >
-                <Text style={styles.emptyBtnText}>게시물 작성하기</Text>
-              </TouchableOpacity>
             </View>
           }
         />
