@@ -11,7 +11,8 @@ from app.core.config import settings
 
 
 VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
-ALLOWED_HOSTS = {"youtube.com", "www.youtube.com"}
+WATCH_HOSTS = {"youtube.com", "www.youtube.com"}
+SHORT_HOSTS = {"youtu.be", "www.youtu.be"}
 YOUTUBE_VIDEOS_API = "https://www.googleapis.com/youtube/v3/videos"
 
 
@@ -29,12 +30,19 @@ def _extract_video_id(raw_url: str) -> str:
     except ValueError as exc:
         raise BadRequestException("유효한 YouTube 영상 주소가 아닙니다.") from exc
 
-    if parsed.scheme != "https" or parsed.hostname not in ALLOWED_HOSTS or parsed.path != "/watch":
+    if parsed.scheme != "https":
         raise BadRequestException(
-            "YouTube 일반 영상 주소(https://www.youtube.com/watch?v=...)만 허용됩니다."
+            "YouTube 일반 영상 주소만 허용됩니다."
         )
 
-    values = parse_qs(parsed.query, keep_blank_values=True).get("v", [])
+    if parsed.hostname in WATCH_HOSTS and parsed.path == "/watch":
+        values = parse_qs(parsed.query, keep_blank_values=True).get("v", [])
+    elif parsed.hostname in SHORT_HOSTS:
+        # YouTube's Share > Copy link uses this canonical short-link form.
+        values = [parsed.path.strip("/")] if parsed.path.count("/") == 1 else []
+    else:
+        values = []
+
     if len(values) != 1 or not VIDEO_ID_RE.fullmatch(values[0]):
         raise BadRequestException("YouTube 일반 영상의 영상 ID를 확인할 수 없습니다.")
     return values[0]

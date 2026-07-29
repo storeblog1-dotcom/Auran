@@ -5,15 +5,18 @@ from app.modules.posts.youtube import _extract_video_id, _has_explicit_age_restr
 
 
 class YouTubeVerificationTests(unittest.TestCase):
-    def test_accepts_only_standard_https_watch_url(self) -> None:
+    def test_accepts_watch_and_youtube_share_urls(self) -> None:
         self.assertEqual(
             _extract_video_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=1"),
+            "dQw4w9WgXcQ",
+        )
+        self.assertEqual(
+            _extract_video_id("https://youtu.be/dQw4w9WgXcQ?si=share-token"),
             "dQw4w9WgXcQ",
         )
 
     def test_rejects_short_live_and_shorts_urls(self) -> None:
         for url in (
-            "https://youtu.be/dQw4w9WgXcQ",
             "https://www.youtube.com/shorts/dQw4w9WgXcQ",
             "https://www.youtube.com/live/dQw4w9WgXcQ",
             "http://www.youtube.com/watch?v=dQw4w9WgXcQ",
