@@ -58,6 +58,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
   const [notices, setNotices] = useState<any[]>([]);
+  const [expandedNoticeIds, setExpandedNoticeIds] = useState<string[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -216,6 +217,14 @@ export const CommunityScreen = ({ navigation, route }: any) => {
     setRefreshing(true);
     fetchBoards();
     fetchCommunityPosts(selectedBoardId);
+  };
+
+  const toggleNotice = (noticeId: string) => {
+    setExpandedNoticeIds((current) =>
+      current.includes(noticeId)
+        ? current.filter((id) => id !== noticeId)
+        : [...current, noticeId]
+    );
   };
 
   const handleToggleLike = async (postId: string) => {
@@ -482,7 +491,27 @@ export const CommunityScreen = ({ navigation, route }: any) => {
               </View>
               <View style={[styles.supportIcon, { backgroundColor: colors.bgCard + "aa" }]}><Ionicons name="heart-outline" size={34} color={colors.accentPink} /></View>
             </LinearGradient>}
-            {notices.length ? <View style={styles.noticeList}>{notices.map((notice) => <View key={notice.id} style={[styles.noticeCard, { backgroundColor: colors.bgCard, borderColor: colors.accentPurple }]}><Ionicons name="megaphone-outline" size={16} color={colors.accentPurple} /><View style={{ flex: 1 }}><Text style={[styles.noticeTitle, { color: colors.textPrimary }]}>{notice.title}</Text><Text style={[styles.noticeContent, { color: colors.textSecondary }]} numberOfLines={2}>{notice.content}</Text></View></View>)}</View> : null}
+            {notices.length ? <View style={styles.noticeList}>{notices.map((notice) => {
+              const isExpanded = expandedNoticeIds.includes(notice.id);
+              return (
+                <TouchableOpacity
+                  key={notice.id}
+                  style={[styles.noticeCard, { backgroundColor: colors.bgCard, borderColor: colors.accentPurple }]}
+                  onPress={() => toggleNotice(notice.id)}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${notice.title} 공지 ${isExpanded ? "접기" : "펼치기"}`}
+                  accessibilityState={{ expanded: isExpanded }}
+                >
+                  <Ionicons name="megaphone-outline" size={16} color={colors.accentPurple} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.noticeTitle, { color: colors.textPrimary }]}>{notice.title}</Text>
+                    <Text style={[styles.noticeContent, { color: colors.textSecondary }]} numberOfLines={isExpanded ? undefined : 2}>{notice.content}</Text>
+                  </View>
+                  <Ionicons name={isExpanded ? "chevron-up-outline" : "chevron-down-outline"} size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+              );
+            })}</View> : null}
           </>}
           refreshControl={
             <RefreshControl
