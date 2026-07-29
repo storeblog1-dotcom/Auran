@@ -25,6 +25,7 @@ import { NotificationsModal } from "../components/NotificationsModal";
 import { SendPostDmModal } from "../components/SendPostDmModal";
 import { MyStoriesGridModal } from "../components/MyStoriesGridModal";
 import { PostCarousel } from "../components/PostCarousel";
+import { VerifiedYouTubeCard } from "../components/VerifiedYouTubeCard";
 import { HashtagText } from "../components/HashtagText";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { AuraLogoText } from "../components/AuraLogoText";
@@ -511,14 +512,14 @@ export const FeedScreen = ({ navigation }: any) => {
         {/* Post Image Media Carousel */}
         {item.media && item.media.length > 0 ? (
           <PostCarousel media={item.media} onPress={() => { setDetailPostId(item.id); setDetailModalVisible(true); }} />
-        ) : (
+        ) : !item.youtube_url ? (
           <TouchableOpacity
             style={[styles.postImage, styles.noMedia, { backgroundColor: colors.bgCard }]}
             onPress={() => { setDetailPostId(item.id); setDetailModalVisible(true); }}
           >
             <Text style={{ color: colors.textMuted }}>이미지 없음</Text>
           </TouchableOpacity>
-        )}
+        ) : null}
 
         {/* Action Row */}
         <View style={styles.actionRow}>
@@ -581,6 +582,12 @@ export const FeedScreen = ({ navigation }: any) => {
               <HashtagText text={item.caption} style={{ fontSize: 14, lineHeight: 20 }} />
             </View>
           ) : null}
+
+          <VerifiedYouTubeCard
+            url={item.youtube_url}
+            title={item.youtube_title}
+            thumbnailUrl={item.youtube_thumbnail_url}
+          />
 
           {/* Created Date */}
           <Text style={[styles.timeText, { color: colors.textMuted, marginTop: 4 }]}>

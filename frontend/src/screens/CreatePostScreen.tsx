@@ -51,6 +51,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
   const [caption, setCaption] = useState("");
   const [hashtags, setHashtags] = useState("");
   const [locationName, setLocationName] = useState("");
+  const [youtubeUrl, setYoutubeUrl] = useState("");
   const [visibility, setVisibility] = useState<PostVisibility>("public");
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -94,6 +95,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
       setCaption(captionText);
       setHashtags(hashtagsText);
       setLocationName(editPost.location || "");
+      setYoutubeUrl(editPost.youtube_url || "");
       setVisibility(editPost.visibility || "public");
 
       if (editPost.media && Array.isArray(editPost.media)) {
@@ -108,6 +110,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
       setCaption("");
       setHashtags("");
       setLocationName("");
+      setYoutubeUrl("");
       setVisibility("public");
       fetchCurrentGPSLocation();
     }
@@ -234,6 +237,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
           caption: finalCaption,
           location: locationName || null,
           visibility,
+          youtube_url: youtubeUrl.trim() || null,
         });
 
         Alert.alert("성공", "게시물이 수정되었습니다.");
@@ -289,6 +293,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
           caption: finalCaption,
           location: locationName || null,
           visibility,
+          youtube_url: youtubeUrl.trim() || null,
           media: uploadedMediaList,
         });
 
@@ -296,6 +301,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
         setCaption("");
         setHashtags("");
         setLocationName("");
+        setYoutubeUrl("");
         navigation.navigate("Feed");
         Alert.alert("성공", "새 피드가 성공적으로 공유되었습니다!");
       }
@@ -404,6 +410,24 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
         )}
 
         {/* ── 2. 캡션 입력 박스 ── */}
+        <View style={styles.inputSection}>
+          <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>YouTube 일반 영상 (선택)</Text>
+          <View style={[styles.linkBox, { backgroundColor: colors.bgInput, borderColor: colors.borderColor }]}>
+            <Ionicons name="logo-youtube" size={20} color="#ff0033" style={{ marginRight: 10 }} />
+            <TextInput
+              style={[styles.locationInput, { color: colors.textPrimary }]}
+              value={youtubeUrl}
+              onChangeText={setYoutubeUrl}
+              placeholder="https://www.youtube.com/watch?v=..."
+              placeholderTextColor={colors.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+          </View>
+          <Text style={[styles.linkHint, { color: colors.textSecondary }]}>일반 영상 1개만 가능하며, 공개·외부 재생 가능·연령 제한 없음이 API로 확인된 영상만 등록됩니다.</Text>
+        </View>
+
         <View style={styles.inputSection}>
           <TextInput
             style={[
@@ -678,6 +702,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 14,
   },
+  linkBox: {
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+  },
+  linkHint: { fontSize: 12, lineHeight: 17, marginTop: 7 },
   locationInput: {
     flex: 1,
     fontSize: 14,

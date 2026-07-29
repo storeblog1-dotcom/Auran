@@ -25,6 +25,7 @@ import { CommunityPostDetailModal } from "../components/CommunityPostDetailModal
 import { ImageDetailViewerModal } from "../components/ImageDetailViewerModal";
 import { AuraLogoText } from "../components/AuraLogoText";
 import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
+import { VerifiedYouTubeCard } from "../components/VerifiedYouTubeCard";
 
 const { width } = Dimensions.get("window");
 type CommunitySection = "anonymous" | "info" | "partner";
@@ -328,6 +329,12 @@ export const CommunityScreen = ({ navigation, route }: any) => {
             >
               {item.caption}
             </Text>
+            <VerifiedYouTubeCard
+              url={item.youtube_url}
+              title={item.youtube_title}
+              thumbnailUrl={item.youtube_thumbnail_url}
+              compact
+            />
           </View>
           {mediaUrl ? (
             <TouchableOpacity
