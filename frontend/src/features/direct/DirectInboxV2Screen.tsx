@@ -210,7 +210,7 @@ const RoomCard = ({
   );
 };
 
-export const DirectInboxV2Screen = ({ navigation }: any) => {
+export const DirectInboxV2Screen = ({ navigation, route }: any) => {
   const { colors } = useTheme();
   const { presenceByUserId, refreshPresencePeers } = useDirectPresence();
   const insets = useSafeAreaInsets();
@@ -257,6 +257,12 @@ export const DirectInboxV2Screen = ({ navigation }: any) => {
       .catch(() => setMutualFollowers([]))
       .finally(() => setLoadingMutuals(false));
   }, [composeVisible]);
+
+  useEffect(() => {
+    if (!route?.params?.composeNonce) return;
+    navigation.setParams({ composeNonce: undefined });
+    setComposeVisible(true);
+  }, [route?.params?.composeNonce, navigation]);
 
   const filteredItems = useMemo(() => {
     const source = activeTab === "inbox" ? rooms : requests;
@@ -368,20 +374,7 @@ export const DirectInboxV2Screen = ({ navigation }: any) => {
             메시지
           </Text>
         </View>
-        <TouchableOpacity
-          accessibilityLabel="새 대화 시작"
-          onPress={() => setComposeVisible(true)}
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={colors.auraGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.composeButton}
-          >
-            <Ionicons name="create-outline" size={22} color="#ffffff" />
-          </LinearGradient>
-        </TouchableOpacity>
+        <View style={styles.headerActionSpacer} />
       </View>
 
       <View
@@ -549,17 +542,6 @@ export const DirectInboxV2Screen = ({ navigation }: any) => {
                     ? "친구에게 첫 메시지를 보내 대화를 시작해 보세요."
                     : "받은 요청은 안전하게 검토한 뒤 승인할 수 있습니다."}
               </Text>
-              {!searchQuery && activeTab === "inbox" && (
-                <TouchableOpacity
-                  onPress={() => setComposeVisible(true)}
-                  style={[
-                    styles.emptyAction,
-                    { backgroundColor: colors.accentPurple },
-                  ]}
-                >
-                  <Text style={styles.emptyActionText}>새 대화 시작</Text>
-                </TouchableOpacity>
-              )}
             </View>
           }
         />
@@ -757,6 +739,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  headerActionSpacer: { width: 46, height: 46 },
   searchBar: {
     height: 46,
     marginHorizontal: 16,
