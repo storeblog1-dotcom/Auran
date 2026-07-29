@@ -64,6 +64,7 @@ export const AdminScreen = ({ navigation }: any) => {
   const [posts, setPosts] = useState<AdminPostItem[]>([]);
   const [postPage, setPostPage] = useState(1);
   const [totalPosts, setTotalPosts] = useState(0);
+  const [contentScope, setContentScope] = useState<"feed" | "community">("feed");
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [selectedPostBoardLabel, setSelectedPostBoardLabel] = useState<string | null>(null);
   const [selectedPostAuditContext, setSelectedPostAuditContext] =
@@ -119,10 +120,10 @@ export const AdminScreen = ({ navigation }: any) => {
     }
   };
 
-  const loadPosts = async (page: number = 1) => {
+  const loadPosts = async (page: number = 1, scope: "feed" | "community" = contentScope) => {
     try {
       setLoading(true);
-      const res = await adminService.getPosts(page, 20);
+      const res = await adminService.getPosts(page, 48, scope);
       setPosts(res.items);
       setTotalPosts(res.total);
       setPostPage(page);
@@ -321,7 +322,7 @@ export const AdminScreen = ({ navigation }: any) => {
     } else if (activeTab === "users") {
       await loadUsers(searchQuery, 1);
     } else if (activeTab === "posts") {
-      await loadPosts(1);
+      await loadPosts(1, contentScope);
     } else if (activeTab === "reports") {
       await loadReports();
     } else if (activeTab === "activity") { await loadActivity(activityQuery, 1);
@@ -335,7 +336,7 @@ export const AdminScreen = ({ navigation }: any) => {
     } else if (activeTab === "users") {
       loadUsers(searchQuery, 1);
     } else if (activeTab === "posts") {
-      loadPosts(1);
+      loadPosts(1, contentScope);
     } else if (activeTab === "reports") {
       loadReports();
     } else if (activeTab === "activity") { loadActivity(activityQuery, 1);
@@ -825,10 +826,11 @@ export const AdminScreen = ({ navigation }: any) => {
       {activeTab === "posts" && (
         <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12 }}>
           <View style={styles.subnavRow}>
-            <TouchableOpacity onPress={() => setActiveTab("posts")} style={[styles.subnavButton, { borderColor: primaryAccent, backgroundColor: `${primaryAccent}18` }]}><Text style={{ color: primaryAccent, fontWeight: "700" }}>전체 콘텐츠</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => { setContentScope("feed"); loadPosts(1, "feed"); }} style={[styles.subnavButton, { borderColor: contentScope === "feed" ? primaryAccent : colors.borderColor, backgroundColor: contentScope === "feed" ? `${primaryAccent}18` : "transparent" }]}><Text style={{ color: contentScope === "feed" ? primaryAccent : colors.textSecondary, fontWeight: "700" }}>피드</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => { setContentScope("community"); loadPosts(1, "community"); }} style={[styles.subnavButton, { borderColor: contentScope === "community" ? primaryAccent : colors.borderColor, backgroundColor: contentScope === "community" ? `${primaryAccent}18` : "transparent" }]}><Text style={{ color: contentScope === "community" ? primaryAccent : colors.textSecondary, fontWeight: "700" }}>게시판</Text></TouchableOpacity>
             <TouchableOpacity onPress={() => setActiveTab("reports")} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>신고됨</Text></TouchableOpacity>
           </View>
-          <Text style={[styles.countText, { color: colors.textMuted }]}>총 {totalPosts}개의 게시물 모니터링 중</Text>
+          <Text style={[styles.countText, { color: colors.textMuted }]}>최신순 · 총 {totalPosts}개</Text>
 
           {loading ? (
             <ActivityIndicator style={{ marginTop: 24 }} size="large" color={primaryAccent} />
@@ -836,6 +838,9 @@ export const AdminScreen = ({ navigation }: any) => {
             <FlatList
               data={posts}
               keyExtractor={(item) => item.id}
+              key={`content-grid-${contentScope}`}
+              numColumns={3}
+              columnWrapperStyle={styles.contentGridRow}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={primaryAccent} />}
               renderItem={({ item }) => {
                 const firstMedia = item.media && item.media.length > 0 ? item.media[0] : null;
@@ -844,7 +849,7 @@ export const AdminScreen = ({ navigation }: any) => {
                 return (
                   <TouchableOpacity
                     activeOpacity={0.8}
-                    style={[styles.postCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
+                    style={[styles.contentTile, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
                     onPress={() => {
                       setSelectedPostId(item.id);
                       setPostDetailModalVisible(true);
@@ -863,15 +868,15 @@ export const AdminScreen = ({ navigation }: any) => {
                       </Text>
                     </View>
 
-                    <View style={{ flexDirection: "row", marginTop: 8, gap: 12, alignItems: "center" }}>
+                    <View style={{ flexDirection: "column", marginTop: 8, gap: 7, alignItems: "stretch" }}>
                       {mediaUrl ? (
                         <Image
                           source={{ uri: getFullImageUrl(mediaUrl) }}
-                          style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: "#ccc" }}
+                          style={styles.contentTileImage}
                           resizeMode="cover"
                         />
                       ) : (
-                        <View style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: colors.bgPrimary, justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: colors.borderColor }}>
+                        <View style={[styles.contentTileText, { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor }]}>
                           <Ionicons name="document-text-outline" size={22} color={colors.textMuted} />
                         </View>
                       )}
@@ -914,7 +919,8 @@ export const AdminScreen = ({ navigation }: any) => {
       {activeTab === "reports" && (
         <View style={{ flex: 1, padding: 16 }}>
           <View style={styles.subnavRow}>
-            <TouchableOpacity onPress={() => setActiveTab("posts")} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>전체 콘텐츠</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => { setContentScope("feed"); setActiveTab("posts"); }} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>피드</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => { setContentScope("community"); setActiveTab("posts"); }} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>게시판</Text></TouchableOpacity>
             <TouchableOpacity onPress={() => setActiveTab("reports")} style={[styles.subnavButton, { borderColor: primaryAccent, backgroundColor: `${primaryAccent}18` }]}><Text style={{ color: primaryAccent, fontWeight: "700" }}>신고됨</Text></TouchableOpacity>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
@@ -1323,6 +1329,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 10,
   },
+  contentGridRow: { gap: 7, marginBottom: 7 },
+  contentTile: { flex: 1, maxWidth: "32.2%", minHeight: 168, padding: 7, borderRadius: 10, borderWidth: 1 },
+  contentTileImage: { width: "100%", height: 82, borderRadius: 7, backgroundColor: "#ccc" },
+  contentTileText: { width: "100%", height: 82, borderRadius: 7, justifyContent: "center", alignItems: "center", borderWidth: 1, padding: 7 },
   postAuthor: {
     fontSize: 14,
     fontWeight: "bold",
