@@ -33,7 +33,14 @@ class Settings(BaseSettings):
     # Supabase Storage
     supabase_url: str = "https://swhaukkqjsdciwpynnsy.supabase.co"
     supabase_key: str = ""
+    supabase_anon_key: str = ""
+    supabase_jwt_secret: str = ""
     supabase_storage_bucket: str = "uploads"
+
+    # Expo Push Service
+    expo_access_token: str = ""
+    expo_push_url: str = "https://exp.host/--/api/v2/push/send"
+    expo_push_receipts_url: str = "https://exp.host/--/api/v2/push/getReceipts"
 
     # CORS
     allowed_origins: str = "*,http://localhost:3000,http://localhost:8081"

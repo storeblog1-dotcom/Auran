@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,6 +16,7 @@ import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 import { getDisplayName } from "../utils/displayName";
 import { AdminAvatar, AdminBadge } from "./AdminIdentity";
+import { createDirectClientMessageId } from "../features/direct/clientMessageId";
 
 interface UserInfo {
   id: string;
@@ -82,6 +83,7 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
   const [sendingUserId, setSendingUserId] = useState<string | null>(null);
   const [sentUserIds, setSentUserIds] = useState<Record<string, boolean>>({});
   const [message, setMessage] = useState("");
+  const clientMessageIdsRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     if (!visible || !post) return;
@@ -90,6 +92,7 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
       setLoading(true);
       setSentUserIds({});
       setMessage("");
+      clientMessageIdsRef.current = {};
       setAuthorEligibility(null);
       try {
         const authorId = post.user?.id;
@@ -170,12 +173,13 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
   }, [authorEligibility, chatRooms, mutualFollowers]);
 
   const handleSendDm = async (recipient: Recipient) => {
-    const note = message.trim();
+    const note = message;
+    const hasNote = Boolean(note.trim());
     const needsRequestText = !recipient.canSharePost;
     if (
       !post ||
       !recipient.canSendMessage ||
-      (needsRequestText && !note) ||
+      (needsRequestText && !hasNote) ||
       sendingUserId ||
       sentUserIds[recipient.user.id]
     ) return;
@@ -191,17 +195,31 @@ export const SendPostDmModal: React.FC<SendPostDmModalProps> = ({
         roomId = room.id;
       }
 
+      const messageKind = recipient.canSharePost ? "POST" : "TEXT";
+      const idempotencyKey = [
+        String(post.id),
+        recipient.user.id,
+        messageKind,
+        note,
+      ].join("\u0000");
+      const clientMessageId =
+        clientMessageIdsRef.current[idempotencyKey] ||
+        createDirectClientMessageId();
+      clientMessageIdsRef.current[idempotencyKey] = clientMessageId;
+
       await api.post(
         `/direct/rooms/${roomId}/messages`,
         recipient.canSharePost
           ? {
-              content: note || "게시물을 공유했습니다.",
+              content: hasNote ? note : "게시물을 공유했습니다.",
               message_type: "POST",
               shared_post_id: post.id,
+              client_message_id: clientMessageId,
             }
           : {
               content: note,
               message_type: "TEXT",
+              client_message_id: clientMessageId,
             }
       );
 

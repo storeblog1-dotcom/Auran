@@ -135,7 +135,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     if (!user?.id) return;
 
-    const ws = notificationService.subscribeWebSocket(user.id, (payload) => {
+    const unsubscribe = notificationService.subscribeWebSocket((payload) => {
       if (payload?.event === "NEW_NOTIFICATION" && payload?.notification) {
         const newNotif: NotificationItem = payload.notification;
         setNotifications((prev) => [newNotif, ...prev]);
@@ -144,9 +144,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     });
 
-    return () => {
-      ws?.close();
-    };
+    return unsubscribe;
   }, [user?.id]);
 
   useEffect(() => {

@@ -1,43 +1,71 @@
+import logging
 import uuid
+from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
-from jose import JWTError
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from sqlalchemy import and_, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
 from app.common.exceptions import (
     AppException,
     BadRequestException,
     ForbiddenException,
     NotFoundException,
-    UnauthorizedException,
 )
+from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.security import decode_token
 from app.modules.auth.dependencies import get_current_active_user
 from app.modules.auth.models import User
 from app.modules.auth.service import get_user_by_id
-from app.modules.direct.models import ChatMessage, ChatRoom, ChatRoomMember
+from app.modules.direct.models import (
+    ChatMessage,
+    ChatRoom,
+    ChatRoomMember,
+    DirectUserPresence,
+)
+from app.modules.direct.realtime import (
+    create_realtime_access_token,
+    direct_presence_topic,
+    direct_room_topic,
+)
 from app.modules.direct.schemas import (
     ChatMessageCreate,
     ChatMessageResponse,
     ChatRoomCreate,
     ChatRoomResponse,
+    DirectPresenceResponse,
     DirectMessageEligibilityResponse,
+    MessageCheckpointResponse,
+    MessageCheckpointUpdate,
+    RealtimeConfigResponse,
     SenderResponse,
 )
 from app.modules.direct.websocket_manager import manager
 from app.modules.users.models import Follow, UserBlock
 
 router = APIRouter(prefix="/direct", tags=["Direct Messages"])
+logger = logging.getLogger(__name__)
 
 REQUEST_ACCEPTED = "ACCEPTED"
 REQUEST_PENDING = "PENDING"
 REQUEST_REJECTED = "REJECTED"
 REQUEST_NEW = "NEW_REQUEST"
 MESSAGE_REQUEST_LIMIT = 5
+DIRECT_NOTIFICATION_MAX_LENGTH = 500
 
 
 def message_request_allowed(
@@ -58,6 +86,164 @@ def admin_message_access(sender_is_admin: bool) -> bool:
 
 def room_starts_accepted(is_mutual: bool, sender_is_admin: bool) -> bool:
     return is_mutual or sender_is_admin
+
+
+def message_content_for_storage(content: str | None) -> str | None:
+    """Keep the exact client string; validation must never normalize content."""
+    return content
+
+
+def direct_message_notification_text(
+    sender_display_name: str,
+    content: str | None,
+    media_url: str | None,
+) -> str:
+    """Build a bounded notification preview without touching stored content."""
+    preview = content or ("사진 메시지" if media_url else "메시지")
+    return (
+        f"{sender_display_name}님의 메시지: {preview}"
+    )[:DIRECT_NOTIFICATION_MAX_LENGTH]
+
+
+@router.get("/realtime/config", response_model=RealtimeConfigResponse)
+async def get_realtime_config(
+    response: Response,
+    room_id: uuid.UUID | None = Query(default=None),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Issue a short-lived token for private Supabase Realtime channels."""
+    response.headers["Cache-Control"] = "no-store"
+    peer_ids: list[uuid.UUID] = []
+    if room_id is not None:
+        await _verify_room_member(db, room_id, current_user.id)
+        room = await _get_room(db, room_id)
+        if await _users_are_blocked_in_room(db, room, current_user.id):
+            raise ForbiddenException(
+                "차단된 사용자와는 메시지를 주고받을 수 없습니다."
+            )
+        peer_ids = [
+            member_id
+            for member_id in await _room_member_ids(db, room_id)
+            if member_id != current_user.id
+        ]
+    else:
+        own_membership = aliased(ChatRoomMember)
+        peer_membership = aliased(ChatRoomMember)
+        blocked_pair = (
+            select(UserBlock.id)
+            .where(
+                or_(
+                    and_(
+                        UserBlock.blocker_id == current_user.id,
+                        UserBlock.blocked_id == peer_membership.user_id,
+                    ),
+                    and_(
+                        UserBlock.blocker_id == peer_membership.user_id,
+                        UserBlock.blocked_id == current_user.id,
+                    ),
+                )
+            )
+            .exists()
+        )
+        peer_result = await db.execute(
+            select(peer_membership.user_id)
+            .join(
+                own_membership,
+                own_membership.room_id == peer_membership.room_id,
+            )
+            .join(ChatRoom, ChatRoom.id == peer_membership.room_id)
+            .where(
+                own_membership.user_id == current_user.id,
+                peer_membership.user_id != current_user.id,
+                ChatRoom.request_status == REQUEST_ACCEPTED,
+                ~blocked_pair,
+            )
+            .distinct()
+        )
+        peer_ids = list(peer_result.scalars().all())
+    if (
+        not settings.supabase_url
+        or not settings.supabase_anon_key
+        or not settings.supabase_jwt_secret
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="실시간 메시지 설정이 완료되지 않았습니다.",
+        )
+
+    presence = await _touch_presence(db, current_user.id)
+    token, expires_at = create_realtime_access_token(
+        current_user.id,
+        settings.supabase_jwt_secret,
+    )
+    return RealtimeConfigResponse(
+        supabase_url=settings.supabase_url,
+        supabase_anon_key=settings.supabase_anon_key,
+        access_token=token,
+        expires_at=expires_at,
+        channel_topic=(
+            direct_room_topic(room_id) if room_id is not None else None
+        ),
+        presence_topic=direct_presence_topic(current_user.id),
+        peer_presence_topics=[
+            direct_presence_topic(peer_id) for peer_id in peer_ids
+        ],
+        user_id=current_user.id,
+        last_seen_at=presence.last_active_at,
+    )
+
+
+@router.post(
+    "/presence/heartbeat",
+    response_model=DirectPresenceResponse,
+)
+async def update_direct_presence(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Persist the foreground user's last-active checkpoint."""
+    presence = await _touch_presence(db, current_user.id)
+    return DirectPresenceResponse(
+        user_id=presence.user_id,
+        last_active_at=presence.last_active_at,
+    )
+
+
+@router.get(
+    "/rooms/{room_id}/presence",
+    response_model=List[DirectPresenceResponse],
+)
+async def get_room_presence(
+    room_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return persisted last-active times for members of an authorized room."""
+    await _verify_room_member(db, room_id, current_user.id)
+    room = await _get_room(db, room_id)
+    if await _users_are_blocked_in_room(db, room, current_user.id):
+        raise ForbiddenException(
+            "차단된 사용자와는 메시지를 주고받을 수 없습니다."
+        )
+    member_ids = await _room_member_ids(db, room_id)
+    result = await db.execute(
+        select(DirectUserPresence).where(
+            DirectUserPresence.user_id.in_(member_ids)
+        )
+    )
+    presence_by_user = {
+        presence.user_id: presence
+        for presence in result.scalars().all()
+    }
+    return [
+        DirectPresenceResponse(
+            user_id=member_id,
+            last_active_at=presence_by_user[member_id].last_active_at,
+        )
+        for member_id in member_ids
+        if member_id in presence_by_user
+    ]
 
 
 @router.post("/rooms", response_model=ChatRoomResponse, status_code=status.HTTP_201_CREATED)
@@ -444,34 +630,89 @@ async def block_message_request_sender(
 async def get_room_messages(
     room_id: uuid.UUID,
     limit: int = Query(50, ge=1, le=100),
+    before: uuid.UUID | None = Query(
+        default=None,
+        description="Return messages older than this message ID",
+    ),
+    mark_read: bool = Query(
+        default=True,
+        description=(
+            "Backward-compatible read update. V2 clients pass false and "
+            "call the explicit read endpoint only while focused."
+        ),
+    ),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     """대화방 메시지 내역 조회 & 읽음 상태 갱신"""
-    await _verify_room_member(db, room_id, current_user.id)
+    current_member = await _verify_room_member(
+        db, room_id, current_user.id
+    )
     room = await _get_room(db, room_id)
 
-    # 메시지 조회
+    filters = [ChatMessage.room_id == room_id]
+    if before is not None:
+        anchor_result = await db.execute(
+            select(ChatMessage).where(
+                ChatMessage.id == before,
+                ChatMessage.room_id == room_id,
+            )
+        )
+        anchor = anchor_result.scalars().first()
+        if anchor is None:
+            raise NotFoundException("기준 메시지")
+        filters.append(
+            or_(
+                ChatMessage.created_at < anchor.created_at,
+                and_(
+                    ChatMessage.created_at == anchor.created_at,
+                    ChatMessage.id < anchor.id,
+                ),
+            )
+        )
+
+    # 최신 페이지를 가져온 뒤 화면 표시 순서(과거 -> 최신)로 반환합니다.
     stmt = (
         select(ChatMessage)
-        .where(ChatMessage.room_id == room_id)
-        .order_by(ChatMessage.created_at.asc())
+        .options(selectinload(ChatMessage.sender))
+        .where(*filters)
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(limit)
     )
     res = await db.execute(stmt)
-    messages = res.scalars().all()
+    messages = list(reversed(res.scalars().all()))
 
-    # 읽음 시각 갱신
-    member_stmt = select(ChatRoomMember).where(
-        and_(ChatRoomMember.room_id == room_id, ChatRoomMember.user_id == current_user.id)
-    )
-    m_res = await db.execute(member_stmt)
-    member = m_res.scalars().first()
-    if member and room.request_status == REQUEST_ACCEPTED:
-        member.last_read_at = func.now()
-        await db.commit()
+    # 전달됨은 최신 페이지를 받은 시점에 전진합니다. 읽음은 구버전
+    # 호환을 위해 기본 true지만, V2는 false로 조회하고 포커스 상태에서
+    # 명시적인 /read 요청만 보냅니다.
+    if room.request_status == REQUEST_ACCEPTED and before is None:
+        latest_received_result = await db.execute(
+            select(func.max(ChatMessage.created_at)).where(
+                ChatMessage.room_id == room_id,
+                ChatMessage.sender_id != current_user.id,
+            )
+        )
+        latest_received_at = latest_received_result.scalar_one_or_none()
+        if latest_received_at is not None:
+            next_delivered_at, next_read_at = history_checkpoint_values(
+                current_member.last_delivered_at,
+                current_member.last_read_at,
+                latest_received_at,
+                mark_read=mark_read,
+            )
+            if (
+                next_delivered_at != current_member.last_delivered_at
+                or next_read_at != current_member.last_read_at
+            ):
+                current_member.last_delivered_at = next_delivered_at
+                current_member.last_read_at = next_read_at
+                await db.commit()
 
-    return messages
+    members = await _get_room_members(db, room_id)
+    return [
+        _format_message_response(message, current_user.id, members)
+        for message in messages
+    ]
 
 
 @router.post("/rooms/{room_id}/messages", response_model=ChatMessageResponse, status_code=status.HTTP_201_CREATED)
@@ -483,6 +724,24 @@ async def send_message_rest(
 ):
     """HTTP REST를 통한 메시지 전송"""
     await _verify_room_member(db, room_id, current_user.id)
+    if body.client_message_id is not None:
+        existing = await _find_idempotent_message(
+            db,
+            current_user.id,
+            body.client_message_id,
+        )
+        if existing is not None:
+            if existing.room_id != room_id:
+                raise BadRequestException(
+                    "client_message_id가 다른 대화방에서 이미 사용되었습니다."
+                )
+            members = await _get_room_members(db, room_id)
+            return _format_message_response(
+                existing,
+                current_user.id,
+                members,
+            )
+
     room = await _authorize_message_send(
         db, room_id, current_user.id, body
     )
@@ -490,7 +749,8 @@ async def send_message_rest(
     new_msg = ChatMessage(
         room_id=room_id,
         sender_id=current_user.id,
-        content=body.content,
+        client_message_id=body.client_message_id,
+        content=message_content_for_storage(body.content),
         message_type=body.message_type,
         media_url=body.media_url,
         shared_post_id=body.shared_post_id,
@@ -500,24 +760,53 @@ async def send_message_rest(
     # 방 updated_at 갱신
     room.updated_at = func.now()
 
-    await db.commit()
-    await db.refresh(new_msg)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        if body.client_message_id is None:
+            raise
+        existing = await _find_idempotent_message(
+            db,
+            current_user.id,
+            body.client_message_id,
+        )
+        if existing is None or existing.room_id != room_id:
+            raise
+        members = await _get_room_members(db, room_id)
+        return _format_message_response(
+            existing,
+            current_user.id,
+            members,
+        )
 
-    # 웹소켓 브로드캐스트
+    new_msg = await _get_message(db, room_id, new_msg.id)
+    saved_message_id = new_msg.id
+
+    # 이전 앱 버전의 WebSocket 수신 경로도 새 화면 전환이 끝날 때까지 유지합니다.
     msg_dict = {
         "id": str(new_msg.id),
         "room_id": str(new_msg.room_id),
+        "client_message_id": (
+            str(new_msg.client_message_id)
+            if new_msg.client_message_id
+            else None
+        ),
         "sender": {
             "id": str(current_user.id),
             "username": current_user.username,
             "nickname": current_user.nickname,
             "full_name": current_user.full_name,
             "profile_image_url": current_user.profile_image_url,
+            "is_admin": current_user.is_admin,
         },
         "content": new_msg.content,
         "message_type": new_msg.message_type,
         "media_url": new_msg.media_url,
         "shared_post_id": str(new_msg.shared_post_id) if new_msg.shared_post_id else None,
+        "delivery_status": "SENT",
+        "delivered_at": None,
+        "read_at": None,
         "created_at": new_msg.created_at.isoformat() if new_msg.created_at else "",
     }
     await manager.broadcast_to_room(str(room_id), msg_dict)
@@ -528,44 +817,97 @@ async def send_message_rest(
             and_(ChatRoomMember.room_id == room_id, ChatRoomMember.user_id != current_user.id)
         )
     )
-    from app.modules.notifications.models import NotificationType
-    from app.modules.notifications.service import create_notification
-
     if room.request_status == REQUEST_ACCEPTED:
         for recipient_id in other_members_res.scalars().all():
-            msg_text = body.content if body.content else ("사진 메시지" if body.media_url else "메시지")
-            await create_notification(
+            await _create_direct_message_notification(
                 db,
                 recipient_id=recipient_id,
                 sender_id=current_user.id,
-                type=NotificationType.DIRECT_MESSAGE.value,
-                message=f"{current_user.nickname or current_user.username}님의 메시지: {msg_text}",
-                direct_message_id=str(new_msg.id),
+                sender_display_name=(
+                    current_user.nickname or current_user.username
+                ),
+                content=body.content,
+                media_url=body.media_url,
+                message_id=saved_message_id,
             )
 
-    return new_msg
+    # Notification creation commits independently and a failed notification
+    # rolls its transaction back, so reload the already-saved message.
+    new_msg = await _get_message(db, room_id, saved_message_id)
+    members = await _get_room_members(db, room_id)
+    return _format_message_response(
+        new_msg,
+        current_user.id,
+        members,
+    )
 
 
-@router.post("/rooms/{room_id}/read", status_code=status.HTTP_200_OK)
+@router.post(
+    "/rooms/{room_id}/delivered",
+    response_model=MessageCheckpointResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def mark_room_as_delivered(
+    room_id: uuid.UUID,
+    body: MessageCheckpointUpdate | None = None,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Acknowledge receipt through a specific message, monotonically."""
+    member = await _verify_room_member(db, room_id, current_user.id)
+    room = await _get_room(db, room_id)
+    if room.request_status == REQUEST_ACCEPTED:
+        checkpoint = await _resolve_checkpoint(
+            db,
+            room_id,
+            body.through_message_id if body else None,
+        )
+        member.last_delivered_at = _later_checkpoint(
+            member.last_delivered_at,
+            checkpoint,
+        )
+        await db.commit()
+    return MessageCheckpointResponse(
+        user_id=current_user.id,
+        delivered_at=member.last_delivered_at,
+        read_at=member.last_read_at,
+    )
+
+
+@router.post(
+    "/rooms/{room_id}/read",
+    response_model=MessageCheckpointResponse,
+    status_code=status.HTTP_200_OK,
+)
 async def mark_room_as_read(
     room_id: uuid.UUID,
+    body: MessageCheckpointUpdate | None = None,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     """대화방 읽음 처리"""
-    member_stmt = select(ChatRoomMember).where(
-        and_(ChatRoomMember.room_id == room_id, ChatRoomMember.user_id == current_user.id)
-    )
-    m_res = await db.execute(member_stmt)
-    member = m_res.scalars().first()
-    if not member:
-        raise NotFoundException("대화방 참여자가 아닙니다")
-
+    member = await _verify_room_member(db, room_id, current_user.id)
     room = await _get_room(db, room_id)
     if room.request_status == REQUEST_ACCEPTED:
-        member.last_read_at = func.now()
+        checkpoint = await _resolve_checkpoint(
+            db,
+            room_id,
+            body.through_message_id if body else None,
+        )
+        member.last_delivered_at = _later_checkpoint(
+            member.last_delivered_at,
+            checkpoint,
+        )
+        member.last_read_at = _later_checkpoint(
+            member.last_read_at,
+            checkpoint,
+        )
         await db.commit()
-    return {"message": "read status updated"}
+    return MessageCheckpointResponse(
+        user_id=current_user.id,
+        delivered_at=member.last_delivered_at,
+        read_at=member.last_read_at,
+    )
 
 
 # ─── WebSocket Endpoint ──────────────────────────────────────
@@ -621,10 +963,17 @@ async def websocket_endpoint(
             media_url = data.get("media_url")
             shared_post_id_str = data.get("shared_post_id")
             shared_post_id = uuid.UUID(shared_post_id_str) if shared_post_id_str else None
+            client_message_id_str = data.get("client_message_id")
+            client_message_id = (
+                uuid.UUID(client_message_id_str)
+                if client_message_id_str
+                else None
+            )
 
             async with AsyncSessionLocal() as db:
                 try:
                     message_body = ChatMessageCreate(
+                        client_message_id=client_message_id,
                         content=content,
                         message_type=message_type,
                         media_url=media_url,
@@ -643,7 +992,8 @@ async def websocket_endpoint(
                 new_msg = ChatMessage(
                     room_id=room_uuid,
                     sender_id=uuid.UUID(sender_info["id"]),
-                    content=content,
+                    client_message_id=client_message_id,
+                    content=message_content_for_storage(content),
                     message_type=message_type,
                     media_url=media_url,
                     shared_post_id=shared_post_id,
@@ -654,6 +1004,7 @@ async def websocket_endpoint(
 
                 await db.commit()
                 await db.refresh(new_msg)
+                saved_message_id = new_msg.id
 
                 # 상대방 멤버들에게 DM 알림 생성
                 other_members_res = await db.execute(
@@ -661,24 +1012,34 @@ async def websocket_endpoint(
                         and_(ChatRoomMember.room_id == room_uuid, ChatRoomMember.user_id != user_id)
                     )
                 )
-                from app.modules.notifications.models import NotificationType
-                from app.modules.notifications.service import create_notification
-
                 if room.request_status == REQUEST_ACCEPTED:
                     for recipient_id in other_members_res.scalars().all():
-                        msg_text = content[:30] if content else ("사진 메시지" if media_url else "메시지")
-                        await create_notification(
+                        await _create_direct_message_notification(
                             db,
                             recipient_id=recipient_id,
                             sender_id=user_id,
-                            type=NotificationType.DIRECT_MESSAGE.value,
-                            message=f"{sender_info.get('nickname') or sender_info['username']}님의 메시지: {msg_text}",
-                            direct_message_id=str(new_msg.id),
+                            sender_display_name=(
+                                sender_info.get("nickname")
+                                or sender_info["username"]
+                            ),
+                            content=content,
+                            media_url=media_url,
+                            message_id=saved_message_id,
                         )
 
+                new_msg = await _get_message(
+                    db,
+                    room_uuid,
+                    saved_message_id,
+                )
                 msg_payload = {
                     "id": str(new_msg.id),
                     "room_id": str(new_msg.room_id),
+                    "client_message_id": (
+                        str(new_msg.client_message_id)
+                        if new_msg.client_message_id
+                        else None
+                    ),
                     "sender": sender_info,
                     "content": new_msg.content,
                     "message_type": new_msg.message_type,
@@ -697,6 +1058,229 @@ async def websocket_endpoint(
 
 
 # ─── Helper Functions ─────────────────────────────────────────
+async def _create_direct_message_notification(
+    db: AsyncSession,
+    *,
+    recipient_id: uuid.UUID,
+    sender_id: uuid.UUID,
+    sender_display_name: str,
+    content: str | None,
+    media_url: str | None,
+    message_id: uuid.UUID,
+) -> bool:
+    """Keep an auxiliary notification failure from failing a saved message."""
+    from app.modules.notifications.models import NotificationType
+    from app.modules.notifications.service import create_notification
+
+    try:
+        await create_notification(
+            db,
+            recipient_id=recipient_id,
+            sender_id=sender_id,
+            type=NotificationType.DIRECT_MESSAGE.value,
+            message=direct_message_notification_text(
+                sender_display_name,
+                content,
+                media_url,
+            ),
+            direct_message_id=str(message_id),
+        )
+        return True
+    except Exception:
+        await db.rollback()
+        logger.exception(
+            "Direct-message notification failed after message commit",
+            extra={
+                "direct_message_id": str(message_id),
+                "recipient_id": str(recipient_id),
+            },
+        )
+        return False
+
+
+def _later_checkpoint(
+    current: datetime | None,
+    candidate: datetime,
+) -> datetime:
+    if current is None or candidate > current:
+        return candidate
+    return current
+
+
+def history_checkpoint_values(
+    last_delivered_at: datetime | None,
+    last_read_at: datetime | None,
+    latest_received_at: datetime,
+    *,
+    mark_read: bool,
+) -> tuple[datetime, datetime | None]:
+    return (
+        _later_checkpoint(last_delivered_at, latest_received_at),
+        (
+            _later_checkpoint(last_read_at, latest_received_at)
+            if mark_read
+            else last_read_at
+        ),
+    )
+
+
+async def _resolve_checkpoint(
+    db: AsyncSession,
+    room_id: uuid.UUID,
+    through_message_id: uuid.UUID | None,
+) -> datetime:
+    if through_message_id is None:
+        return datetime.now(timezone.utc)
+    result = await db.execute(
+        select(ChatMessage).where(
+            ChatMessage.id == through_message_id,
+            ChatMessage.room_id == room_id,
+        )
+    )
+    message = result.scalars().first()
+    if message is None:
+        raise NotFoundException("기준 메시지")
+    return message.created_at
+
+
+async def _get_room_members(
+    db: AsyncSession,
+    room_id: uuid.UUID,
+) -> list[ChatRoomMember]:
+    result = await db.execute(
+        select(ChatRoomMember).where(
+            ChatRoomMember.room_id == room_id
+        )
+    )
+    return list(result.scalars().all())
+
+
+async def _get_message(
+    db: AsyncSession,
+    room_id: uuid.UUID,
+    message_id: uuid.UUID,
+) -> ChatMessage:
+    result = await db.execute(
+        select(ChatMessage)
+        .options(selectinload(ChatMessage.sender))
+        .where(
+            ChatMessage.id == message_id,
+            ChatMessage.room_id == room_id,
+        )
+    )
+    message = result.scalars().first()
+    if message is None:
+        raise NotFoundException("메시지")
+    return message
+
+
+async def _find_idempotent_message(
+    db: AsyncSession,
+    sender_id: uuid.UUID,
+    client_message_id: uuid.UUID,
+) -> ChatMessage | None:
+    result = await db.execute(
+        select(ChatMessage)
+        .options(selectinload(ChatMessage.sender))
+        .where(
+            ChatMessage.sender_id == sender_id,
+            ChatMessage.client_message_id == client_message_id,
+        )
+    )
+    return result.scalars().first()
+
+
+def _format_message_response(
+    message: ChatMessage,
+    viewer_id: uuid.UUID,
+    members: list[ChatRoomMember],
+) -> ChatMessageResponse:
+    if message.sender_id == viewer_id:
+        recipient_members = [
+            member
+            for member in members
+            if member.user_id != viewer_id
+        ]
+    else:
+        recipient_members = [
+            member
+            for member in members
+            if member.user_id == viewer_id
+        ]
+
+    delivered_checkpoints = [
+        member.last_delivered_at
+        for member in recipient_members
+        if (
+            member.last_delivered_at is not None
+            and member.last_delivered_at >= message.created_at
+        )
+    ]
+    read_checkpoints = [
+        member.last_read_at
+        for member in recipient_members
+        if (
+            member.last_read_at is not None
+            and member.last_read_at >= message.created_at
+        )
+    ]
+    delivered_at = (
+        max(delivered_checkpoints)
+        if recipient_members
+        and len(delivered_checkpoints) == len(recipient_members)
+        else None
+    )
+    read_at = (
+        max(read_checkpoints)
+        if recipient_members
+        and len(read_checkpoints) == len(recipient_members)
+        else None
+    )
+    delivery_status = (
+        "READ"
+        if read_at is not None
+        else "DELIVERED"
+        if delivered_at is not None
+        else "SENT"
+    )
+    return ChatMessageResponse(
+        id=message.id,
+        room_id=message.room_id,
+        client_message_id=message.client_message_id,
+        sender=_format_sender(message.sender),
+        content=message.content,
+        message_type=message.message_type,
+        media_url=message.media_url,
+        shared_post_id=message.shared_post_id,
+        delivery_status=delivery_status,
+        delivered_at=delivered_at,
+        read_at=read_at,
+        created_at=message.created_at,
+    )
+
+
+async def _touch_presence(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+) -> DirectUserPresence:
+    now = datetime.now(timezone.utc)
+    await db.execute(
+        pg_insert(DirectUserPresence)
+        .values(user_id=user_id, last_active_at=now)
+        .on_conflict_do_update(
+            index_elements=[DirectUserPresence.user_id],
+            set_={"last_active_at": now},
+        )
+    )
+    await db.commit()
+    result = await db.execute(
+        select(DirectUserPresence).where(
+            DirectUserPresence.user_id == user_id
+        )
+    )
+    return result.scalar_one()
+
+
 async def _get_room(db: AsyncSession, room_id: uuid.UUID) -> ChatRoom:
     result = await db.execute(select(ChatRoom).where(ChatRoom.id == room_id))
     room = result.scalars().first()
@@ -971,22 +1555,10 @@ async def _format_room_response(db: AsyncSession, room_id: uuid.UUID, current_us
 
     last_msg_resp = None
     if last_msg:
-        last_msg_resp = ChatMessageResponse(
-            id=last_msg.id,
-            room_id=last_msg.room_id,
-            sender=SenderResponse(
-                id=last_msg.sender.id,
-                username=last_msg.sender.username,
-                nickname=last_msg.sender.nickname,
-                full_name=last_msg.sender.full_name,
-                profile_image_url=last_msg.sender.profile_image_url,
-                is_admin=last_msg.sender.is_admin,
-            ),
-            content=last_msg.content,
-            message_type=last_msg.message_type,
-            media_url=last_msg.media_url,
-            shared_post_id=last_msg.shared_post_id,
-            created_at=last_msg.created_at,
+        last_msg_resp = _format_message_response(
+            last_msg,
+            current_user_id,
+            list(members),
         )
 
     # 안읽은 메시지 수
