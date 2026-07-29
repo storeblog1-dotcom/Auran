@@ -70,6 +70,7 @@ export const AdminScreen = ({ navigation }: any) => {
   const [selectedPostAuditContext, setSelectedPostAuditContext] =
     useState<AdminPostAuditContext | null>(null);
   const [postDetailModalVisible, setPostDetailModalVisible] = useState(false);
+  const [managedPost, setManagedPost] = useState<AdminPostItem | null>(null);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
   const [revisionModalVisible, setRevisionModalVisible] = useState(false);
   const [activityUsers, setActivityUsers] = useState<AdminActivityUser[]>([]);
@@ -417,21 +418,7 @@ export const AdminScreen = ({ navigation }: any) => {
   };
 
   const openPostManagementMenu = (item: AdminPostItem) => {
-    Alert.alert("콘텐츠 관리", "관리 작업을 선택하세요.", [
-      {
-        text: "상세 보기",
-        onPress: () => {
-          setSelectedPostId(item.id);
-          setPostDetailModalVisible(true);
-        },
-      },
-      {
-        text: item.moderation_hidden ? "숨김 해제" : "숨김",
-        onPress: () => handleSetPostHidden(item, !item.moderation_hidden),
-      },
-      { text: "강제 삭제", style: "destructive", onPress: () => handleDeletePost(item) },
-      { text: "취소", style: "cancel" },
-    ]);
+    setManagedPost(item);
   };
 
   const primaryAccent = isDark ? "#a855f7" : "#7c3aed";
@@ -899,17 +886,18 @@ export const AdminScreen = ({ navigation }: any) => {
                       setPostDetailModalVisible(true);
                     }}
                   >
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <View style={styles.contentTileHeader}>
+                      <View style={styles.contentTileAuthorRow}>
                         <Ionicons name="eye-outline" size={16} color={primaryAccent} />
-                        <Text style={[styles.postAuthor, { color: primaryAccent }]}>
+                        <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.postAuthor, styles.contentTileAuthor, { color: primaryAccent }]}>
                           {getDisplayName(item.author, "알 수 없음")}
                         </Text>
-                        {item.author.is_admin && <AdminBadge />}
+                        {item.author.is_admin && <AdminBadge compact />}
                       </View>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                      <View style={styles.contentTileMenu}>
                         {item.moderation_hidden && <View style={styles.hiddenBadge}><Ionicons name="eye-off-outline" size={11} color="#b45309" /></View>}
                         <TouchableOpacity
+                          style={styles.contentTileMenuButton}
                           accessibilityLabel="콘텐츠 관리 메뉴"
                           hitSlop={8}
                           onPress={(event) => {
@@ -947,12 +935,12 @@ export const AdminScreen = ({ navigation }: any) => {
                       </View>
                     </View>
 
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
-                      <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+                    <View style={styles.contentTileFooter}>
+                      <Text style={{ display: "none" }}>
                         👆 클릭하여 상세 팝업 보기
                       </Text>
                       <TouchableOpacity
-                        style={styles.deletePostBtn}
+                        style={styles.contentTileDeleteBtn}
                         onPress={() => handleDeletePost(item)}
                         activeOpacity={0.7}
                       >
@@ -1114,6 +1102,58 @@ export const AdminScreen = ({ navigation }: any) => {
       />
 
       {/* 게시물 상세 팝업 모달 */}
+      <Modal
+        transparent
+        visible={Boolean(managedPost)}
+        animationType="fade"
+        onRequestClose={() => setManagedPost(null)}
+      >
+        <View style={styles.managementMenuOverlay}>
+          <TouchableOpacity
+            activeOpacity={1}
+            style={StyleSheet.absoluteFill}
+            onPress={() => setManagedPost(null)}
+          />
+          {managedPost && (
+            <View style={[styles.managementMenuCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+              <TouchableOpacity
+                style={styles.managementMenuAction}
+                onPress={() => {
+                  setManagedPost(null);
+                  setSelectedPostId(managedPost.id);
+                  setPostDetailModalVisible(true);
+                }}
+              >
+                <Ionicons name="open-outline" size={18} color={colors.textPrimary} />
+                <Text style={[styles.managementMenuText, { color: colors.textPrimary }]}>상세 보기</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.managementMenuAction}
+                onPress={() => {
+                  const targetPost = managedPost;
+                  setManagedPost(null);
+                  handleSetPostHidden(targetPost, !targetPost.moderation_hidden);
+                }}
+              >
+                <Ionicons name={managedPost.moderation_hidden ? "eye-outline" : "eye-off-outline"} size={18} color={colors.textPrimary} />
+                <Text style={[styles.managementMenuText, { color: colors.textPrimary }]}>{managedPost.moderation_hidden ? "숨김 해제" : "숨김"}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.managementMenuAction}
+                onPress={() => {
+                  const targetPost = managedPost;
+                  setManagedPost(null);
+                  handleDeletePost(targetPost);
+                }}
+              >
+                <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                <Text style={[styles.managementMenuText, { color: "#ef4444" }]}>강제 삭제</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </Modal>
+
       <PostDetailModal
         visible={postDetailModalVisible}
         postId={selectedPostId}
@@ -1384,7 +1424,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   contentGridRow: { gap: 7, marginBottom: 7 },
-  contentTile: { flex: 1, maxWidth: "32.2%", minHeight: 168, padding: 7, borderRadius: 10, borderWidth: 1 },
+  contentTile: { flex: 1, maxWidth: "32.2%", minHeight: 198, padding: 7, borderRadius: 10, borderWidth: 1 },
+  contentTileHeader: { flexDirection: "row", alignItems: "center", minHeight: 22 },
+  contentTileAuthorRow: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 4, paddingRight: 3 },
+  contentTileAuthor: { flexShrink: 1, minWidth: 0, fontSize: 13 },
+  contentTileMenu: { width: 24, alignItems: "flex-end", justifyContent: "center" },
+  contentTileMenuButton: { width: 24, height: 24, alignItems: "center", justifyContent: "center" },
   contentTileImage: { width: "100%", height: 82, borderRadius: 7, backgroundColor: "#ccc" },
   contentTileText: { width: "100%", height: 82, borderRadius: 7, justifyContent: "center", alignItems: "center", borderWidth: 1, padding: 7 },
   postAuthor: {
@@ -1395,6 +1440,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 6,
     lineHeight: 18,
+  },
+  contentTileFooter: { minHeight: 34, marginTop: 6, flexDirection: "row", justifyContent: "flex-end", alignItems: "center" },
+  contentTileDeleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 30,
+    paddingHorizontal: 7,
+    borderRadius: 8,
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.4)",
   },
   deletePostBtn: {
     flexDirection: "row",
@@ -1414,4 +1471,30 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#fef3c7",
   },
+  managementMenuOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.28)",
+    padding: 24,
+  },
+  managementMenuCard: {
+    width: "100%",
+    maxWidth: 280,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 14,
+    elevation: 8,
+  },
+  managementMenuAction: {
+    minHeight: 46,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  managementMenuText: { fontSize: 15, fontWeight: "700" },
 });
