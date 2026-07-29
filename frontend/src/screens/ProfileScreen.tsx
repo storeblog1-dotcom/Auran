@@ -303,7 +303,7 @@ export const ProfileScreen = ({ navigation }: any) => {
                       backgroundColor: isDark ? "rgba(168, 85, 247, 0.12)" : "rgba(124, 58, 237, 0.08)",
                     },
                   ]}
-                  onPress={() => navigation.navigate("DirectMessage")}
+                  onPress={() => navigation.navigate("MainTabs", { screen: "Messages" })}
                   activeOpacity={0.8}
                 >
                   <Ionicons name="chatbubble-ellipses-outline" size={18} color={purpleAccent} />

@@ -35,12 +35,20 @@ import { Ionicons } from "@expo/vector-icons";
 const Stack = createNativeStackNavigator<any>();
 const Tab = createBottomTabNavigator<any>();
 const FeedStack = createNativeStackNavigator<any>();
+const MessagesStack = createNativeStackNavigator<any>();
 
 const FeedStackNavigator = () => (
   <FeedStack.Navigator id="feed-stack" screenOptions={{ headerShown: false, animation: "none" }}>
     <FeedStack.Screen name="FeedHome" component={FeedScreen} />
     <FeedStack.Screen name="Community" component={CommunityScreen} />
   </FeedStack.Navigator>
+);
+
+const MessagesStackNavigator = () => (
+  <MessagesStack.Navigator id="messages-stack" screenOptions={{ headerShown: false }}>
+    <MessagesStack.Screen name="DirectMessageHome" component={DirectMessageScreen} />
+    <MessagesStack.Screen name="ChatRoom" component={ChatRoomScreen} />
+  </MessagesStack.Navigator>
 );
 
 const MainTabs = () => {
@@ -129,7 +137,7 @@ const MainTabs = () => {
       />
       <Tab.Screen
         name="Messages"
-        component={DirectMessageScreen}
+        component={MessagesStackNavigator}
         options={{
           tabBarIcon: ({ color, focused }) => (
             <View style={{ alignItems: "center", justifyContent: "center", width: 64, height: 52, borderRadius: 18, paddingTop: 4, position: "relative", backgroundColor: focused ? colors.accentPurple + "12" : "transparent" }}>
@@ -173,16 +181,22 @@ const AppContent = () => {
       try {
         const res = await api.post("/direct/rooms", { target_user_id: toast.sender.id });
         const room = res.data?.data || res.data;
-        navigationRef.current.navigate("ChatRoom", {
-          roomId: room.id,
-          requestStatus: room.request_status,
-          isOutgoingRequest: room.is_outgoing_request,
-          targetUser: {
-            id: toast.sender.id,
-            username: toast.sender.username,
-            full_name: toast.sender.full_name || toast.sender.username,
-            profile_image_url: toast.sender.profile_image_url,
-            is_admin: toast.sender.is_admin,
+        navigationRef.current.navigate("MainTabs", {
+          screen: "Messages",
+          params: {
+            screen: "ChatRoom",
+            params: {
+              roomId: room.id,
+              requestStatus: room.request_status,
+              isOutgoingRequest: room.is_outgoing_request,
+              targetUser: {
+                id: toast.sender.id,
+                username: toast.sender.username,
+                full_name: toast.sender.full_name || toast.sender.username,
+                profile_image_url: toast.sender.profile_image_url,
+                is_admin: toast.sender.is_admin,
+              },
+            },
           },
         });
       } catch (err) {
@@ -222,8 +236,6 @@ const AppContent = () => {
               <Stack.Screen name="MainTabs" component={MainTabs} options={{ animation: "none" }} />
               <Stack.Screen name="UserProfile" component={UserProfileScreen} />
               <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-              <Stack.Screen name="DirectMessage" component={DirectMessageScreen} />
-              <Stack.Screen name="ChatRoom" component={ChatRoomScreen} />
               <Stack.Screen name="Notification" component={NotificationScreen} />
               <Stack.Screen name="Hashtag" component={HashtagScreen} />
               <Stack.Screen name="Admin" component={AdminScreen} />
