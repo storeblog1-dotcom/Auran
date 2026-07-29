@@ -75,6 +75,8 @@ export const CommunityScreen = ({ navigation, route }: any) => {
 
   const selectedBoard = boards.find((board) => board.id === selectedBoardId)
     || (selectedBoardId === ALL_CHILD_BOARDS_ID ? boards.find((board) => board.id === selectedParentId) : undefined);
+  const selectedParentBoard = boards.find((board) => board.id === selectedParentId)
+    || (selectedBoard && !selectedBoard.parent_id ? selectedBoard : undefined);
   const isPartnerBoard = Boolean(
     selectedBoard &&
       (String(selectedBoard.slug || "").toLowerCase().includes("partner") ||
@@ -516,6 +518,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
         initialBoardType={selectedBoard?.is_anonymous ? "anonymous" : "info"}
         boardId={selectedBoardId === ALL_CHILD_BOARDS_ID ? defaultChildBoard?.id || null : selectedBoardId}
         boardName={selectedBoardId === ALL_CHILD_BOARDS_ID ? defaultChildBoard?.name : selectedBoard?.name}
+        parentBoardName={selectedParentBoard?.name || selectedBoard?.name}
         boardOptions={orderedChildBoards}
         editPost={editingPost}
         onClose={() => {

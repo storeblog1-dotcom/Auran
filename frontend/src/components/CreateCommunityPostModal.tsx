@@ -25,6 +25,7 @@ interface CreateCommunityPostModalProps {
   initialBoardType?: "anonymous" | "info";
   boardId?: string | null;
   boardName?: string;
+  parentBoardName?: string;
   boardOptions?: any[];
   editPost?: any;
   onClose: () => void;
@@ -36,6 +37,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
   initialBoardType = "anonymous",
   boardId,
   boardName,
+  parentBoardName,
   boardOptions = [],
   editPost,
   onClose,
@@ -80,6 +82,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
 
   const selectedBoard = boardOptions.find((board) => board.id === selectedBoardId);
   const selectedBoardLabel = selectedBoard?.name || boardName || "게시판";
+  const parentBoardLabel = parentBoardName || boardName || "게시판";
   const selectBoard = (nextBoard: any) => {
     setSelectedBoardId(nextBoard.id);
     setBoardType(nextBoard.is_anonymous ? "anonymous" : "info");
@@ -243,11 +246,15 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
           </View>
 
           <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>게시판</Text>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>상위 게시판</Text>
             <View style={[styles.selectedBoard, { backgroundColor: colors.bgCard || "#18181b" }]}>
-              <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{selectedBoardLabel}</Text>
+              <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{parentBoardLabel}</Text>
             </View>
-            {boardOptions.length > 1 && (
+            {boardOptions.length > 0 && <>
+              <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginTop: 16 }]}>하위 게시판</Text>
+              <View style={[styles.selectedBoard, { backgroundColor: colors.bgCard || "#18181b" }]}>
+                <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{selectedBoardLabel}</Text>
+              </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.boardOptions}>
                 {boardOptions.map((board) => (
                   <TouchableOpacity
@@ -259,7 +266,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-            )}
+            </>}
 
             {/* Title Input */}
             <View style={styles.inputGroup}>
