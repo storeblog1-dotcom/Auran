@@ -904,6 +904,7 @@ async def get_admin_posts(
             "title": p.title,
             "board_type": p.board_type,
             "board_name": board_name,
+            "moderation_hidden": p.moderation_hidden,
             "caption": p.caption,
             "media": [
                 {
@@ -925,6 +926,25 @@ async def get_admin_posts(
         })
 
     return ApiResponse.paginated(data=post_list, total=total or 0)
+
+
+@router.patch("/posts/{post_id}/moderation-visibility", summary="관리자 권한 게시물 숨김 상태 변경")
+async def set_admin_post_moderation_visibility(
+    post_id: uuid.UUID,
+    hidden: bool = Query(...),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+) -> ApiResponse[dict[str, Any]]:
+    post = await db.scalar(select(Post).where(Post.id == post_id).with_for_update())
+    if not post:
+        raise NotFoundException("게시물")
+
+    post.moderation_hidden = hidden
+    await db.commit()
+    return ApiResponse.ok({
+        "post_id": str(post.id),
+        "moderation_hidden": post.moderation_hidden,
+    })
 
 
 @router.delete("/posts/{post_id}", summary="관리자 권한 게시물 강제 삭제")
