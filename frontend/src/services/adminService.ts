@@ -41,6 +41,7 @@ export interface AdminPostItem {
     id: string;
     username: string;
     nickname?: string | null;
+    is_admin?: boolean;
   };
   created_at?: string;
 }

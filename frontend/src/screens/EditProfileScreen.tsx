@@ -18,6 +18,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import api from "../services/api";
 import { getFullImageUrl } from "../config";
+import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
 
 export const EditProfileScreen = ({ navigation }: any) => {
   const { user, refreshProfile, logout } = useAuth();
@@ -290,9 +291,30 @@ export const EditProfileScreen = ({ navigation }: any) => {
         }}
       >
         {/* Avatar Section */}
-        <TouchableOpacity style={styles.avatarSection} onPress={handlePickProfileImage} activeOpacity={0.8}>
-          <Image source={{ uri: currentAvatarUri }} style={styles.avatar} />
-          <Text style={styles.changeAvatarText}>프로필 사진 변경 (갤러리에서 선택)</Text>
+        <TouchableOpacity
+          style={styles.avatarSection}
+          onPress={
+            user?.is_admin
+              ? () =>
+                  Alert.alert(
+                    "관리자 전용 프로필",
+                    "관리자 계정에는 공식 관리자 배지 이미지가 표시됩니다."
+                  )
+              : handlePickProfileImage
+          }
+          activeOpacity={0.8}
+        >
+          {user?.is_admin ? (
+            <AdminAvatar user={user} style={styles.avatar} />
+          ) : (
+            <Image source={{ uri: currentAvatarUri }} style={styles.avatar} />
+          )}
+          <Text style={styles.changeAvatarText}>
+            {user?.is_admin
+              ? "공식 관리자 프로필 배지"
+              : "프로필 사진 변경 (갤러리에서 선택)"}
+          </Text>
+          {user?.is_admin && <AdminBadge />}
           <Text style={styles.usernameText}>{user?.nickname || "닉네임"}</Text>
         </TouchableOpacity>
 

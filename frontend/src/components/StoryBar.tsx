@@ -5,12 +5,11 @@ import {
   View,
   ScrollView,
   TouchableOpacity,
-  Image,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { getFullImageUrl } from "../config";
 import { useTheme } from "../context/ThemeContext";
 import { getDisplayInitial, getDisplayName } from "../utils/displayName";
+import { AdminAvatar, AdminBadge } from "./AdminIdentity";
 
 interface StoryBarProps {
   storyGroups: any[];
@@ -62,9 +61,9 @@ export const StoryBar: React.FC<StoryBarProps> = ({
                 style={styles.ringOuterGradient}
               >
                 <View style={[styles.ringInner, { backgroundColor: colors.bgPrimary }]}>
-                  {currentUser?.profile_image_url ? (
-                    <Image
-                      source={{ uri: getFullImageUrl(currentUser.profile_image_url) }}
+                  {currentUser?.is_admin || currentUser?.profile_image_url ? (
+                    <AdminAvatar
+                      user={currentUser}
                       style={styles.avatarImage}
                     />
                   ) : (
@@ -84,9 +83,9 @@ export const StoryBar: React.FC<StoryBarProps> = ({
                 ]}
               >
                 <View style={[styles.ringInner, { backgroundColor: colors.bgPrimary }]}>
-                  {currentUser?.profile_image_url ? (
-                    <Image
-                      source={{ uri: getFullImageUrl(currentUser.profile_image_url) }}
+                  {currentUser?.is_admin || currentUser?.profile_image_url ? (
+                    <AdminAvatar
+                      user={currentUser}
                       style={styles.avatarImage}
                     />
                   ) : (
@@ -103,6 +102,7 @@ export const StoryBar: React.FC<StoryBarProps> = ({
           <Text style={[styles.usernameText, { color: colors.textPrimary }]} numberOfLines={1}>
             {getDisplayName(currentUser, "내 스토리")}
           </Text>
+          {currentUser?.is_admin && <AdminBadge />}
         </View>
 
 
@@ -129,9 +129,9 @@ export const StoryBar: React.FC<StoryBarProps> = ({
                     style={styles.ringOuterGradient}
                   >
                     <View style={[styles.ringInner, { backgroundColor: colors.bgPrimary }]}>
-                      {user.profile_image_url ? (
-                        <Image
-                          source={{ uri: getFullImageUrl(user.profile_image_url) }}
+                      {user.is_admin || user.profile_image_url ? (
+                        <AdminAvatar
+                          user={user}
                           style={styles.avatarImage}
                         />
                       ) : (
@@ -146,9 +146,9 @@ export const StoryBar: React.FC<StoryBarProps> = ({
                 ) : (
                   <View style={[styles.ringOuter, styles.viewedRing]}>
                     <View style={[styles.ringInner, { backgroundColor: colors.bgPrimary }]}>
-                      {user.profile_image_url ? (
-                        <Image
-                          source={{ uri: getFullImageUrl(user.profile_image_url) }}
+                      {user.is_admin || user.profile_image_url ? (
+                        <AdminAvatar
+                          user={user}
                           style={styles.avatarImage}
                         />
                       ) : (
@@ -165,6 +165,7 @@ export const StoryBar: React.FC<StoryBarProps> = ({
               <Text style={[styles.usernameText, { color: colors.textPrimary }]} numberOfLines={1}>
                 {getDisplayName(user)}
               </Text>
+              {user.is_admin && <AdminBadge />}
             </View>
           );
         })}

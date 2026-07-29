@@ -10,6 +10,7 @@ class SenderSummary(BaseModel):
     nickname: Optional[str] = None
     full_name: str
     profile_image_url: Optional[str] = None
+    is_admin: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

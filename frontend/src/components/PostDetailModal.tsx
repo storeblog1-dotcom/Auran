@@ -5,7 +5,6 @@ import {
   View,
   Modal,
   TouchableOpacity,
-  Image,
   ScrollView,
   Dimensions,
   ActivityIndicator,
@@ -20,7 +19,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import api from "../services/api";
-import { getFullImageUrl } from "../config";
 import { Comment, CommentNode } from "./CommentsModal";
 import { SendPostDmModal } from "./SendPostDmModal";
 import { PostCarousel } from "./PostCarousel";
@@ -28,6 +26,11 @@ import { HashtagText } from "./HashtagText";
 import { getDisplayName } from "../utils/displayName";
 import { PostOptionsSheet } from "./PostOptionsSheet";
 import { ReportSheet } from "./ReportSheet";
+import {
+  AdminAvatar,
+  AdminBadge,
+  openUserProfile,
+} from "./AdminIdentity";
 
 const { width, height } = Dimensions.get("window");
 
@@ -421,18 +424,19 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
               {/* Post User Header */}
               <View style={styles.postHeader}>
-                <View style={styles.userInfo}>
-                  <Image
-                    source={{
-                      uri: getFullImageUrl(post.user?.profile_image_url),
-                    }}
-                    style={styles.avatar}
-                  />
+                <TouchableOpacity
+                  style={styles.userInfo}
+                  onPress={() => openUserProfile(navigation, post.user)}
+                >
+                  <AdminAvatar user={post.user} style={styles.avatar} />
                   <View style={styles.authorText}>
-                    <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(post.user)}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(post.user)}</Text>
+                      {post.user?.is_admin && <AdminBadge />}
+                    </View>
                     {post.location ? <Text style={[styles.location, { color: colors.textSecondary }]}>{post.location}</Text> : null}
                   </View>
-                </View>
+                </TouchableOpacity>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                   {currentUser && currentUser.username === post.user?.username && (
                     <>
@@ -688,7 +692,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                 setPost((previous: any) => previous ? { ...previous, visibility } : previous);
                 onPostUpdated?.();
               }}
-              onProfile={() => post?.user?.username && navigation.navigate("UserProfile", { username: post.user.username })}
+              onProfile={() => openUserProfile(navigation, post?.user)}
               onFollow={() => post?.user?.username && handleToggleFollowUser(post.user.username, !!post.user.is_following)}
               onHide={async () => {
                 if (!post) return;

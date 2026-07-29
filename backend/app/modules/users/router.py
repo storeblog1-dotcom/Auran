@@ -242,6 +242,7 @@ async def get_follow_requests(
                 "username": r.requester.username,
                 "full_name": r.requester.full_name,
                 "profile_image_url": r.requester.profile_image_url,
+                "is_admin": r.requester.is_admin,
             },
             "created_at": r.created_at.isoformat() if r.created_at else "",
         })

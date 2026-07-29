@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Image,
   ActivityIndicator,
   Modal,
   TextInput,
@@ -16,10 +15,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../services/api";
-import { getFullImageUrl } from "../config";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { getDisplayName } from "../utils/displayName";
+import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
 
 interface UserInfo {
   id: string;
@@ -27,6 +26,7 @@ interface UserInfo {
   nickname?: string | null;
   full_name: string;
   profile_image_url: string | null;
+  is_admin?: boolean;
 }
 
 interface LastMessage {
@@ -170,6 +170,7 @@ export const DirectMessageScreen = ({ navigation, route }: any) => {
           username: targetUser.username,
           full_name: targetUser.full_name,
           profile_image_url: targetUser.profile_image_url,
+          is_admin: targetUser.is_admin,
         });
       } else {
         throw new Error("User not found");
@@ -196,8 +197,6 @@ export const DirectMessageScreen = ({ navigation, route }: any) => {
 
   const renderRoomItem = ({ item }: { item: ChatRoom }) => {
     const target = item.target_user;
-    const avatarUrl = getFullImageUrl(target?.profile_image_url);
-
     const lastMsgText = item.last_message
       ? item.last_message.message_type?.toUpperCase() === "IMAGE"
         ? "📷 사진"
@@ -223,9 +222,12 @@ export const DirectMessageScreen = ({ navigation, route }: any) => {
           })
         }
       >
-        <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+        <AdminAvatar user={target} style={styles.avatar} />
         <View style={styles.roomInfo}>
-          <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(target, "대화 상대")}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(target, "대화 상대")}</Text>
+            {target?.is_admin && <AdminBadge />}
+          </View>
           <Text
             style={[
               styles.lastMessage,
@@ -298,14 +300,14 @@ export const DirectMessageScreen = ({ navigation, route }: any) => {
             })
           }
         >
-          <Image
-            source={{ uri: getFullImageUrl(target?.profile_image_url) }}
-            style={styles.avatar}
-          />
+          <AdminAvatar user={target} style={styles.avatar} />
           <View style={styles.roomInfo}>
-            <Text style={[styles.username, { color: colors.textPrimary }]}>
-              {getDisplayName(target, "요청 보낸 사용자")}
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={[styles.username, { color: colors.textPrimary }]}>
+                {getDisplayName(target, "요청 보낸 사용자")}
+              </Text>
+              {target?.is_admin && <AdminBadge />}
+            </View>
             <Text
               style={[styles.lastMessage, { color: colors.textSecondary }]}
               numberOfLines={1}
@@ -530,12 +532,12 @@ export const DirectMessageScreen = ({ navigation, route }: any) => {
                   onPress={() => startChatWithUser(item)}
                 >
                   <View style={styles.mutualUserLeft}>
-                    <Image
-                      source={{ uri: getFullImageUrl(item.profile_image_url) }}
-                      style={styles.avatar}
-                    />
+                    <AdminAvatar user={item} style={styles.avatar} />
                     <View style={{ marginLeft: 12 }}>
-                      <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(item)}</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(item)}</Text>
+                        {item.is_admin && <AdminBadge />}
+                      </View>
                       {item.full_name ? (
                         <Text style={[styles.userFullName, { color: colors.textSecondary }]}>{item.full_name}</Text>
                       ) : null}

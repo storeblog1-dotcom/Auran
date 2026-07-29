@@ -19,6 +19,11 @@ import { getFullImageUrl } from "../config";
 import { useTheme } from "../context/ThemeContext";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { getDisplayName } from "../utils/displayName";
+import {
+  AdminAvatar,
+  AdminBadge,
+  openUserProfile,
+} from "../components/AdminIdentity";
 
 const { width, height } = Dimensions.get("window");
 const DEVICE_ASPECT_RATIO = height / width;
@@ -149,16 +154,14 @@ export const SearchScreen = ({ navigation }: any) => {
         <TouchableOpacity
           style={styles.userLeft}
           activeOpacity={0.7}
-          onPress={() => navigation.navigate("UserProfile", { username: item.username })}
+          onPress={() => openUserProfile(navigation, item)}
         >
-          <Image
-            source={{
-              uri: getFullImageUrl(item.profile_image_url),
-            }}
-            style={styles.userAvatar}
-          />
+          <AdminAvatar user={item} style={styles.userAvatar} />
           <View>
-            <Text style={[styles.userUsername, { color: colors.textPrimary }]}>{getDisplayName(item)}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={[styles.userUsername, { color: colors.textPrimary }]}>{getDisplayName(item)}</Text>
+              {item.is_admin && <AdminBadge />}
+            </View>
             <Text style={[styles.userFullName, { color: colors.textSecondary }]}>{item.full_name}</Text>
           </View>
         </TouchableOpacity>

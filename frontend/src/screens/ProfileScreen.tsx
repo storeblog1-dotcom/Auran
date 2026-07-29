@@ -20,6 +20,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { FollowRequestsModal } from "../components/FollowRequestsModal";
 import { getDisplayName } from "../utils/displayName";
+import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
 
 const { width, height } = Dimensions.get("window");
 const DEVICE_ASPECT_RATIO = height / width;
@@ -217,10 +218,8 @@ export const ProfileScreen = ({ navigation }: any) => {
                   },
                 ]}
               >
-                <Image
-                  source={{
-                    uri: getFullImageUrl(user?.profile_image_url),
-                  }}
+                <AdminAvatar
+                  user={user}
                   style={styles.profileAvatarHero}
                 />
               </View>
@@ -232,7 +231,11 @@ export const ProfileScreen = ({ navigation }: any) => {
                 <Text style={[styles.fullNameText, { color: colors.textPrimary }]}>
                   {getDisplayName(user)}
                 </Text>
-                <Ionicons name="checkmark-circle" size={18} color={primaryAccent} />
+                {user?.is_admin ? (
+                  <AdminBadge />
+                ) : (
+                  <Ionicons name="checkmark-circle" size={18} color={primaryAccent} />
+                )}
               </View>
               {user?.bio ? <Text style={[styles.bioSubText, { color: colors.textSecondary }]}>{user.bio}</Text> : null}
             </View>

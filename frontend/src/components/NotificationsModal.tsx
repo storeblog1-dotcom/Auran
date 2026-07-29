@@ -6,7 +6,6 @@ import {
   Modal,
   TouchableOpacity,
   FlatList,
-  Image,
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
@@ -15,11 +14,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useTheme } from "../context/ThemeContext";
 import { useNotification } from "../context/NotificationContext";
-import { getFullImageUrl } from "../config";
 import api from "../services/api";
 import { NotificationItem } from "../services/notifications";
 import { PostDetailModal } from "./PostDetailModal";
 import { getDisplayName } from "../utils/displayName";
+import {
+  AdminAvatar,
+  AdminBadge,
+  showAdminProfilePrivateAlert,
+} from "./AdminIdentity";
 
 interface NotificationsModalProps {
   visible: boolean;
@@ -50,6 +53,19 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   const unreadItems = notifications.filter((n) => !n.is_read);
   const readItems = notifications.filter((n) => n.is_read);
 
+  const openSenderProfile = (item: NotificationItem) => {
+    if (item.sender.is_admin) {
+      showAdminProfilePrivateAlert();
+      return;
+    }
+    onClose();
+    if (onNavigateProfile) {
+      onNavigateProfile(item.sender.username);
+    } else {
+      navigation.navigate("UserProfile", { username: item.sender.username });
+    }
+  };
+
   const formatTimeAgo = (dateStr?: string) => {
     if (!dateStr) return "";
     const date = new Date(dateStr);
@@ -70,13 +86,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     }
 
     if (item.type === "FOLLOW") {
-      onClose();
       if (item.sender?.username) {
-        if (onNavigateProfile) {
-          onNavigateProfile(item.sender.username);
-        } else {
-          navigation.navigate("UserProfile", { username: item.sender.username });
-        }
+        openSenderProfile(item);
       }
     } else if (item.type === "DIRECT_MESSAGE") {
       onClose();
@@ -94,6 +105,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               nickname: item.sender.nickname,
               full_name: item.sender.full_name,
               profile_image_url: item.sender.profile_image_url,
+              is_admin: item.sender.is_admin,
             },
           });
         } catch (err) {
@@ -105,16 +117,14 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         setAutoOpenComments(true);
         setSelectedPostId(item.post_id);
       } else if (item.sender?.username) {
-        onClose();
-        navigation.navigate("UserProfile", { username: item.sender.username });
+        openSenderProfile(item);
       }
     } else if (item.type === "LIKE" || item.type === "MENTION") {
       if (item.post_id) {
         setAutoOpenComments(false);
         setSelectedPostId(item.post_id);
       } else if (item.sender?.username) {
-        onClose();
-        navigation.navigate("UserProfile", { username: item.sender.username });
+        openSenderProfile(item);
       }
     }
   };
@@ -133,27 +143,30 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         ]}
         onPress={() => handlePressItem(item)}
       >
-        <Image
-          source={{ uri: getFullImageUrl(item.sender?.profile_image_url) }}
+        <AdminAvatar
+          user={item.sender}
           style={[styles.avatar, isRead && { opacity: 0.75 }]}
         />
         <View style={{ flex: 1, paddingRight: 8 }}>
-          <Text
-            style={[
-              styles.itemText,
-              { color: isRead ? colors.textMuted : colors.textPrimary },
-            ]}
-          >
+          <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 5 }}>
             <Text
               style={[
                 styles.username,
                 { color: isRead ? colors.textSecondary : colors.textPrimary },
               ]}
             >
-              {getDisplayName(item.sender)}{" "}
+              {getDisplayName(item.sender)}
             </Text>
-            {item.message || "새로운 알림이 도착했습니다."}
-          </Text>
+            {item.sender.is_admin && <AdminBadge />}
+            <Text
+              style={[
+                styles.itemText,
+                { color: isRead ? colors.textMuted : colors.textPrimary },
+              ]}
+            >
+              {item.message || "새로운 알림이 도착했습니다."}
+            </Text>
+          </View>
           <Text
             style={[
               styles.timeText,

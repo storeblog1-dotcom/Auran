@@ -4,7 +4,6 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
-  Image,
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
@@ -14,11 +13,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useFocusEffect, useRoute } from "@react-navigation/native";
 import { useTheme } from "../context/ThemeContext";
 import { useNotification } from "../context/NotificationContext";
-import { getFullImageUrl } from "../config";
 import api from "../services/api";
 import { NotificationItem } from "../services/notifications";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { getDisplayName } from "../utils/displayName";
+import {
+  AdminAvatar,
+  AdminBadge,
+  openUserProfile,
+} from "../components/AdminIdentity";
 
 export const NotificationScreen = () => {
   const { colors } = useTheme();
@@ -61,7 +64,7 @@ export const NotificationScreen = () => {
     }
 
     if (item.type === "FOLLOW") {
-      navigation.navigate("UserProfile", { username: item.sender.username });
+      openUserProfile(navigation, item.sender);
     } else if (item.type === "DIRECT_MESSAGE") {
       try {
         const res = await api.post("/direct/rooms", { target_user_id: item.sender.id });
@@ -76,6 +79,7 @@ export const NotificationScreen = () => {
             nickname: item.sender.nickname,
             full_name: item.sender.full_name,
             profile_image_url: item.sender.profile_image_url,
+            is_admin: item.sender.is_admin,
           },
         });
       } catch (err) {
@@ -86,14 +90,14 @@ export const NotificationScreen = () => {
         setAutoOpenComments(true);
         setSelectedPostId(item.post_id);
       } else {
-        navigation.navigate("UserProfile", { username: item.sender.username });
+        openUserProfile(navigation, item.sender);
       }
     } else if (item.type === "LIKE" || item.type === "MENTION") {
       if (item.post_id) {
         setAutoOpenComments(false);
         setSelectedPostId(item.post_id);
       } else {
-        navigation.navigate("UserProfile", { username: item.sender.username });
+        openUserProfile(navigation, item.sender);
       }
     }
   };
@@ -163,8 +167,8 @@ export const NotificationScreen = () => {
         activeOpacity={0.7}
       >
         <View style={styles.avatarWrapper}>
-          <Image
-            source={{ uri: getFullImageUrl(item.sender.profile_image_url) }}
+          <AdminAvatar
+            user={item.sender}
             style={[styles.avatar, isRead && { opacity: 0.75 }]}
           />
           <View
@@ -178,12 +182,7 @@ export const NotificationScreen = () => {
         </View>
 
         <View style={styles.contentWrapper}>
-          <Text
-            style={[
-              styles.messageText,
-              { color: isRead ? colors.textMuted : colors.textPrimary },
-            ]}
-          >
+          <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 5 }}>
             <Text
               style={[
                 styles.usernameBold,
@@ -191,9 +190,17 @@ export const NotificationScreen = () => {
               ]}
             >
               {getDisplayName(item.sender)}
-            </Text>{" "}
-            {item.message || "새로운 알림이 도착했습니다."}
-          </Text>
+            </Text>
+            {item.sender.is_admin && <AdminBadge />}
+            <Text
+              style={[
+                styles.messageText,
+                { color: isRead ? colors.textMuted : colors.textPrimary },
+              ]}
+            >
+              {item.message || "새로운 알림이 도착했습니다."}
+            </Text>
+          </View>
           <Text
             style={[
               styles.timeText,

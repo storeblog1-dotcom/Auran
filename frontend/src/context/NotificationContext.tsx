@@ -87,6 +87,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
         nickname: item.sender.nickname,
         full_name: item.sender.full_name,
         profile_image_url: item.sender.profile_image_url,
+        is_admin: item.sender.is_admin,
       },
       type: item.type,
       message: item.message,
