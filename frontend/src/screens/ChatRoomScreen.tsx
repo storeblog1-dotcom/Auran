@@ -79,7 +79,6 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
     420,
     Math.max(180, viewportWidth - 96)
   );
-  const messageTextMaxWidth = messageBubbleMaxWidth - 28;
 
   useEffect(() => {
     if (requestStatus !== "ACCEPTED") return;
@@ -430,10 +429,7 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
             <Text
               style={[
                 styles.messageText,
-                {
-                  color: isMine ? "#ffffff" : colors.textPrimary,
-                  maxWidth: messageTextMaxWidth,
-                },
+                { color: isMine ? "#ffffff" : colors.textPrimary },
               ]}
               textBreakStrategy="simple"
             >
@@ -714,9 +710,8 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 15,
     lineHeight: 22,
-    minWidth: 0,
     flexShrink: 1,
-    flexWrap: "wrap",
+    paddingRight: 2,
   },
   myMessageText: {
     color: "#fff",
