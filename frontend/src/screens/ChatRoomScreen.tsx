@@ -78,6 +78,19 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
   const ws = useRef<WebSocket | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
+  // Android Korean IME can commit the final composing character after the
+  // send button's press handler starts. Keep the native input value outside
+  // React's asynchronous state queue so the final character is never lost.
+  const latestInputTextRef = useRef("");
+  const sendingTextRef = useRef(false);
+  const inputFocusedRef = useRef(false);
+  const pendingSendRef = useRef(false);
+  const shouldRestoreInputFocusRef = useRef(false);
+
+  const handleInputChange = (text: string) => {
+    latestInputTextRef.current = text;
+    setInputText(text);
+  };
 
   useEffect(() => {
     if (requestStatus !== "ACCEPTED") return;
@@ -181,8 +194,12 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
     };
   }, [roomId]);
 
-  const handleSendText = async () => {
-    if (!inputText.trim()) return;
+  const sendTextMessage = async (rawInput: string) => {
+    if (sendingTextRef.current) return;
+    // Use trim only to reject an empty message. The actual text is sent
+    // unchanged, including its final character and punctuation.
+    if (!rawInput.trim()) return;
+    const contentToSend = rawInput;
     if (
       roomRequestStatus === "PENDING" &&
       (!isOutgoingRequest ||
@@ -196,7 +213,8 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
       );
       return;
     }
-    const contentToSend = inputText.trim();
+    sendingTextRef.current = true;
+    latestInputTextRef.current = "";
     setInputText("");
 
     const tempId = `temp-${Date.now()}`;
@@ -264,7 +282,33 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
           (error as any)?.response?.data?.detail ||
           "메시지를 보내지 못했습니다."
       );
+    } finally {
+      sendingTextRef.current = false;
+      if (shouldRestoreInputFocusRef.current && canCompose) {
+        shouldRestoreInputFocusRef.current = false;
+        requestAnimationFrame(() => inputRef.current?.focus());
+      }
     }
+  };
+
+  const handleSendText = () => {
+    if (sendingTextRef.current || pendingSendRef.current) return;
+
+    if (inputFocusedRef.current) {
+      // blur() forces Android to commit a Korean IME composition. The final
+      // native value is then sent from onEndEditing below.
+      pendingSendRef.current = true;
+      shouldRestoreInputFocusRef.current = true;
+      inputRef.current?.blur();
+      return;
+    }
+
+    void sendTextMessage(latestInputTextRef.current);
+  };
+
+  const handleInputSubmit = (text: string) => {
+    pendingSendRef.current = false;
+    void sendTextMessage(text);
   };
 
   const handlePickAndSendImage = async () => {
@@ -557,8 +601,23 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
             }
             placeholderTextColor={colors.textSecondary}
             value={inputText}
-            onChangeText={setInputText}
+            onFocus={() => {
+              inputFocusedRef.current = true;
+            }}
+            onChangeText={handleInputChange}
+            onEndEditing={(event) => {
+              const finalText = event.nativeEvent.text;
+              inputFocusedRef.current = false;
+              handleInputChange(finalText);
+              if (pendingSendRef.current) {
+                pendingSendRef.current = false;
+                void sendTextMessage(finalText);
+              }
+            }}
+            onSubmitEditing={(event) => handleInputSubmit(event.nativeEvent.text)}
             multiline
+            submitBehavior="submit"
+            returnKeyType="send"
             editable={canCompose}
           />
 
