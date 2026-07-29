@@ -38,6 +38,7 @@ class PostCreateRequest(BaseModel):
     board_id: Optional[UUID] = Field(None, description="커뮤니티 게시판 ID")
     caption: Optional[str] = Field(None, description="게시물 문구")
     location: Optional[str] = Field(None, max_length=255, description="위치")
+    youtube_url: Optional[str] = Field(None, max_length=255, description="API 검증된 YouTube 일반 영상 URL")
     visibility: Optional[str] = Field(
         "public",
         pattern=r"^(public|followers|private)$",
@@ -56,6 +57,7 @@ class PostUpdateRequest(BaseModel):
     board_id: Optional[UUID] = Field(None, description="커뮤니티 게시판 ID")
     caption: Optional[str] = Field(None, description="게시물 문구")
     location: Optional[str] = Field(None, max_length=255, description="위치")
+    youtube_url: Optional[str] = Field(None, max_length=255, description="API 검증된 YouTube 일반 영상 URL")
     visibility: Optional[str] = Field(None, pattern=r"^(public|followers|private)$")
     media: Optional[List[PostMediaCreate]] = Field(None, description="수정할 미디어 목록")
 
@@ -135,6 +137,10 @@ class PostResponse(BaseModel):
     parent_board_name: Optional[str] = None
     caption: Optional[str] = None
     location: Optional[str] = None
+    youtube_url: Optional[str] = None
+    youtube_video_id: Optional[str] = None
+    youtube_title: Optional[str] = None
+    youtube_thumbnail_url: Optional[str] = None
     visibility: str = "public"
     media: List[PostMediaResponse]
     likes_count: int = 0

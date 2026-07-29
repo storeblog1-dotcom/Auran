@@ -46,6 +46,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(boardId || null);
   const [title, setTitle] = useState("");
   const [caption, setCaption] = useState("");
+  const [youtubeUrl, setYoutubeUrl] = useState("");
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
@@ -56,6 +57,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
         setSelectedBoardId(editPost.board_id || boardId || null);
         setTitle(editPost.title || "");
         setCaption(editPost.caption || "");
+        setYoutubeUrl(editPost.youtube_url || "");
         if (editPost.media && editPost.media.length > 0) {
           setSelectedAsset({
             uri: editPost.media[0].media_url,
@@ -70,6 +72,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
         setSelectedBoardId(boardId || null);
         setTitle("");
         setCaption("");
+        setYoutubeUrl("");
         setSelectedAsset(null);
       }
     }
@@ -108,6 +111,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
   const handleReset = () => {
     setTitle("");
     setCaption("");
+    setYoutubeUrl("");
     setSelectedAsset(null);
     setLoading(false);
   };
@@ -172,6 +176,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
           board_type: boardType,
           board_id: selectedBoardId,
           caption: caption.trim(),
+          youtube_url: youtubeUrl.trim() || null,
           media: mediaList,
         });
         Alert.alert("성공", "게시물이 수정되었습니다!");
@@ -182,6 +187,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
           board_type: boardType,
           board_id: selectedBoardId,
           media: mediaList,
+          youtube_url: youtubeUrl.trim() || null,
         });
 
         Alert.alert("성공", "게시물이 등록되었습니다!");
@@ -189,9 +195,15 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
 
       handleClose();
       onPostCreated();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error creating/editing community post", err);
-      Alert.alert("오류", editPost ? "게시물 수정에 실패했습니다." : "게시물 등록에 실패했습니다.");
+      const serverMessage = err.response?.data?.error?.message || err.response?.data?.detail;
+      Alert.alert(
+        "등록 실패",
+        typeof serverMessage === "string"
+          ? serverMessage
+          : editPost ? "게시물 수정에 실패했습니다." : "게시물 등록에 실패했습니다."
+      );
     } finally {
       setLoading(false);
     }
@@ -288,6 +300,25 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
                 multiline
                 textAlignVertical="top"
               />
+            </View>
+
+            {/* Image Attachment */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>YouTube 일반 영상 (선택)</Text>
+              <View style={[styles.youtubeInputRow, { backgroundColor: colors.bgInput || "#18181b", borderColor: colors.borderColor || "#27272a" }]}>
+                <Ionicons name="logo-youtube" size={20} color="#ff0033" />
+                <TextInput
+                  style={[styles.youtubeInput, { color: colors.textPrimary }]}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  placeholderTextColor={colors.textSecondary || "#71717a"}
+                  value={youtubeUrl}
+                  onChangeText={setYoutubeUrl}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                />
+              </View>
+              <Text style={[styles.youtubeHint, { color: colors.textSecondary }]}>검증된 일반 영상 1개만 등록할 수 있습니다.</Text>
             </View>
 
             {/* Image Attachment */}
@@ -432,6 +463,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
+  youtubeInputRow: { minHeight: 48, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 10 },
+  youtubeInput: { flex: 1, fontSize: 14 },
+  youtubeHint: { fontSize: 12, lineHeight: 17, marginTop: 7 },
   imagePickerBtn: {
     height: 100,
     borderRadius: 12,

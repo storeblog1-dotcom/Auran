@@ -41,6 +41,10 @@ class Post(Base):
     board_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("community_boards.id", ondelete="SET NULL"), nullable=True, index=True)
     caption: Mapped[str | None] = mapped_column(Text, nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    youtube_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    youtube_video_id: Mapped[str | None] = mapped_column(String(11), nullable=True)
+    youtube_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    youtube_thumbnail_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     visibility: Mapped[str] = mapped_column(
         String(20), default="public", server_default="public", nullable=False
     )

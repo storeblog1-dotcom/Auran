@@ -22,6 +22,7 @@ import api from "../services/api";
 import { Comment, CommentNode } from "./CommentsModal";
 import { SendPostDmModal } from "./SendPostDmModal";
 import { PostCarousel } from "./PostCarousel";
+import { VerifiedYouTubeCard } from "./VerifiedYouTubeCard";
 import { HashtagText } from "./HashtagText";
 import { getDisplayName } from "../utils/displayName";
 import { PostOptionsSheet } from "./PostOptionsSheet";
@@ -563,6 +564,12 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     <HashtagText text={post.caption} style={{ fontSize: 14, lineHeight: 20 }} />
                   </View>
                 ) : null}
+
+                <VerifiedYouTubeCard
+                  url={post.youtube_url}
+                  title={post.youtube_title}
+                  thumbnailUrl={post.youtube_thumbnail_url}
+                />
 
                 <Text style={[styles.timeText, { color: colors.textMuted, marginTop: 4, marginBottom: 12 }]}>
                   {new Date(post.created_at).toLocaleDateString("ko-KR")}

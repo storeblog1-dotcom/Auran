@@ -26,6 +26,7 @@ import { Comment, CommentNode } from "./CommentsModal";
 
 import { CreateCommunityPostModal } from "./CreateCommunityPostModal";
 import { ImageDetailViewerModal } from "./ImageDetailViewerModal";
+import { VerifiedYouTubeCard } from "./VerifiedYouTubeCard";
 import { PostOptionsSheet } from "./PostOptionsSheet";
 import { ReportSheet } from "./ReportSheet";
 import {
@@ -318,6 +319,12 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
                   <Text style={[styles.postTitle, { color: colors.textPrimary }]}>{post.title}</Text>
                 ) : null}
                 <Text style={[styles.postBody, { color: colors.textPrimary }]}>{post.caption}</Text>
+
+                <VerifiedYouTubeCard
+                  url={post.youtube_url}
+                  title={post.youtube_title}
+                  thumbnailUrl={post.youtube_thumbnail_url}
+                />
 
                 {/* Media Image */}
                 {post.media && post.media.length > 0 ? (

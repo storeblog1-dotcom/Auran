@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     expo_push_url: str = "https://exp.host/--/api/v2/push/send"
     expo_push_receipts_url: str = "https://exp.host/--/api/v2/push/getReceipts"
 
+    # Server-only YouTube Data API v3 key for video safety verification.
+    youtube_data_api_key: str = ""
+
     # CORS
     allowed_origins: str = "*,http://localhost:3000,http://localhost:8081"
 
