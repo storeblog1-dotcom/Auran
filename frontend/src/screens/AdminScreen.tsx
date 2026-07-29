@@ -390,6 +390,50 @@ export const AdminScreen = ({ navigation }: any) => {
     ]);
   };
 
+  const handleSetPostHidden = (targetPost: AdminPostItem, hidden: boolean) => {
+    const actionLabel = hidden ? "숨김" : "숨김 해제";
+    Alert.alert(
+      `게시물 ${actionLabel}`,
+      hidden ? "이 게시물은 일반 사용자에게 보이지 않게 됩니다." : "이 게시물을 다시 일반 사용자에게 표시합니다.",
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: actionLabel,
+          style: hidden ? "destructive" : "default",
+          onPress: async () => {
+            try {
+              const updated = await adminService.setPostModerationHidden(targetPost.id, hidden);
+              setPosts((prev) => prev.map((post) => (
+                post.id === updated.post_id ? { ...post, moderation_hidden: updated.moderation_hidden } : post
+              )));
+              Alert.alert("완료", `게시물이 ${actionLabel} 처리되었습니다.`);
+            } catch (err: any) {
+              Alert.alert("오류", err.response?.data?.detail || `게시물 ${actionLabel} 처리에 실패했습니다.`);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const openPostManagementMenu = (item: AdminPostItem) => {
+    Alert.alert("콘텐츠 관리", "관리 작업을 선택하세요.", [
+      {
+        text: "상세 보기",
+        onPress: () => {
+          setSelectedPostId(item.id);
+          setPostDetailModalVisible(true);
+        },
+      },
+      {
+        text: item.moderation_hidden ? "숨김 해제" : "숨김",
+        onPress: () => handleSetPostHidden(item, !item.moderation_hidden),
+      },
+      { text: "강제 삭제", style: "destructive", onPress: () => handleDeletePost(item) },
+      { text: "취소", style: "cancel" },
+    ]);
+  };
+
   const primaryAccent = isDark ? "#a855f7" : "#7c3aed";
   const cyanBorder = isDark ? "#06b6d4" : "#0284c7";
 
@@ -863,9 +907,19 @@ export const AdminScreen = ({ navigation }: any) => {
                         </Text>
                         {item.author.is_admin && <AdminBadge />}
                       </View>
-                      <Text style={{ color: colors.textMuted, fontSize: 11 }}>
-                        {item.created_at ? new Date(item.created_at).toLocaleDateString() : ""}
-                      </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                        {item.moderation_hidden && <View style={styles.hiddenBadge}><Ionicons name="eye-off-outline" size={11} color="#b45309" /></View>}
+                        <TouchableOpacity
+                          accessibilityLabel="콘텐츠 관리 메뉴"
+                          hitSlop={8}
+                          onPress={(event) => {
+                            event.stopPropagation();
+                            openPostManagementMenu(item);
+                          }}
+                        >
+                          <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
+                        </TouchableOpacity>
+                      </View>
                     </View>
 
                     <View style={{ flexDirection: "column", marginTop: 8, gap: 7, alignItems: "stretch" }}>
@@ -1351,5 +1405,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(239, 68, 68, 0.1)",
     borderWidth: 1,
     borderColor: "rgba(239, 68, 68, 0.4)",
+  },
+  hiddenBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fef3c7",
   },
 });

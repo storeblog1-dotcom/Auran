@@ -47,6 +47,7 @@ export interface AdminPostItem {
     is_admin?: boolean;
   };
   created_at?: string;
+  moderation_hidden?: boolean;
 }
 
 export interface AdminActivityUser {
@@ -178,6 +179,10 @@ export const adminService = {
 
   deletePost: async (postId: string): Promise<void> => {
     await api.delete(`/admin/posts/${postId}`);
+  },
+  setPostModerationHidden: async (postId: string, hidden: boolean): Promise<{ post_id: string; moderation_hidden: boolean }> => {
+    const res = await api.patch(`/admin/posts/${postId}/moderation-visibility`, null, { params: { hidden } });
+    return res.data.data;
   },
   getActivityUsers: async (q?: string, page: number = 1, size: number = 20) => {
     const res = await api.get("/admin/activity-users", { params: { q, page, size } });
