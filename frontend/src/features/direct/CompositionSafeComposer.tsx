@@ -38,7 +38,6 @@ export const CompositionSafeComposer = ({
   const ignoreEndEditingUntilRef = useRef(0);
   const commitFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hasText, setHasText] = useState(false);
-  const [inputHeight, setInputHeight] = useState(40);
 
   useEffect(() => {
     if (!autoFocus || !editable) return;
@@ -58,7 +57,6 @@ export const CompositionSafeComposer = ({
   const clearNativeInput = useCallback(() => {
     nativeTextRef.current = "";
     setHasText(false);
-    setInputHeight(40);
     onTypingChange(false);
     inputRef.current?.clear();
   }, [onTypingChange]);
@@ -161,12 +159,12 @@ export const CompositionSafeComposer = ({
           style={[
             styles.input,
             {
-              height: inputHeight,
               color: colors.textPrimary,
             },
           ]}
           editable={editable}
           multiline
+          scrollEnabled
           autoCorrect
           autoCapitalize="sentences"
           placeholder={placeholder}
@@ -176,10 +174,6 @@ export const CompositionSafeComposer = ({
           onChangeText={updateNativeText}
           onEndEditing={handleEndEditing}
           onSubmitEditing={commitFromNative}
-          onContentSizeChange={(event) => {
-            const measured = event.nativeEvent.contentSize.height + 10;
-            setInputHeight(Math.max(40, Math.min(96, measured)));
-          }}
           textAlignVertical="center"
         />
       </View>
@@ -233,14 +227,14 @@ const styles = StyleSheet.create({
   inputShell: {
     flex: 1,
     minWidth: 0,
+    height: 40,
     borderWidth: 1,
     borderRadius: 16,
     overflow: "visible",
   },
   input: {
     width: "100%",
-    minHeight: 40,
-    maxHeight: 96,
+    height: "100%",
     paddingHorizontal: 12,
     paddingTop: 7,
     paddingBottom: 7,
