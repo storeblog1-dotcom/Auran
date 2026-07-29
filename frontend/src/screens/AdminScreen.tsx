@@ -38,6 +38,11 @@ import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
 
 type AdminTab = "stats" | "users" | "posts" | "activity" | "reports";
 
+const getReportedPostImages = (snapshot: Record<string, any> | null | undefined) => {
+  const media = Array.isArray(snapshot?.media) ? snapshot.media : [];
+  return media.map((item: any) => ({ url: item?.url || item?.media_url || item?.image_url || null, type: String(item?.type || item?.media_type || "image").toLowerCase() })).filter((item: { url: string | null; type: string }) => item.url && item.type === "image");
+};
+
 export const AdminScreen = ({ navigation }: any) => {
   const { colors, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<AdminTab>("stats");
@@ -1052,6 +1057,17 @@ export const AdminScreen = ({ navigation }: any) => {
                   <Text style={{ color: colors.textMuted, marginTop: 6 }}>
                     고유번호: {selectedReport.snapshot.display_number || selectedReport.snapshot.comment_display_number || "-"}
                   </Text>
+                  {selectedReport.target_type === "post" && (getReportedPostImages(selectedReport.snapshot).length > 0 ? (
+                    <View style={{ marginTop: 14 }}>
+                      <Text style={{ color: colors.textSecondary, fontWeight: "800", marginBottom: 8 }}>신고 게시물 이미지</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                        {getReportedPostImages(selectedReport.snapshot).map((media, index) => <View key={`${media.url}-${index}`} style={{ width: 168, height: 168, borderRadius: 12, overflow: "hidden", backgroundColor: colors.bgPrimary, borderWidth: 1, borderColor: colors.borderColor, alignItems: "center", justifyContent: "center" }}>
+                          <Ionicons name="image-outline" size={28} color={colors.textMuted} />
+                          <Image source={{ uri: getFullImageUrl(media.url!) }} style={{ position: "absolute", width: "100%", height: "100%" }} resizeMode="cover" />
+                        </View>)}
+                      </ScrollView>
+                    </View>
+                  ) : <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14 }}><Ionicons name="image-outline" size={16} color={colors.textMuted} /><Text style={{ color: colors.textMuted, fontSize: 12 }}>저장된 게시물 이미지가 없습니다.</Text></View>)}
                 </View>
                 {selectedReport.reports?.map((report) => (
                   <View key={report.id} style={[styles.postCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
