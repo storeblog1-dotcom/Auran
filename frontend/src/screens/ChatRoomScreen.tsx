@@ -45,6 +45,23 @@ interface ChatMessage {
   created_at: string;
 }
 
+const replaceOptimisticMessage = (
+  messages: ChatMessage[],
+  tempId: string,
+  savedMessage: ChatMessage
+): ChatMessage[] => {
+  const tempIndex = messages.findIndex((message) => message.id === tempId);
+  if (tempIndex === -1) {
+    return messages.some((message) => message.id === savedMessage.id)
+      ? messages
+      : [...messages, savedMessage];
+  }
+
+  return messages.map((message) =>
+    message.id === tempId ? savedMessage : message
+  );
+};
+
 export const ChatRoomScreen = ({ route, navigation }: any) => {
   const insets = useSafeAreaInsets();
   const {
@@ -113,7 +130,32 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
           const normalizedMessages = Array.isArray(messageItems)
             ? messageItems
             : [];
-          setMessages(normalizedMessages);
+          setMessages((previousMessages) => {
+            const optimisticMessages = previousMessages.filter((message) =>
+              message.id.startsWith("temp-")
+            );
+            const unmatchedOptimisticMessages = optimisticMessages.filter(
+              (optimisticMessage) =>
+                !normalizedMessages.some(
+                  (serverMessage) =>
+                    serverMessage.sender.id === optimisticMessage.sender.id &&
+                    serverMessage.content === optimisticMessage.content &&
+                    serverMessage.message_type === optimisticMessage.message_type
+                )
+            );
+            const reconciledMessages = [
+              ...normalizedMessages,
+              ...unmatchedOptimisticMessages,
+            ];
+            const unchanged =
+              reconciledMessages.length === previousMessages.length &&
+              reconciledMessages.every(
+                (message, index) =>
+                  message.id === previousMessages[index]?.id &&
+                  message.content === previousMessages[index]?.content
+              );
+            return unchanged ? previousMessages : reconciledMessages;
+          });
           if (roomRequestStatus === "PENDING" && isOutgoingRequest) {
             setRequestMessageCount(
               normalizedMessages.filter(
@@ -216,6 +258,7 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
     sendingTextRef.current = true;
     latestInputTextRef.current = "";
     setInputText("");
+    inputRef.current?.clear();
 
     const tempId = `temp-${Date.now()}`;
     const tempMsg: ChatMessage = {
@@ -246,9 +289,7 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
         });
         const savedMessage = res.data?.data || res.data;
         setMessages((prev) =>
-          prev.map((message) =>
-            message.id === tempId ? savedMessage : message
-          )
+          replaceOptimisticMessage(prev, tempId, savedMessage)
         );
         setRequestMessageCount((previous) => {
           const nextCount = previous + 1;
@@ -271,7 +312,9 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
           message_type: "TEXT",
         });
         const savedMessage = res.data?.data || res.data;
-        setMessages((prev) => prev.map((m) => (m.id === tempId ? savedMessage : m)));
+        setMessages((prev) =>
+          replaceOptimisticMessage(prev, tempId, savedMessage)
+        );
       }
     } catch (error) {
       console.error("Failed to send message", error);
@@ -600,7 +643,6 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
                 : "요청 승인 대기 중"
             }
             placeholderTextColor={colors.textSecondary}
-            value={inputText}
             onFocus={() => {
               inputFocusedRef.current = true;
             }}
