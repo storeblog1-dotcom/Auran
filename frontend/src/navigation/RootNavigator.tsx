@@ -7,6 +7,7 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { ContextualComposeProvider, useContextualCompose } from "../context/ContextualComposeContext";
 import { NotificationProvider, useNotification } from "../context/NotificationContext";
 import { NotificationToast, ToastData } from "../components/NotificationToast";
 import { openUserProfile } from "../components/AdminIdentity";
@@ -58,6 +59,7 @@ const MessagesStackNavigator = () => (
 
 const MainTabs = () => {
   const { colors } = useTheme();
+  const { communityComposeDisabled } = useContextualCompose();
 
   return (
     <Tab.Navigator
@@ -122,7 +124,9 @@ const MainTabs = () => {
               accessibilityState={accessibilityState}
               testID={testID}
               style={style}
+              disabled={communityComposeDisabled}
               onPress={() => {
+                if (communityComposeDisabled) return;
                 const tabState = navigation.getState();
                 const activeTab = tabState.routes[tabState.index] as any;
                 const nestedState = activeTab?.state;
@@ -149,7 +153,7 @@ const MainTabs = () => {
           ),
           tabBarIcon: () => (
             <LinearGradient
-              colors={colors.auraGradient}
+              colors={communityComposeDisabled ? ["#cbd5e1", "#94a3b8"] : colors.auraGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={{
@@ -166,7 +170,7 @@ const MainTabs = () => {
                 marginTop: 0,
               }}
             >
-              <Ionicons name="add" size={28} color="#ffffff" />
+              <Ionicons name={communityComposeDisabled ? "lock-closed" : "add"} size={communityComposeDisabled ? 20 : 28} color="#ffffff" />
             </LinearGradient>
           ),
         })}
@@ -301,6 +305,7 @@ const AppContent = () => {
         ref={navigationRef}
         onReady={handleNavigationReady}
       >
+        <ContextualComposeProvider>
         <Stack.Navigator id="root-stack" screenOptions={{ headerShown: false }}>
           {withdrawalPending ? (
             <Stack.Screen
@@ -325,6 +330,7 @@ const AppContent = () => {
             </>
           )}
         </Stack.Navigator>
+        </ContextualComposeProvider>
       </NavigationContainer>
     </View>
   );

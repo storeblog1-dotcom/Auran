@@ -17,6 +17,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { useContextualCompose } from "../context/ContextualComposeContext";
+import { useIsFocused } from "@react-navigation/native";
 import { getDisplayName } from "../utils/displayName";
 import api from "../services/api";
 import { getFullImageUrl } from "../config";
@@ -43,6 +45,8 @@ const isPartnerBoardRecord = (board: any) =>
 
 export const CommunityScreen = ({ navigation, route }: any) => {
   const { colors } = useTheme();
+  const { setCommunityComposeDisabled } = useContextualCompose();
+  const isFocused = useIsFocused();
   const { user: currentUser } = useAuth();
   const requestedSection: CommunitySection = route?.params?.section === "partner"
     ? "partner"
@@ -77,6 +81,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
         String(selectedBoard.name || "").includes("제휴업소"))
   );
   const selectedIsPartnerBoard = Boolean(selectedBoard && isPartnerBoardRecord(selectedBoard));
+  const canComposeInSelectedBoard = !selectedIsPartnerBoard || Boolean(currentUser?.is_admin);
   const sectionBoards = boards.filter((board) => {
     const isAnonymous = Boolean(board.is_anonymous || String(board.slug || "").toLowerCase().includes("anonymous"));
     const isPartner = isPartnerBoardRecord(board);
@@ -177,15 +182,19 @@ export const CommunityScreen = ({ navigation, route }: any) => {
   }, [requestedSection]);
 
   useEffect(() => {
+    setCommunityComposeDisabled(isFocused && !canComposeInSelectedBoard);
+  }, [isFocused, canComposeInSelectedBoard, setCommunityComposeDisabled]);
+
+  useEffect(() => {
     if (!route?.params?.composeNonce) return;
     navigation.setParams({ composeNonce: undefined });
-    if (selectedIsPartnerBoard && !currentUser?.is_admin) {
+    if (!canComposeInSelectedBoard) {
       Alert.alert("글쓰기 제한", "제휴업소 게시판은 관리자만 글을 작성할 수 있습니다.");
       return;
     }
     setEditingPost(null);
     setCreateModalVisible(true);
-  }, [route?.params?.composeNonce, navigation, selectedIsPartnerBoard, currentUser?.is_admin]);
+  }, [route?.params?.composeNonce, navigation, canComposeInSelectedBoard]);
 
   const changeSection = (nextSection: CommunitySection) => {
     setSection(nextSection);
