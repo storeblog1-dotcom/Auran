@@ -72,6 +72,9 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
   );
   const [canSendMessage, setCanSendMessage] = useState(initialCanSendMessage);
 
+  // REST is the source of truth for chat delivery. Cloud Run can drop a
+  // mobile WebSocket handshake, so realtime updates use short polling.
+  const useRealtimeWebSocket = false;
   const ws = useRef<WebSocket | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
@@ -114,6 +117,7 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
     };
 
     loadMessages();
+    const refreshTimer = setInterval(loadMessages, 3000);
 
     // 2. Connect WebSocket
     const connectWebSocket = async () => {
@@ -152,7 +156,9 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
       };
 
       socket.onerror = (error) => {
-        console.error("WebSocket error:", error);
+        // The chat uses REST as its delivery path. A transient realtime
+        // connection failure must not trigger Expo Go's red error screen.
+        console.log("WebSocket realtime connection unavailable", error.type);
       };
 
       socket.onclose = () => {
@@ -162,11 +168,14 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
       ws.current = socket;
     };
 
-    connectWebSocket();
+    if (useRealtimeWebSocket) {
+      connectWebSocket();
+    }
 
     return () => {
       isMounted = false;
-      if (ws.current) {
+      clearInterval(refreshTimer);
+      if (useRealtimeWebSocket && ws.current) {
         ws.current.close();
       }
     };
@@ -230,7 +239,7 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
           }
           return nextCount;
         });
-      } else if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      } else if (useRealtimeWebSocket && ws.current && ws.current.readyState === WebSocket.OPEN) {
         ws.current.send(
           JSON.stringify({
             action: "send_message",
@@ -243,7 +252,8 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
           content: contentToSend,
           message_type: "TEXT",
         });
-        setMessages((prev) => prev.map((m) => (m.id === tempId ? res.data : m)));
+        const savedMessage = res.data?.data || res.data;
+        setMessages((prev) => prev.map((m) => (m.id === tempId ? savedMessage : m)));
       }
     } catch (error) {
       console.error("Failed to send message", error);
@@ -305,7 +315,7 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
 
       const mediaUrl = uploadRes.data.url;
 
-      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      if (useRealtimeWebSocket && ws.current && ws.current.readyState === WebSocket.OPEN) {
         ws.current.send(
           JSON.stringify({
             action: "send_message",
@@ -320,7 +330,7 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
           message_type: "IMAGE",
           media_url: mediaUrl,
         });
-        setMessages((prev) => [...prev, res.data]);
+        setMessages((prev) => [...prev, res.data?.data || res.data]);
       }
     } catch (error) {
       console.error("Failed to send image message", error);
@@ -691,7 +701,9 @@ const styles = StyleSheet.create({
     maxWidth: "78%",
     minWidth: 0,
     flexShrink: 1,
-    overflow: "hidden",
+    // Do not clip the final glyph. On Android, punctuation can extend a
+    // fraction beyond its measured text box and gets cut by overflow:hidden.
+    overflow: "visible",
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 9,
@@ -711,7 +723,9 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     flexWrap: "wrap",
     maxWidth: "100%",
-    paddingRight: 2,
+    // Keep a small safety gutter after the final character (especially
+    // punctuation such as ?, !, and ,) without changing bubble alignment.
+    paddingRight: 5,
   },
   myMessageText: {
     color: "#fff",
