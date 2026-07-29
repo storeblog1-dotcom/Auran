@@ -134,7 +134,10 @@ const MainTabs = () => {
                 const composeNonce = Date.now();
 
                 if (activeTab?.name === "Feed" && activeNestedRoute?.name === "Community") {
-                  navigation.navigate("Feed", { screen: "Community", params: { composeNonce } });
+                  navigation.navigate("Feed", {
+                    screen: "Community",
+                    params: { ...(activeNestedRoute?.params || {}), composeNonce },
+                  });
                   return;
                 }
                 if (activeTab?.name === "Messages") {
