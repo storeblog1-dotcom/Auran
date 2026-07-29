@@ -2,7 +2,7 @@ import re
 from typing import List
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -30,10 +30,11 @@ async def update_post_hashtags(db: AsyncSession, post_id, caption: str | None):
     tags = parse_hashtags_from_caption(caption)
 
     # 기존 포스트-해시태그 매핑 삭제
-    existing_stmt = select(PostHashtag).where(PostHashtag.post_id == post_id)
-    res = await db.execute(existing_stmt)
-    for ph in res.scalars().all():
-        await db.delete(ph)
+    # Flush the deletion before adding replacements. Without this explicit
+    # ordering, SQLAlchemy can insert a replacement row before removing the
+    # existing `(post_id, hashtag_id)` mapping and violate `uq_post_hashtag`.
+    await db.execute(delete(PostHashtag).where(PostHashtag.post_id == post_id))
+    await db.flush()
 
     if not tags:
         await db.commit()
