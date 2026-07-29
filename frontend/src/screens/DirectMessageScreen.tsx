@@ -19,6 +19,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { getDisplayName } from "../utils/displayName";
 import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
+import { DirectInboxV2Screen } from "../features/direct/DirectInboxV2Screen";
 
 interface UserInfo {
   id: string;
@@ -55,7 +56,7 @@ interface ChatRoom {
   updated_at: string;
 }
 
-export const DirectMessageScreen = ({ navigation, route }: any) => {
+const LegacyDirectMessageScreen = ({ navigation, route }: any) => {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const isTabScreen = route?.name === "Messages";
@@ -848,3 +849,5 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 });
+
+export { DirectInboxV2Screen as DirectMessageScreen };

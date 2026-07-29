@@ -24,6 +24,7 @@ import { useTheme } from "../context/ThemeContext";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { getDisplayName } from "../utils/displayName";
 import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
+import { DirectChatV2Screen } from "../features/direct/DirectChatV2Screen";
 
 interface MessageSender {
   id: string;
@@ -62,7 +63,7 @@ const replaceOptimisticMessage = (
   );
 };
 
-export const ChatRoomScreen = ({ route, navigation }: any) => {
+const LegacyChatRoomScreen = ({ route, navigation }: any) => {
   const insets = useSafeAreaInsets();
   const {
     roomId,
@@ -896,3 +897,5 @@ const styles = StyleSheet.create({
     color: "#00487c",
   },
 });
+
+export { DirectChatV2Screen as ChatRoomScreen };

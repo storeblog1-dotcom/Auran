@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { View, ActivityIndicator, Text, StyleSheet } from "react-native";
 import { NavigationContainer, NavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -12,6 +12,11 @@ import { NotificationToast, ToastData } from "../components/NotificationToast";
 import { openUserProfile } from "../components/AdminIdentity";
 import { SplashScreen } from "../components/SplashScreen";
 import api from "../services/api";
+import {
+  consumePendingDirectMessagePushNavigation,
+  DirectMessagePushData,
+  subscribeToDirectMessagePushNavigation,
+} from "../services/pushNotifications";
 
 import { LoginScreen } from "../screens/LoginScreen";
 import { WithdrawalPendingScreen } from "../screens/WithdrawalPendingScreen";
@@ -22,8 +27,8 @@ import { CreatePostScreen } from "../screens/CreatePostScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { UserProfileScreen } from "../screens/UserProfileScreen";
 import { EditProfileScreen } from "../screens/EditProfileScreen";
-import { DirectMessageScreen } from "../screens/DirectMessageScreen";
-import { ChatRoomScreen } from "../screens/ChatRoomScreen";
+import { DirectInboxV2Screen } from "../features/direct/DirectInboxV2Screen";
+import { DirectChatV2Screen } from "../features/direct/DirectChatV2Screen";
 import { HashtagScreen } from "../screens/HashtagScreen";
 import { NotificationScreen } from "../screens/NotificationScreen";
 import { CommunityScreen } from "../screens/CommunityScreen";
@@ -46,8 +51,8 @@ const FeedStackNavigator = () => (
 
 const MessagesStackNavigator = () => (
   <MessagesStack.Navigator id="messages-stack" screenOptions={{ headerShown: false }}>
-    <MessagesStack.Screen name="DirectMessageHome" component={DirectMessageScreen} />
-    <MessagesStack.Screen name="ChatRoom" component={ChatRoomScreen} />
+    <MessagesStack.Screen name="DirectMessageHome" component={DirectInboxV2Screen} />
+    <MessagesStack.Screen name="ChatRoom" component={DirectChatV2Screen} />
   </MessagesStack.Navigator>
 );
 
@@ -173,6 +178,44 @@ const AppContent = () => {
   const { toastNotification, clearToast } = useNotification();
   const navigationRef = useRef<NavigationContainerRef<any>>(null);
 
+  const openDirectMessagePush = useCallback(
+    (data: DirectMessagePushData): boolean => {
+      const navigator = navigationRef.current;
+      if (!token || !navigator?.isReady()) return false;
+
+      navigator.navigate("MainTabs", {
+        screen: "Messages",
+        params: {
+          screen: "ChatRoom",
+          params: {
+            roomId: data.room_id,
+            targetUser: {
+              id: data.sender_id,
+              username: data.sender_username,
+              nickname: data.sender_nickname,
+              full_name: data.sender_full_name,
+              profile_image_url: data.sender_profile_image_url,
+              is_admin: data.sender_is_admin,
+            },
+          },
+        },
+      });
+      return true;
+    },
+    [token],
+  );
+
+  useEffect(
+    () => subscribeToDirectMessagePushNavigation(openDirectMessagePush),
+    [openDirectMessagePush],
+  );
+
+  const handleNavigationReady = useCallback(() => {
+    if (!token) return;
+    const pending = consumePendingDirectMessagePushNavigation();
+    if (pending) openDirectMessagePush(pending);
+  }, [openDirectMessagePush, token]);
+
   const handlePressToast = async (toast: ToastData) => {
     if (!navigationRef.current) return;
     if (toast.type === "FOLLOW") {
@@ -223,7 +266,10 @@ const AppContent = () => {
         onPressToast={handlePressToast}
         onDismiss={clearToast}
       />
-      <NavigationContainer ref={navigationRef}>
+      <NavigationContainer
+        ref={navigationRef}
+        onReady={handleNavigationReady}
+      >
         <Stack.Navigator id="root-stack" screenOptions={{ headerShown: false }}>
           {withdrawalPending ? (
             <Stack.Screen

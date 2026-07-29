@@ -102,6 +102,10 @@ class ChatRoomMember(Base):
         server_default=func.now(),
         nullable=False,
     )
+    last_delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     room: Mapped["ChatRoom"] = relationship("ChatRoom", back_populates="members")
     user: Mapped["User"] = relationship("User", lazy="selectin")
@@ -114,6 +118,13 @@ class ChatMessage(Base):
     """메시지 내역 ORM 모델"""
 
     __tablename__ = "chat_messages"
+    __table_args__ = (
+        UniqueConstraint(
+            "sender_id",
+            "client_message_id",
+            name="uq_chat_messages_sender_client_message",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -132,6 +143,10 @@ class ChatMessage(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+    client_message_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
     )
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
     message_type: Mapped[str] = mapped_column(
@@ -156,3 +171,21 @@ class ChatMessage(Base):
 
     def __repr__(self) -> str:
         return f"<ChatMessage id={self.id} room_id={self.room_id} sender_id={self.sender_id}>"
+
+
+class DirectUserPresence(Base):
+    """Persisted last-active checkpoint for direct-message presence."""
+
+    __tablename__ = "direct_user_presence"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    last_active_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )

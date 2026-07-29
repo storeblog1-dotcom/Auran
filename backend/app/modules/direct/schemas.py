@@ -20,6 +20,10 @@ class ChatRoomCreate(BaseModel):
 
 
 class ChatMessageCreate(BaseModel):
+    client_message_id: UUID | None = Field(
+        default=None,
+        description="Client-generated UUID used to make retries idempotent",
+    )
     content: str | None = None
     message_type: str = Field(default="TEXT", description="TEXT, IMAGE, POST 등")
     media_url: str | None = None
@@ -29,11 +33,15 @@ class ChatMessageCreate(BaseModel):
 class ChatMessageResponse(BaseModel):
     id: UUID
     room_id: UUID
+    client_message_id: UUID | None = None
     sender: SenderResponse
     content: str | None = None
     message_type: str
     media_url: str | None = None
     shared_post_id: UUID | None = None
+    delivery_status: str = "SENT"
+    delivered_at: datetime | None = None
+    read_at: datetime | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -69,3 +77,30 @@ class DirectMessageEligibilityResponse(BaseModel):
     can_send_message: bool
     can_share_post: bool
     message_permission_reason: str | None = None
+
+
+class MessageCheckpointUpdate(BaseModel):
+    through_message_id: UUID | None = None
+
+
+class MessageCheckpointResponse(BaseModel):
+    user_id: UUID
+    delivered_at: datetime | None = None
+    read_at: datetime | None = None
+
+
+class DirectPresenceResponse(BaseModel):
+    user_id: UUID
+    last_active_at: datetime
+
+
+class RealtimeConfigResponse(BaseModel):
+    supabase_url: str
+    supabase_anon_key: str
+    access_token: str
+    expires_at: datetime
+    channel_topic: str | None = None
+    presence_topic: str
+    peer_presence_topics: list[str] = Field(default_factory=list)
+    user_id: UUID
+    last_seen_at: datetime

@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 from typing import Dict, List, Optional, Set
 
@@ -10,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.modules.notifications.models import Notification, NotificationType
 from app.modules.notifications.schemas import NotificationRead
 
+logger = logging.getLogger(__name__)
 
 class NotificationConnectionManager:
     """사용자별 알림 WebSocket 커넥션 관리자"""
@@ -88,6 +90,21 @@ async def create_notification(
     }
     await notification_manager.send_notification(str(recipient_id), payload)
 
+    if type == NotificationType.DIRECT_MESSAGE.value:
+        try:
+            from app.modules.notifications.push import send_direct_message_push
+
+            await send_direct_message_push(
+                db,
+                notification=loaded_notification,
+            )
+        except Exception:
+            # A push provider outage must never fail a message that is already
+            # saved and visible through the chat transport.
+            logger.exception(
+                "Failed to send DM push notification %s",
+                loaded_notification.id,
+            )
 
     return notification
 

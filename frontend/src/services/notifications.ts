@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "./api";
 import { WS_BASE_URL } from "../config";
 
@@ -51,31 +52,66 @@ export const notificationService = {
     return res.data;
   },
 
-  subscribeWebSocket(userId: string, onMessage: (data: any) => void) {
-    if (!userId) return null;
-    const wsUrl = `${WS_BASE_URL}/notifications/ws?user_id=${userId}`;
-    const ws = new WebSocket(wsUrl);
+  subscribeWebSocket(onMessage: (data: any) => void): () => void {
+    let cancelled = false;
+    let ws: WebSocket | null = null;
+    let pingInterval: ReturnType<typeof setInterval> | null = null;
 
-    ws.onmessage = (event) => {
-      try {
-        const parsed = JSON.parse(event.data);
-        onMessage(parsed);
-      } catch (err) {
-        // ignore non-json
+    const clearPing = () => {
+      if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
       }
     };
 
-    // Ping interval
-    const pingInterval = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send("ping");
+    void AsyncStorage.getItem("access_token")
+      .then((token) => {
+        if (cancelled || !token) return;
+
+        const wsUrl =
+          `${WS_BASE_URL}/notifications/ws?token=${encodeURIComponent(token)}`;
+        const socket = new WebSocket(wsUrl);
+        if (cancelled) {
+          socket.close();
+          return;
+        }
+        ws = socket;
+
+        socket.onmessage = (event) => {
+          if (cancelled) return;
+          try {
+            const parsed = JSON.parse(event.data);
+            onMessage(parsed);
+          } catch {
+            // Ignore non-JSON WebSocket frames such as a pong response.
+          }
+        };
+
+        pingInterval = setInterval(() => {
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send("ping");
+          }
+        }, 25000);
+
+        socket.onclose = clearPing;
+      })
+      .catch(() => {
+        // REST polling remains the quiet fallback when secure storage fails.
+      });
+
+    return () => {
+      cancelled = true;
+      clearPing();
+      if (ws) {
+        ws.onmessage = null;
+        ws.onclose = null;
+        try {
+          ws.close();
+        } catch {
+          // The socket may already have been closed by the native runtime.
+        }
+        ws = null;
       }
-    }, 25000);
-
-    ws.onclose = () => {
-      clearInterval(pingInterval);
     };
-
-    return ws;
   },
 };

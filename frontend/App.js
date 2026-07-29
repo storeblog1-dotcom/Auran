@@ -6,6 +6,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AuthProvider } from "./src/context/AuthContext";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 import { RootNavigator } from "./src/navigation/RootNavigator";
+import { PushNotificationManager } from "./src/components/PushNotificationManager";
+import { DirectPresenceProvider } from "./src/features/direct/DirectPresenceContext";
 
 function AppInner() {
   const { colors } = useTheme();
@@ -45,7 +47,10 @@ export default function App() {
       <SafeAreaProvider>
       <ThemeProvider>
         <AuthProvider>
-          <AppInner />
+          <DirectPresenceProvider>
+            <PushNotificationManager />
+            <AppInner />
+          </DirectPresenceProvider>
         </AuthProvider>
       </ThemeProvider>
       </SafeAreaProvider>

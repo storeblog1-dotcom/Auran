@@ -2,6 +2,7 @@
   "expo": {
     "name": "Aura+n",
     "slug": "aura-n",
+    "scheme": "auran",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -26,6 +27,15 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "color": "#7C3AED",
+          "defaultChannel": "direct-messages"
+        }
+      ]
+    ]
   }
 }
