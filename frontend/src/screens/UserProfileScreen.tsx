@@ -139,17 +139,23 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
         target_user_id: profile.id,
       });
       const room = res.data?.data || res.data;
-      navigation.navigate("ChatRoom", {
-        roomId: room.id,
-        requestStatus: room.request_status,
-        isOutgoingRequest: room.is_outgoing_request,
-        targetUser: {
-          id: profile.id,
-          username: profile.username,
-          nickname: profile.nickname,
-          full_name: profile.full_name,
-          profile_image_url: profile.profile_image_url,
-          is_admin: profile.is_admin,
+      navigation.navigate("MainTabs", {
+        screen: "Messages",
+        params: {
+          screen: "ChatRoom",
+          params: {
+            roomId: room.id,
+            requestStatus: room.request_status,
+            isOutgoingRequest: room.is_outgoing_request,
+            targetUser: {
+              id: profile.id,
+              username: profile.username,
+              nickname: profile.nickname,
+              full_name: profile.full_name,
+              profile_image_url: profile.profile_image_url,
+              is_admin: profile.is_admin,
+            },
+          },
         },
       });
     } catch (err: any) {

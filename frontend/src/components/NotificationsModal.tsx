@@ -95,17 +95,23 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         try {
           const res = await api.post("/direct/rooms", { target_user_id: item.sender.id });
           const room = res.data?.data || res.data;
-          navigation.navigate("ChatRoom", {
-            roomId: room.id,
-            requestStatus: room.request_status,
-            isOutgoingRequest: room.is_outgoing_request,
-            targetUser: {
-              id: item.sender.id,
-              username: item.sender.username,
-              nickname: item.sender.nickname,
-              full_name: item.sender.full_name,
-              profile_image_url: item.sender.profile_image_url,
-              is_admin: item.sender.is_admin,
+          navigation.navigate("MainTabs", {
+            screen: "Messages",
+            params: {
+              screen: "ChatRoom",
+              params: {
+                roomId: room.id,
+                requestStatus: room.request_status,
+                isOutgoingRequest: room.is_outgoing_request,
+                targetUser: {
+                  id: item.sender.id,
+                  username: item.sender.username,
+                  nickname: item.sender.nickname,
+                  full_name: item.sender.full_name,
+                  profile_image_url: item.sender.profile_image_url,
+                  is_admin: item.sender.is_admin,
+                },
+              },
             },
           });
         } catch (err) {
