@@ -15,7 +15,7 @@ export interface NotificationItem {
   id: string;
   recipient_id: string;
   sender: SenderSummary;
-  type: "LIKE" | "COMMENT" | "FOLLOW" | "MENTION" | "DIRECT_MESSAGE";
+  type: "LIKE" | "COMMENT" | "FOLLOW" | "MENTION" | "DIRECT_MESSAGE" | "REPORT_RESULT" | "MODERATION_WARNING";
   message?: string | null;
   post_id?: string | null;
   comment_id?: string | null;

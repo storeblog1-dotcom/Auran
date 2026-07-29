@@ -1,4 +1,5 @@
 import uuid
+import logging
 from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any
@@ -14,7 +15,7 @@ from app.core.database import get_db
 from app.modules.audit.service import record
 from app.modules.auth.dependencies import get_current_active_user, get_current_admin_user
 from app.modules.auth.models import User
-from app.modules.notifications.models import Notification
+from app.modules.notifications.service import create_notification
 from app.modules.posts import service as post_service
 from app.modules.posts.models import Comment, Post
 from app.modules.reports.models import HiddenContent, Report
@@ -23,6 +24,20 @@ from app.modules.reports.service import create_report, hide_report_target
 
 
 router = APIRouter(tags=["Reports"])
+logger = logging.getLogger(__name__)
+
+
+def _report_result_message(*, status: str, action: str, note: str | None) -> str:
+    if status == "reviewing":
+        message = "신고하신 내용이 검토 중입니다."
+    elif status == "rejected":
+        message = "신고하신 내용은 검토 후 기각되었습니다."
+    else:
+        action_label = {"maintain": "검토 완료", "hide": "콘텐츠 숨김", "delete": "콘텐츠 삭제", "warn": "경고 조치", "suspend": "이용 정지 조치"}.get(action, "처리 완료")
+        message = f"신고하신 내용의 검토가 완료되었습니다. 처리 결과: {action_label}."
+    if note and note.strip():
+        message = f"{message} 관리자 안내: {note.strip()[:240]}"
+    return message[:500]
 
 
 def _report_item(report: Report, *, include_ip: bool = False) -> dict[str, Any]:
@@ -204,6 +219,7 @@ async def moderate_report_group(
             target_user.is_active = False
 
     now = datetime.now(timezone.utc)
+    reporter_ids: set[uuid.UUID] = set()
     for report in reports:
         report.status = body.status
         report.reviewer_id = admin.id
@@ -211,25 +227,7 @@ async def moderate_report_group(
         report.resolution_note = body.note
         report.reviewed_at = now
         if report.reporter_id and report.reporter_id != admin.id:
-            db.add(
-                Notification(
-                    recipient_id=report.reporter_id,
-                    sender_id=admin.id,
-                    type="REPORT_RESULT",
-                    message=f"신고 처리 결과: {body.status}",
-                    is_read=False,
-                )
-            )
-    if body.action == "warn" and reports[0].target_user_id and reports[0].target_user_id != admin.id:
-        db.add(
-            Notification(
-                recipient_id=reports[0].target_user_id,
-                sender_id=admin.id,
-                type="MODERATION_WARNING",
-                message=body.note or "커뮤니티 운영정책 위반 신고가 접수되어 경고 조치되었습니다.",
-                is_read=False,
-            )
-        )
+            reporter_ids.add(report.reporter_id)
     await record(
         db,
         user_id=None,
@@ -245,6 +243,17 @@ async def moderate_report_group(
         },
     )
     await db.commit()
+    result_message = _report_result_message(status=body.status, action=body.action, note=body.note)
+    for reporter_id in reporter_ids:
+        try:
+            await create_notification(db, recipient_id=reporter_id, sender_id=admin.id, type="REPORT_RESULT", message=result_message, post_id=target_id if target_type == "post" else None)
+        except Exception:
+            logger.exception("Failed to notify report recipient %s", reporter_id)
+    if body.action == "warn" and reports[0].target_user_id and reports[0].target_user_id != admin.id:
+        try:
+            await create_notification(db, recipient_id=reports[0].target_user_id, sender_id=admin.id, type="MODERATION_WARNING", message=body.note or "커뮤니티 운영정책 위반 신고가 접수되어 경고 조치되었습니다.", post_id=target_id if target_type == "post" else None)
+        except Exception:
+            logger.exception("Failed to notify moderated user %s", reports[0].target_user_id)
     return ApiResponse.ok({"message": "신고 처리를 저장했습니다."})
 
 
