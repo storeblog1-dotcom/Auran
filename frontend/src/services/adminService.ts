@@ -30,6 +30,9 @@ export interface AdminUserItem {
 export interface AdminPostItem {
   id: string;
   content_number?: string | null;
+  title?: string | null;
+  board_type?: string | null;
+  board_name?: string | null;
   caption?: string;
   media?: Array<{
     media_url?: string;
@@ -165,8 +168,8 @@ export const adminService = {
     return res.data.data;
   },
 
-  getPosts: async (page: number = 1, size: number = 20) => {
-    const res = await api.get("/admin/posts", { params: { page, size } });
+  getPosts: async (page: number = 1, size: number = 20, scope: "all" | "feed" | "community" = "all") => {
+    const res = await api.get("/admin/posts", { params: { page, size, scope } });
     return {
       items: res.data.data as AdminPostItem[],
       total: res.data.pagination?.total || res.data.total || res.data.data.length,
