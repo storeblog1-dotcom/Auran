@@ -30,7 +30,7 @@ const sortSiblingBoards = (items: any[], siblingOrder: string[] = []) =>
     return String(a.name || "").localeCompare(String(b.name || ""), "ko");
   });
 
-export const CommunityAdminScreen = ({ navigation }: any) => {
+export const CommunityAdminScreen = ({ navigation, route }: any) => {
   const { colors } = useTheme();
   const [boards, setBoards] = useState<any[]>([]);
   const [editing, setEditing] = useState<any | null>(null);
@@ -50,6 +50,10 @@ export const CommunityAdminScreen = ({ navigation }: any) => {
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (route?.params?.mode === "create") reset();
+  }, [route?.params?.mode]);
+  const entryMode = route?.params?.mode || "edit";
 
   const reset = () => { setEditing(null); setName(""); setSlug(""); setParentId(null); setAnonymous(false); };
   const select = (board: any) => { setEditing(board); setName(board.name); setSlug(board.slug); setParentId(board.parent_id); setAnonymous(board.is_anonymous); };
@@ -104,6 +108,12 @@ export const CommunityAdminScreen = ({ navigation }: any) => {
   return <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
     <View style={[styles.header, { borderBottomColor: colors.borderColor }]}><TouchableOpacity onPress={() => navigation.goBack()}><Ionicons name="chevron-back" size={26} color={colors.textPrimary} /></TouchableOpacity><Text style={[styles.title, { color: colors.textPrimary }]}>커뮤니티 관리</Text><TouchableOpacity onPress={reset}><Text style={{ color: colors.accentBlue, fontWeight: "700" }}>새 게시판</Text></TouchableOpacity></View>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <View style={[styles.entryHint, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+        <Ionicons name={entryMode === "notice" ? "megaphone-outline" : entryMode === "create" ? "add-circle-outline" : "create-outline"} size={18} color={colors.accentPurple} />
+        <Text style={{ color: colors.textSecondary, flex: 1 }}>
+          {entryMode === "notice" ? "전체 공지를 등록할 수 있습니다." : entryMode === "create" ? "새 게시판 정보를 입력해 생성하세요." : "목록에서 게시판을 선택해 수정하거나 순서를 바꾸세요."}
+        </Text>
+      </View>
       <Text style={[styles.section, { color: colors.textPrimary }]}>게시판 순서</Text>
       {orderedBoards.map((board) => <View key={board.id} style={[styles.boardRow, board.parent_id && styles.childBoardRow, { borderColor: colors.borderColor, backgroundColor: board.parent_id ? colors.bgInput : colors.bgCard, opacity: board.is_active ? 1 : .5 }]}>
         <TouchableOpacity style={styles.boardInfo} onPress={() => select(board)}><Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{board.parent_id ? "└ " : ""}{board.name}{board.is_default ? " (기본)" : ""}</Text><Text style={{ color: colors.textSecondary, fontSize: 12 }}>{board.slug} · {board.is_anonymous ? "익명" : "일반"}</Text></TouchableOpacity>
@@ -125,4 +135,4 @@ export const CommunityAdminScreen = ({ navigation }: any) => {
   </SafeAreaView>;
 };
 
-const styles = StyleSheet.create({ container: { flex: 1 }, header: { height: 54, paddingHorizontal: 16, borderBottomWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, title: { fontSize: 17, fontWeight: "800" }, content: { padding: 16, paddingBottom: 50 }, section: { fontSize: 16, fontWeight: "800", marginTop: 12, marginBottom: 10 }, hint: { fontSize: 12, marginBottom: 8 }, boardRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 8 }, childBoardRow: { marginLeft: 20, borderRadius: 14 }, boardInfo: { flex: 1, marginRight: 8 }, rowActions: { flexDirection: "row", alignItems: "center", gap: 4 }, iconButton: { padding: 4 }, input: { borderWidth: 1, borderRadius: 10, minHeight: 46, paddingHorizontal: 12, marginBottom: 10 }, chips: { gap: 8, paddingBottom: 12 }, chip: { paddingHorizontal: 12, height: 34, justifyContent: "center", borderRadius: 17 }, switchRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }, primary: { minHeight: 46, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 8 }, primaryText: { color: "#fff", fontWeight: "800" }, noticeInput: { minHeight: 100, textAlignVertical: "top", paddingTop: 12 } });
+const styles = StyleSheet.create({ container: { flex: 1 }, header: { height: 54, paddingHorizontal: 16, borderBottomWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, title: { fontSize: 17, fontWeight: "800" }, content: { padding: 16, paddingBottom: 50 }, entryHint: { borderWidth: 1, borderRadius: 10, padding: 11, flexDirection: "row", gap: 8, alignItems: "center" }, section: { fontSize: 16, fontWeight: "800", marginTop: 12, marginBottom: 10 }, hint: { fontSize: 12, marginBottom: 8 }, boardRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 8 }, childBoardRow: { marginLeft: 20, borderRadius: 14 }, boardInfo: { flex: 1, marginRight: 8 }, rowActions: { flexDirection: "row", alignItems: "center", gap: 4 }, iconButton: { padding: 4 }, input: { borderWidth: 1, borderRadius: 10, minHeight: 46, paddingHorizontal: 12, marginBottom: 10 }, chips: { gap: 8, paddingBottom: 12 }, chip: { paddingHorizontal: 12, height: 34, justifyContent: "center", borderRadius: 17 }, switchRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }, primary: { minHeight: 46, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 8 }, primaryText: { color: "#fff", fontWeight: "800" }, noticeInput: { minHeight: 100, textAlignVertical: "top", paddingTop: 12 } });
