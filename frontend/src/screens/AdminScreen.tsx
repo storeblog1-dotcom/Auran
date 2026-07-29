@@ -910,7 +910,7 @@ export const AdminScreen = ({ navigation }: any) => {
                       </View>
                     </View>
 
-                    <View style={{ flexDirection: "column", marginTop: 8, gap: 7, alignItems: "stretch" }}>
+                    <View style={styles.contentTileBody}>
                       {mediaUrl ? (
                         <Image
                           source={{ uri: getFullImageUrl(mediaUrl) }}
@@ -1430,6 +1430,7 @@ const styles = StyleSheet.create({
   contentTileAuthor: { flexShrink: 1, minWidth: 0, fontSize: 13 },
   contentTileMenu: { width: 24, alignItems: "flex-end", justifyContent: "center" },
   contentTileMenuButton: { width: 24, height: 24, alignItems: "center", justifyContent: "center" },
+  contentTileBody: { flex: 1, flexDirection: "column", marginTop: 8, gap: 7, alignItems: "stretch" },
   contentTileImage: { width: "100%", height: 82, borderRadius: 7, backgroundColor: "#ccc" },
   contentTileText: { width: "100%", height: 82, borderRadius: 7, justifyContent: "center", alignItems: "center", borderWidth: 1, padding: 7 },
   postAuthor: {
