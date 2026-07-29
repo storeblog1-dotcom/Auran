@@ -10,6 +10,7 @@ import {
   Alert,
   AppState,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   LayoutChangeEvent,
   NativeScrollEvent,
@@ -80,6 +81,19 @@ export const DirectChatV2Screen = ({ route, navigation }: any) => {
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       setAppIsForeground(state === "active");
+    });
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    const eventName = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const subscription = Keyboard.addListener(eventName, () => {
+      // Keep the newest messages and the composer together above the keyboard.
+      requestAnimationFrame(() => {
+        if (shouldAutoScrollRef.current) {
+          listRef.current?.scrollToEnd({ animated: true });
+        }
+      });
     });
     return () => subscription.remove();
   }, []);
@@ -490,7 +504,7 @@ export const DirectChatV2Screen = ({ route, navigation }: any) => {
 
       <KeyboardAvoidingView
         style={styles.conversation}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={0}
       >
         <View style={styles.messageArea} onLayout={handleMessageAreaLayout}>

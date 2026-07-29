@@ -38,7 +38,7 @@ export const CompositionSafeComposer = ({
   const ignoreEndEditingUntilRef = useRef(0);
   const commitFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hasText, setHasText] = useState(false);
-  const [inputHeight, setInputHeight] = useState(44);
+  const [inputHeight, setInputHeight] = useState(40);
 
   useEffect(() => {
     if (!autoFocus || !editable) return;
@@ -58,7 +58,7 @@ export const CompositionSafeComposer = ({
   const clearNativeInput = useCallback(() => {
     nativeTextRef.current = "";
     setHasText(false);
-    setInputHeight(44);
+    setInputHeight(40);
     onTypingChange(false);
     inputRef.current?.clear();
   }, [onTypingChange]);
@@ -177,8 +177,8 @@ export const CompositionSafeComposer = ({
           onEndEditing={handleEndEditing}
           onSubmitEditing={commitFromNative}
           onContentSizeChange={(event) => {
-            const measured = event.nativeEvent.contentSize.height + 12;
-            setInputHeight(Math.max(44, Math.min(112, measured)));
+            const measured = event.nativeEvent.contentSize.height + 10;
+            setInputHeight(Math.max(40, Math.min(96, measured)));
           }}
           textAlignVertical="center"
         />
@@ -214,19 +214,19 @@ export const CompositionSafeComposer = ({
 
 const styles = StyleSheet.create({
   container: {
-    minHeight: 66,
-    paddingHorizontal: 12,
-    paddingTop: 9,
-    paddingBottom: 9,
+    minHeight: 54,
+    paddingHorizontal: 10,
+    paddingTop: 7,
+    paddingBottom: 7,
     borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 8,
+    gap: 6,
   },
   mediaButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 15,
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -234,28 +234,28 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     borderWidth: 1,
-    borderRadius: 18,
+    borderRadius: 16,
     overflow: "visible",
   },
   input: {
     width: "100%",
-    minHeight: 44,
-    maxHeight: 112,
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 10,
+    minHeight: 40,
+    maxHeight: 96,
+    paddingHorizontal: 12,
+    paddingTop: 7,
+    paddingBottom: 7,
     fontSize: 15,
     lineHeight: 21,
     includeFontPadding: true,
   },
   sendButtonTouch: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
   },
   sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 15,
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
   },
