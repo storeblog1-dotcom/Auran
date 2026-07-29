@@ -12,7 +12,6 @@ import {
   ActivityIndicator,
   StatusBar,
   Alert,
-  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -48,7 +47,6 @@ interface ChatMessage {
 
 export const ChatRoomScreen = ({ route, navigation }: any) => {
   const insets = useSafeAreaInsets();
-  const { width: viewportWidth } = useWindowDimensions();
   const {
     roomId,
     targetUser,
@@ -77,10 +75,6 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
   const ws = useRef<WebSocket | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
-  const messageBubbleMaxWidth = Math.min(
-    420,
-    Math.max(180, viewportWidth - 96)
-  );
 
   useEffect(() => {
     if (requestStatus !== "ACCEPTED") return;
@@ -380,7 +374,6 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
         <View
           style={[
             styles.bubble,
-            { maxWidth: messageBubbleMaxWidth },
             isMine
               ? [styles.myBubble, { alignSelf: "flex-end" }]
               : [styles.otherBubble, { alignSelf: "flex-start", backgroundColor: colors.chatBubbleOther }],
@@ -513,7 +506,6 @@ export const ChatRoomScreen = ({ route, navigation }: any) => {
           <FlatList
             ref={flatListRef}
             data={messages}
-            extraData={viewportWidth}
             keyExtractor={(item) => item.id}
             renderItem={renderMessageItem}
             removeClippedSubviews={false}
@@ -670,10 +662,11 @@ const styles = StyleSheet.create({
   messagesList: {
     paddingHorizontal: 14,
     paddingVertical: 12,
+    flexGrow: 1,
   },
   messageRow: {
-    width: "100%",
     minWidth: 0,
+    alignSelf: "stretch",
     flexDirection: "row",
     marginVertical: 4,
     alignItems: "flex-end",
@@ -692,9 +685,13 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   bubble: {
-    minWidth: 36,
+    // Percentages are resolved against the actual FlatList content width,
+    // including its padding. This avoids using the device width, which can
+    // push right-aligned bubbles beyond the visible edge on Android.
+    maxWidth: "78%",
+    minWidth: 0,
     flexShrink: 1,
-    overflow: "visible",
+    overflow: "hidden",
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 9,
@@ -710,7 +707,10 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 15,
     lineHeight: 22,
+    minWidth: 0,
     flexShrink: 1,
+    flexWrap: "wrap",
+    maxWidth: "100%",
     paddingRight: 2,
   },
   myMessageText: {
