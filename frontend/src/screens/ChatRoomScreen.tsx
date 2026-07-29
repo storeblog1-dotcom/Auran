@@ -691,7 +691,9 @@ const styles = StyleSheet.create({
     maxWidth: "78%",
     minWidth: 0,
     flexShrink: 1,
-    overflow: "hidden",
+    // Do not clip the final glyph. On Android, punctuation can extend a
+    // fraction beyond its measured text box and gets cut by overflow:hidden.
+    overflow: "visible",
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 9,
@@ -711,7 +713,9 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     flexWrap: "wrap",
     maxWidth: "100%",
-    paddingRight: 2,
+    // Keep a small safety gutter after the final character (especially
+    // punctuation such as ?, !, and ,) without changing bubble alignment.
+    paddingRight: 5,
   },
   myMessageText: {
     color: "#fff",
