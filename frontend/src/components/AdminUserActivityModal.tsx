@@ -167,6 +167,24 @@ export const AdminUserActivityModal: React.FC<AdminUserActivityModalProps> = ({
     return "피드";
   };
 
+  const getMediaUrl = (item: any) => {
+    if (!item) return null;
+    const mediaArr = item.media || item.media_manifest || item.images;
+    if (Array.isArray(mediaArr) && mediaArr.length > 0) {
+      const first = mediaArr[0];
+      if (typeof first === "string") return first;
+      return (
+        first?.media_url ||
+        first?.detail_media_url ||
+        first?.url ||
+        first?.image_url ||
+        null
+      );
+    }
+    if (typeof item.media === "string") return item.media;
+    return item.media_url || item.image_url || item.url || null;
+  };
+
   const handleModerateReportAction = async (
     report: AdminReportGroup,
     action: "maintain" | "hide" | "delete" | "warn" | "suspend"
@@ -443,7 +461,7 @@ export const AdminUserActivityModal: React.FC<AdminUserActivityModalProps> = ({
                   </View>
                 }
                 renderItem={({ item }) => {
-                  const mediaUrl = item.media?.[0]?.media_url || item.media?.[0]?.url || item.image_url || null;
+                  const mediaUrl = getMediaUrl(item);
                   const isBoardPost = item.board_type || item.board_name;
                   const locationText = getLocationBadge(item);
 
@@ -569,7 +587,7 @@ export const AdminUserActivityModal: React.FC<AdminUserActivityModalProps> = ({
                   </View>
                 }
                 renderItem={({ item }) => {
-                  const mediaUrl = item.snapshot?.media?.[0]?.url || item.snapshot?.media?.[0]?.media_url || item.snapshot?.image_url || null;
+                  const mediaUrl = getMediaUrl(item.snapshot);
                   const locationText = getLocationBadge(item.snapshot || {});
 
                   return (
