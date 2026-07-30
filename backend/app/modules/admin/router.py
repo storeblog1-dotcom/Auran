@@ -867,11 +867,17 @@ async def toggle_user_active(
 async def get_admin_posts(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    scope: str = Query("all", pattern="^(all|feed|community)$"),
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_admin_user),
 ) -> ApiResponse[list[dict[str, Any]]]:
-    total = await db.scalar(select(func.count(Post.id)))
-    stmt = select(Post).order_by(desc(Post.created_at)).offset((page - 1) * size).limit(size)
+    scope_clause = (
+        Post.board_type.is_(None) if scope == "feed"
+        else Post.board_type.is_not(None) if scope == "community"
+        else True
+    )
+    total = await db.scalar(select(func.count(Post.id)).where(scope_clause))
+    stmt = select(Post).where(scope_clause).order_by(desc(Post.created_at)).offset((page - 1) * size).limit(size)
     res = await db.execute(stmt)
     posts = res.scalars().all()
 
@@ -882,6 +888,10 @@ async def get_admin_posts(
         user_res = await db.execute(user_stmt)
         author = user_res.scalar_one_or_none()
 
+        board_name = None
+        if p.board_id:
+            board_name = await db.scalar(select(CommunityBoard.name).where(CommunityBoard.id == p.board_id))
+
         # Load media for post
         from app.modules.posts.models import PostMedia
         media_stmt = select(PostMedia).where(PostMedia.post_id == p.id).order_by(PostMedia.order)
@@ -891,6 +901,10 @@ async def get_admin_posts(
         post_list.append({
             "id": str(p.id),
             "content_number": f"P-{p.display_number:06d}" if p.display_number else None,
+            "title": p.title,
+            "board_type": p.board_type,
+            "board_name": board_name,
+            "moderation_hidden": p.moderation_hidden,
             "caption": p.caption,
             "media": [
                 {
@@ -912,6 +926,25 @@ async def get_admin_posts(
         })
 
     return ApiResponse.paginated(data=post_list, total=total or 0)
+
+
+@router.patch("/posts/{post_id}/moderation-visibility", summary="관리자 권한 게시물 숨김 상태 변경")
+async def set_admin_post_moderation_visibility(
+    post_id: uuid.UUID,
+    hidden: bool = Query(...),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+) -> ApiResponse[dict[str, Any]]:
+    post = await db.scalar(select(Post).where(Post.id == post_id).with_for_update())
+    if not post:
+        raise NotFoundException("게시물")
+
+    post.moderation_hidden = hidden
+    await db.commit()
+    return ApiResponse.ok({
+        "post_id": str(post.id),
+        "moderation_hidden": post.moderation_hidden,
+    })
 
 
 @router.delete("/posts/{post_id}", summary="관리자 권한 게시물 강제 삭제")

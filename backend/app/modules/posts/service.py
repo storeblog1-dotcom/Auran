@@ -31,6 +31,7 @@ from app.modules.posts.schemas import (
     PostUpdateRequest,
     PostUserSummary,
 )
+from app.modules.posts.youtube import VerifiedYouTubeVideo, verify_youtube_watch_url
 from app.modules.users.models import Follow
 
 
@@ -293,6 +294,10 @@ async def _build_post_responses_batch(
                 ),
                 caption=post.caption,
                 location=post.location,
+                youtube_url=post.youtube_url,
+                youtube_video_id=post.youtube_video_id,
+                youtube_title=post.youtube_title,
+                youtube_thumbnail_url=post.youtube_thumbnail_url,
                 visibility=post.visibility,
                 media=media_responses,
                 likes_count=likes_map.get(post.id, 0),
@@ -334,6 +339,10 @@ async def create_post(
         if ("partner" in board.slug.lower() or "제휴업소" in board.name) and not current_user.is_admin:
             raise ForbiddenException("제휴업소 게시판은 관리자만 게시물을 작성할 수 있습니다.")
 
+    verified_video: VerifiedYouTubeVideo | None = None
+    if data.youtube_url:
+        verified_video = await verify_youtube_watch_url(data.youtube_url)
+
     post = Post(
         user_id=current_user.id,
         title=data.title,
@@ -341,6 +350,10 @@ async def create_post(
         board_id=data.board_id,
         caption=data.caption,
         location=data.location,
+        youtube_url=verified_video.url if verified_video else None,
+        youtube_video_id=verified_video.video_id if verified_video else None,
+        youtube_title=verified_video.title if verified_video else None,
+        youtube_thumbnail_url=verified_video.thumbnail_url if verified_video else None,
         visibility=data.visibility or "public",
     )
     db.add(post)
@@ -567,6 +580,15 @@ async def update_post(
     if data.visibility is not None:
         post.visibility = data.visibility
 
+    if "youtube_url" in data.model_fields_set:
+        verified_video: VerifiedYouTubeVideo | None = None
+        if data.youtube_url:
+            verified_video = await verify_youtube_watch_url(data.youtube_url)
+        post.youtube_url = verified_video.url if verified_video else None
+        post.youtube_video_id = verified_video.video_id if verified_video else None
+        post.youtube_title = verified_video.title if verified_video else None
+        post.youtube_thumbnail_url = verified_video.thumbnail_url if verified_video else None
+
     if data.media is not None:
         for old_m in list(post.media):
             await db.delete(old_m)
@@ -583,6 +605,9 @@ async def update_post(
             db.add(media_obj)
 
     await db.flush()
+    # `updated_at` is server-managed. Refresh it explicitly before the audit
+    # snapshot reads it so async SQLAlchemy does not attempt implicit IO.
+    await db.refresh(post, attribute_names=["updated_at"])
     revision = await preserve_post(
         db, post, lifecycle_event="updated", ip_address=ip_address
     )

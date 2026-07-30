@@ -120,6 +120,10 @@ export const NotificationScreen = () => {
         return <Ionicons name="at" size={10} color="#ffffff" />;
       case "DIRECT_MESSAGE":
         return <Ionicons name="paper-plane" size={10} color="#ffffff" />;
+      case "REPORT_RESULT":
+        return <Ionicons name="shield-checkmark" size={10} color="#ffffff" />;
+      case "MODERATION_WARNING":
+        return <Ionicons name="warning" size={10} color="#ffffff" />;
       default:
         return <Ionicons name="notifications" size={10} color="#ffffff" />;
     }
@@ -138,6 +142,10 @@ export const NotificationScreen = () => {
         return "#f59e0b";
       case "DIRECT_MESSAGE":
         return "#10b981";
+      case "REPORT_RESULT":
+        return "#7c3aed";
+      case "MODERATION_WARNING":
+        return "#ef4444";
       default:
         return "#8e8e8e";
     }

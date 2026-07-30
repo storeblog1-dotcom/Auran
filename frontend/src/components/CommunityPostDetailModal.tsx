@@ -327,6 +327,12 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
                   thumbnailUrl={post.youtube_thumbnail_url}
                 />
 
+                <VerifiedYouTubeCard
+                  url={post.youtube_url}
+                  title={post.youtube_title}
+                  thumbnailUrl={post.youtube_thumbnail_url}
+                />
+
                 {/* Media Image */}
                 {post.media && post.media.length > 0 ? (
                   <TouchableOpacity

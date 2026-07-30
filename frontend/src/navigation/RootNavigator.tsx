@@ -7,6 +7,7 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { ContextualComposeProvider, useContextualCompose } from "../context/ContextualComposeContext";
 import { NotificationProvider, useNotification } from "../context/NotificationContext";
 import { NotificationToast, ToastData } from "../components/NotificationToast";
 import { openUserProfile } from "../components/AdminIdentity";
@@ -58,6 +59,7 @@ const MessagesStackNavigator = () => (
 
 const MainTabs = () => {
   const { colors } = useTheme();
+  const { communityComposeDisabled } = useContextualCompose();
 
   return (
     <Tab.Navigator
@@ -115,10 +117,46 @@ const MainTabs = () => {
       <Tab.Screen
         name="CreatePost"
         component={CreatePostScreen}
-        options={{
+        options={({ navigation }) => ({
+          tabBarButton: ({ children, style, accessibilityState, testID }) => (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityState={accessibilityState}
+              testID={testID}
+              style={style}
+              disabled={communityComposeDisabled}
+              onPress={() => {
+                if (communityComposeDisabled) return;
+                const tabState = navigation.getState();
+                const activeTab = tabState.routes[tabState.index] as any;
+                const nestedState = activeTab?.state;
+                const activeNestedRoute = nestedState?.routes?.[nestedState.index ?? 0];
+                const composeNonce = Date.now();
+
+                if (activeTab?.name === "Feed" && activeNestedRoute?.name === "Community") {
+                  navigation.navigate("Feed", {
+                    screen: "Community",
+                    params: { ...(activeNestedRoute?.params || {}), composeNonce },
+                  });
+                  return;
+                }
+                if (activeTab?.name === "Messages") {
+                  navigation.navigate("Messages", { screen: "DirectMessageHome", params: { composeNonce } });
+                  return;
+                }
+                navigation.navigate({
+                  name: "CreatePost",
+                  params: { mode: "create", editPost: null, onPostUpdated: undefined },
+                  merge: false,
+                });
+              }}
+            >
+              {children}
+            </TouchableOpacity>
+          ),
           tabBarIcon: () => (
             <LinearGradient
-              colors={colors.auraGradient}
+              colors={communityComposeDisabled ? ["#cbd5e1", "#94a3b8"] : colors.auraGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={{
@@ -135,10 +173,10 @@ const MainTabs = () => {
                 marginTop: 0,
               }}
             >
-              <Ionicons name="add" size={28} color="#ffffff" />
+              <Ionicons name={communityComposeDisabled ? "lock-closed" : "add"} size={communityComposeDisabled ? 20 : 28} color="#ffffff" />
             </LinearGradient>
           ),
-        }}
+        })}
       />
       <Tab.Screen
         name="Messages"
@@ -270,6 +308,7 @@ const AppContent = () => {
         ref={navigationRef}
         onReady={handleNavigationReady}
       >
+        <ContextualComposeProvider>
         <Stack.Navigator id="root-stack" screenOptions={{ headerShown: false }}>
           {withdrawalPending ? (
             <Stack.Screen
@@ -294,6 +333,7 @@ const AppContent = () => {
             </>
           )}
         </Stack.Navigator>
+        </ContextualComposeProvider>
       </NavigationContainer>
     </View>
   );

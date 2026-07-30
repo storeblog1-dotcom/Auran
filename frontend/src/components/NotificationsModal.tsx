@@ -80,6 +80,12 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     return `${diffDay}일 전`;
   };
 
+  const renderNotificationMarker = (type: NotificationItem["type"]) => {
+    if (type === "REPORT_RESULT") return { icon: "shield-checkmark" as const, color: "#7c3aed" };
+    if (type === "MODERATION_WARNING") return { icon: "warning" as const, color: "#ef4444" };
+    return null;
+  };
+
   const handlePressItem = async (item: NotificationItem) => {
     if (!item.is_read) {
       await markAsRead(item.id);
@@ -137,6 +143,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
   const renderItemRow = (item: NotificationItem) => {
     const isRead = item.is_read;
+    const marker = renderNotificationMarker(item.type);
     return (
       <TouchableOpacity
         key={item.id}
@@ -149,10 +156,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         ]}
         onPress={() => handlePressItem(item)}
       >
-        <AdminAvatar
-          user={item.sender}
-          style={[styles.avatar, isRead && { opacity: 0.75 }]}
-        />
+        <View style={styles.avatarWrapper}><AdminAvatar user={item.sender} style={[styles.avatar, isRead && { opacity: 0.75 }]} />{marker && <View style={[styles.notificationMarker, { backgroundColor: marker.color }]}><Ionicons name={marker.icon} size={10} color="#ffffff" /></View>}</View>
         <View style={{ flex: 1, paddingRight: 8 }}>
           <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 5 }}>
             <Text
@@ -317,8 +321,9 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    marginRight: 12,
   },
+  avatarWrapper: { width: 54, height: 42 },
+  notificationMarker: { position: "absolute", right: 7, bottom: -1, width: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#ffffff" },
   itemText: {
     fontSize: 13,
     lineHeight: 18,

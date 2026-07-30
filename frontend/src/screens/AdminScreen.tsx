@@ -36,7 +36,12 @@ import { AdminContentRevisionModal } from "../components/AdminContentRevisionMod
 import { getDisplayName } from "../utils/displayName";
 import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
 
-type AdminTab = "stats" | "users" | "posts" | "activity" | "reports";
+type AdminTab = "stats" | "users" | "posts" | "activity" | "reports" | "community";
+
+const getReportedPostImages = (snapshot: Record<string, any> | null | undefined) => {
+  const media = Array.isArray(snapshot?.media) ? snapshot.media : [];
+  return media.map((item: any) => ({ url: item?.url || item?.media_url || item?.image_url || null, type: String(item?.type || item?.media_type || "image").toLowerCase() })).filter((item: { url: string | null; type: string }) => item.url && item.type === "image");
+};
 
 export const AdminScreen = ({ navigation }: any) => {
   const { colors, isDark } = useTheme();
@@ -59,11 +64,13 @@ export const AdminScreen = ({ navigation }: any) => {
   const [posts, setPosts] = useState<AdminPostItem[]>([]);
   const [postPage, setPostPage] = useState(1);
   const [totalPosts, setTotalPosts] = useState(0);
+  const [contentScope, setContentScope] = useState<"feed" | "community">("feed");
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [selectedPostBoardLabel, setSelectedPostBoardLabel] = useState<string | null>(null);
   const [selectedPostAuditContext, setSelectedPostAuditContext] =
     useState<AdminPostAuditContext | null>(null);
   const [postDetailModalVisible, setPostDetailModalVisible] = useState(false);
+  const [managedPost, setManagedPost] = useState<AdminPostItem | null>(null);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
   const [revisionModalVisible, setRevisionModalVisible] = useState(false);
   const [activityUsers, setActivityUsers] = useState<AdminActivityUser[]>([]);
@@ -85,6 +92,9 @@ export const AdminScreen = ({ navigation }: any) => {
   const [selectedReport, setSelectedReport] = useState<AdminReportDetail | null>(null);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportNote, setReportNote] = useState("");
+
+  const isMemberSection = activeTab === "users" || activeTab === "activity";
+  const isContentSection = activeTab === "posts" || activeTab === "reports";
 
   const loadStats = async () => {
     try {
@@ -111,10 +121,10 @@ export const AdminScreen = ({ navigation }: any) => {
     }
   };
 
-  const loadPosts = async (page: number = 1) => {
+  const loadPosts = async (page: number = 1, scope: "feed" | "community" = contentScope) => {
     try {
       setLoading(true);
-      const res = await adminService.getPosts(page, 20);
+      const res = await adminService.getPosts(page, 48, scope);
       setPosts(res.items);
       setTotalPosts(res.total);
       setPostPage(page);
@@ -313,10 +323,10 @@ export const AdminScreen = ({ navigation }: any) => {
     } else if (activeTab === "users") {
       await loadUsers(searchQuery, 1);
     } else if (activeTab === "posts") {
-      await loadPosts(1);
+      await loadPosts(1, contentScope);
     } else if (activeTab === "reports") {
       await loadReports();
-    } else { await loadActivity(activityQuery, 1);
+    } else if (activeTab === "activity") { await loadActivity(activityQuery, 1);
     }
     setRefreshing(false);
   };
@@ -327,10 +337,10 @@ export const AdminScreen = ({ navigation }: any) => {
     } else if (activeTab === "users") {
       loadUsers(searchQuery, 1);
     } else if (activeTab === "posts") {
-      loadPosts(1);
+      loadPosts(1, contentScope);
     } else if (activeTab === "reports") {
       loadReports();
-    } else { loadActivity(activityQuery, 1);
+    } else if (activeTab === "activity") { loadActivity(activityQuery, 1);
     }
   }, [activeTab]);
 
@@ -379,6 +389,36 @@ export const AdminScreen = ({ navigation }: any) => {
         },
       },
     ]);
+  };
+
+  const handleSetPostHidden = (targetPost: AdminPostItem, hidden: boolean) => {
+    const actionLabel = hidden ? "숨김" : "숨김 해제";
+    Alert.alert(
+      `게시물 ${actionLabel}`,
+      hidden ? "이 게시물은 일반 사용자에게 보이지 않게 됩니다." : "이 게시물을 다시 일반 사용자에게 표시합니다.",
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: actionLabel,
+          style: hidden ? "destructive" : "default",
+          onPress: async () => {
+            try {
+              const updated = await adminService.setPostModerationHidden(targetPost.id, hidden);
+              setPosts((prev) => prev.map((post) => (
+                post.id === updated.post_id ? { ...post, moderation_hidden: updated.moderation_hidden } : post
+              )));
+              Alert.alert("완료", `게시물이 ${actionLabel} 처리되었습니다.`);
+            } catch (err: any) {
+              Alert.alert("오류", err.response?.data?.detail || `게시물 ${actionLabel} 처리에 실패했습니다.`);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const openPostManagementMenu = (item: AdminPostItem) => {
+    setManagedPost(item);
   };
 
   const primaryAccent = isDark ? "#a855f7" : "#7c3aed";
@@ -588,9 +628,6 @@ export const AdminScreen = ({ navigation }: any) => {
         <TouchableOpacity style={styles.refreshBtn} onPress={handleRefresh} activeOpacity={0.7}>
           <Ionicons name="refresh" size={20} color={primaryAccent} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.refreshBtn} onPress={() => navigation.navigate("CommunityAdmin")} activeOpacity={0.7}>
-          <Ionicons name="list-outline" size={20} color={primaryAccent} />
-        </TouchableOpacity>
       </View>
 
       {/* Segmented Tab Bar */}
@@ -606,38 +643,31 @@ export const AdminScreen = ({ navigation }: any) => {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.tabItem, activeTab === "users" && { borderBottomColor: primaryAccent, borderBottomWidth: 3 }]}
+          style={[styles.tabItem, isMemberSection && { borderBottomColor: primaryAccent, borderBottomWidth: 3 }]}
           onPress={() => setActiveTab("users")}
         >
-          <Ionicons name="people" size={16} color={activeTab === "users" ? primaryAccent : colors.textMuted} />
-          <Text style={[styles.tabText, { color: activeTab === "users" ? primaryAccent : colors.textMuted, fontWeight: activeTab === "users" ? "bold" : "500" }]}>
+          <Ionicons name="people" size={16} color={isMemberSection ? primaryAccent : colors.textMuted} />
+          <Text style={[styles.tabText, { color: isMemberSection ? primaryAccent : colors.textMuted, fontWeight: isMemberSection ? "bold" : "500" }]}>
             회원 관리
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.tabItem, activeTab === "posts" && { borderBottomColor: primaryAccent, borderBottomWidth: 3 }]}
+          style={[styles.tabItem, isContentSection && { borderBottomColor: primaryAccent, borderBottomWidth: 3 }]}
           onPress={() => setActiveTab("posts")}
         >
-          <Ionicons name="images" size={16} color={activeTab === "posts" ? primaryAccent : colors.textMuted} />
-          <Text style={[styles.tabText, { color: activeTab === "posts" ? primaryAccent : colors.textMuted, fontWeight: activeTab === "posts" ? "bold" : "500" }]}>
-            게시물 관리
+          <Ionicons name="folder-open-outline" size={16} color={isContentSection ? primaryAccent : colors.textMuted} />
+          <Text style={[styles.tabText, { color: isContentSection ? primaryAccent : colors.textMuted, fontWeight: isContentSection ? "bold" : "500" }]}>
+            콘텐츠 관리
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.tabItem, activeTab === "activity" && { borderBottomColor: primaryAccent, borderBottomWidth: 3 }]}
-          onPress={() => setActiveTab("activity")}
+          style={[styles.tabItem, activeTab === "community" && { borderBottomColor: primaryAccent, borderBottomWidth: 3 }]}
+          onPress={() => setActiveTab("community")}
         >
-          <Ionicons name="receipt-outline" size={16} color={activeTab === "activity" ? primaryAccent : colors.textMuted} />
-          <Text style={[styles.tabText, { color: activeTab === "activity" ? primaryAccent : colors.textMuted, fontWeight: activeTab === "activity" ? "bold" : "500" }]}>활동 로그</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabItem, activeTab === "reports" && { borderBottomColor: primaryAccent, borderBottomWidth: 3 }]}
-          onPress={() => setActiveTab("reports")}
-        >
-          <Ionicons name="shield-outline" size={16} color={activeTab === "reports" ? primaryAccent : colors.textMuted} />
-          <Text style={[styles.tabText, { color: activeTab === "reports" ? primaryAccent : colors.textMuted, fontWeight: activeTab === "reports" ? "bold" : "500" }]}>신고 관리</Text>
+          <Ionicons name="list-outline" size={16} color={activeTab === "community" ? primaryAccent : colors.textMuted} />
+          <Text style={[styles.tabText, { color: activeTab === "community" ? primaryAccent : colors.textMuted, fontWeight: activeTab === "community" ? "bold" : "500" }]}>커뮤니티</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -695,6 +725,10 @@ export const AdminScreen = ({ navigation }: any) => {
 
       {activeTab === "users" && (
         <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12 }}>
+          <View style={styles.subnavRow}>
+            <TouchableOpacity onPress={() => setActiveTab("users")} style={[styles.subnavButton, { borderColor: primaryAccent, backgroundColor: `${primaryAccent}18` }]}><Text style={{ color: primaryAccent, fontWeight: "700" }}>회원 목록</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setActiveTab("activity")} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>활동·보존 이력</Text></TouchableOpacity>
+          </View>
           {/* Search Box */}
           <View style={[styles.searchContainer, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
             <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
@@ -822,7 +856,12 @@ export const AdminScreen = ({ navigation }: any) => {
 
       {activeTab === "posts" && (
         <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12 }}>
-          <Text style={[styles.countText, { color: colors.textMuted }]}>총 {totalPosts}개의 게시물 모니터링 중</Text>
+          <View style={styles.subnavRow}>
+            <TouchableOpacity onPress={() => { setContentScope("feed"); loadPosts(1, "feed"); }} style={[styles.subnavButton, { borderColor: contentScope === "feed" ? primaryAccent : colors.borderColor, backgroundColor: contentScope === "feed" ? `${primaryAccent}18` : "transparent" }]}><Text style={{ color: contentScope === "feed" ? primaryAccent : colors.textSecondary, fontWeight: "700" }}>피드</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => { setContentScope("community"); loadPosts(1, "community"); }} style={[styles.subnavButton, { borderColor: contentScope === "community" ? primaryAccent : colors.borderColor, backgroundColor: contentScope === "community" ? `${primaryAccent}18` : "transparent" }]}><Text style={{ color: contentScope === "community" ? primaryAccent : colors.textSecondary, fontWeight: "700" }}>게시판</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setActiveTab("reports")} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>신고됨</Text></TouchableOpacity>
+          </View>
+          <Text style={[styles.countText, { color: colors.textMuted }]}>최신순 · 총 {totalPosts}개</Text>
 
           {loading ? (
             <ActivityIndicator style={{ marginTop: 24 }} size="large" color={primaryAccent} />
@@ -830,6 +869,9 @@ export const AdminScreen = ({ navigation }: any) => {
             <FlatList
               data={posts}
               keyExtractor={(item) => item.id}
+              key={`content-grid-${contentScope}`}
+              numColumns={3}
+              columnWrapperStyle={styles.contentGridRow}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={primaryAccent} />}
               renderItem={({ item }) => {
                 const firstMedia = item.media && item.media.length > 0 ? item.media[0] : null;
@@ -838,34 +880,45 @@ export const AdminScreen = ({ navigation }: any) => {
                 return (
                   <TouchableOpacity
                     activeOpacity={0.8}
-                    style={[styles.postCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
+                    style={[styles.contentTile, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
                     onPress={() => {
                       setSelectedPostId(item.id);
                       setPostDetailModalVisible(true);
                     }}
                   >
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <View style={styles.contentTileHeader}>
+                      <View style={styles.contentTileAuthorRow}>
                         <Ionicons name="eye-outline" size={16} color={primaryAccent} />
-                        <Text style={[styles.postAuthor, { color: primaryAccent }]}>
+                        <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.postAuthor, styles.contentTileAuthor, { color: primaryAccent }]}>
                           {getDisplayName(item.author, "알 수 없음")}
                         </Text>
-                        {item.author.is_admin && <AdminBadge />}
+                        {item.author.is_admin && <AdminBadge compact />}
                       </View>
-                      <Text style={{ color: colors.textMuted, fontSize: 11 }}>
-                        {item.created_at ? new Date(item.created_at).toLocaleDateString() : ""}
-                      </Text>
+                      <View style={styles.contentTileMenu}>
+                        {item.moderation_hidden && <View style={styles.hiddenBadge}><Ionicons name="eye-off-outline" size={11} color="#b45309" /></View>}
+                        <TouchableOpacity
+                          style={styles.contentTileMenuButton}
+                          accessibilityLabel="콘텐츠 관리 메뉴"
+                          hitSlop={8}
+                          onPress={(event) => {
+                            event.stopPropagation();
+                            openPostManagementMenu(item);
+                          }}
+                        >
+                          <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
+                        </TouchableOpacity>
+                      </View>
                     </View>
 
-                    <View style={{ flexDirection: "row", marginTop: 8, gap: 12, alignItems: "center" }}>
+                    <View style={styles.contentTileBody}>
                       {mediaUrl ? (
                         <Image
                           source={{ uri: getFullImageUrl(mediaUrl) }}
-                          style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: "#ccc" }}
+                          style={styles.contentTileImage}
                           resizeMode="cover"
                         />
                       ) : (
-                        <View style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: colors.bgPrimary, justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: colors.borderColor }}>
+                        <View style={[styles.contentTileText, { backgroundColor: colors.bgPrimary, borderColor: colors.borderColor }]}>
                           <Ionicons name="document-text-outline" size={22} color={colors.textMuted} />
                         </View>
                       )}
@@ -882,12 +935,12 @@ export const AdminScreen = ({ navigation }: any) => {
                       </View>
                     </View>
 
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
-                      <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+                    <View style={styles.contentTileFooter}>
+                      <Text style={{ display: "none" }}>
                         👆 클릭하여 상세 팝업 보기
                       </Text>
                       <TouchableOpacity
-                        style={styles.deletePostBtn}
+                        style={styles.contentTileDeleteBtn}
                         onPress={() => handleDeletePost(item)}
                         activeOpacity={0.7}
                       >
@@ -907,6 +960,11 @@ export const AdminScreen = ({ navigation }: any) => {
 
       {activeTab === "reports" && (
         <View style={{ flex: 1, padding: 16 }}>
+          <View style={styles.subnavRow}>
+            <TouchableOpacity onPress={() => { setContentScope("feed"); setActiveTab("posts"); }} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>피드</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => { setContentScope("community"); setActiveTab("posts"); }} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>게시판</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setActiveTab("reports")} style={[styles.subnavButton, { borderColor: primaryAccent, backgroundColor: `${primaryAccent}18` }]}><Text style={{ color: primaryAccent, fontWeight: "700" }}>신고됨</Text></TouchableOpacity>
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
             {[
               ["", "전체"],
@@ -971,6 +1029,10 @@ export const AdminScreen = ({ navigation }: any) => {
 
       {activeTab === "activity" && (
         <View style={{ flex: 1, padding: 16 }}>
+          <View style={styles.subnavRow}>
+            <TouchableOpacity onPress={() => setActiveTab("users")} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>회원 목록</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setActiveTab("activity")} style={[styles.subnavButton, { borderColor: primaryAccent, backgroundColor: `${primaryAccent}18` }]}><Text style={{ color: primaryAccent, fontWeight: "700" }}>활동·보존 이력</Text></TouchableOpacity>
+          </View>
           <View style={styles.activitySearchRow}>
             <View style={[styles.searchContainer, styles.activitySearchContainer, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
               <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
@@ -1001,6 +1063,37 @@ export const AdminScreen = ({ navigation }: any) => {
         </View>
       )}
 
+      {activeTab === "community" && (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 12 }}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: 2 }]}>커뮤니티 관리</Text>
+          <Text style={{ color: colors.textSecondary, lineHeight: 20 }}>게시판과 공지를 한 곳에서 관리합니다. 생성과 수정은 아래 항목을 선택해 바로 진행할 수 있습니다.</Text>
+          <TouchableOpacity
+            style={[styles.managementCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
+            onPress={() => navigation.navigate("CommunityAdmin", { mode: "create" })}
+          >
+            <View style={[styles.managementIcon, { backgroundColor: `${primaryAccent}18` }]}><Ionicons name="add-circle-outline" size={25} color={primaryAccent} /></View>
+            <View style={{ flex: 1 }}><Text style={{ color: colors.textPrimary, fontWeight: "800", fontSize: 15 }}>게시판 생성</Text><Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>새 상위·하위 게시판을 추가합니다.</Text></View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.managementCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
+            onPress={() => navigation.navigate("CommunityAdmin", { mode: "edit" })}
+          >
+            <View style={[styles.managementIcon, { backgroundColor: "rgba(6,182,212,0.14)" }]}><Ionicons name="create-outline" size={25} color="#06b6d4" /></View>
+            <View style={{ flex: 1 }}><Text style={{ color: colors.textPrimary, fontWeight: "800", fontSize: 15 }}>게시판 수정·정렬</Text><Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>목록에서 게시판을 선택해 이름, 공개 방식, 순서를 바꿉니다.</Text></View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.managementCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
+            onPress={() => navigation.navigate("CommunityAdmin", { mode: "notice" })}
+          >
+            <View style={[styles.managementIcon, { backgroundColor: "rgba(245,158,11,0.14)" }]}><Ionicons name="megaphone-outline" size={25} color="#f59e0b" /></View>
+            <View style={{ flex: 1 }}><Text style={{ color: colors.textPrimary, fontWeight: "800", fontSize: 15 }}>전체 공지</Text><Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>커뮤니티 상단에 공지할 내용을 등록합니다.</Text></View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
+        </ScrollView>
+      )}
+
       {/* 회원별 작성 게시물 팝업 모달 */}
       <AdminUserPostsModal
         visible={userPostsModalVisible}
@@ -1009,6 +1102,58 @@ export const AdminScreen = ({ navigation }: any) => {
       />
 
       {/* 게시물 상세 팝업 모달 */}
+      <Modal
+        transparent
+        visible={Boolean(managedPost)}
+        animationType="fade"
+        onRequestClose={() => setManagedPost(null)}
+      >
+        <View style={styles.managementMenuOverlay}>
+          <TouchableOpacity
+            activeOpacity={1}
+            style={StyleSheet.absoluteFill}
+            onPress={() => setManagedPost(null)}
+          />
+          {managedPost && (
+            <View style={[styles.managementMenuCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+              <TouchableOpacity
+                style={styles.managementMenuAction}
+                onPress={() => {
+                  setManagedPost(null);
+                  setSelectedPostId(managedPost.id);
+                  setPostDetailModalVisible(true);
+                }}
+              >
+                <Ionicons name="open-outline" size={18} color={colors.textPrimary} />
+                <Text style={[styles.managementMenuText, { color: colors.textPrimary }]}>상세 보기</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.managementMenuAction}
+                onPress={() => {
+                  const targetPost = managedPost;
+                  setManagedPost(null);
+                  handleSetPostHidden(targetPost, !targetPost.moderation_hidden);
+                }}
+              >
+                <Ionicons name={managedPost.moderation_hidden ? "eye-outline" : "eye-off-outline"} size={18} color={colors.textPrimary} />
+                <Text style={[styles.managementMenuText, { color: colors.textPrimary }]}>{managedPost.moderation_hidden ? "숨김 해제" : "숨김"}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.managementMenuAction}
+                onPress={() => {
+                  const targetPost = managedPost;
+                  setManagedPost(null);
+                  handleDeletePost(targetPost);
+                }}
+              >
+                <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                <Text style={[styles.managementMenuText, { color: "#ef4444" }]}>강제 삭제</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </Modal>
+
       <PostDetailModal
         visible={postDetailModalVisible}
         postId={selectedPostId}
@@ -1052,6 +1197,17 @@ export const AdminScreen = ({ navigation }: any) => {
                   <Text style={{ color: colors.textMuted, marginTop: 6 }}>
                     고유번호: {selectedReport.snapshot.display_number || selectedReport.snapshot.comment_display_number || "-"}
                   </Text>
+                  {selectedReport.target_type === "post" && (getReportedPostImages(selectedReport.snapshot).length > 0 ? (
+                    <View style={{ marginTop: 14 }}>
+                      <Text style={{ color: colors.textSecondary, fontWeight: "800", marginBottom: 8 }}>신고 게시물 이미지</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                        {getReportedPostImages(selectedReport.snapshot).map((media, index) => <View key={`${media.url}-${index}`} style={{ width: 168, height: 168, borderRadius: 12, overflow: "hidden", backgroundColor: colors.bgPrimary, borderWidth: 1, borderColor: colors.borderColor, alignItems: "center", justifyContent: "center" }}>
+                          <Ionicons name="image-outline" size={28} color={colors.textMuted} />
+                          <Image source={{ uri: getFullImageUrl(media.url!) }} style={{ position: "absolute", width: "100%", height: "100%" }} resizeMode="cover" />
+                        </View>)}
+                      </ScrollView>
+                    </View>
+                  ) : <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14 }}><Ionicons name="image-outline" size={16} color={colors.textMuted} /><Text style={{ color: colors.textMuted, fontSize: 12 }}>저장된 게시물 이미지가 없습니다.</Text></View>)}
                 </View>
                 {selectedReport.reports?.map((report) => (
                   <View key={report.id} style={[styles.postCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
@@ -1135,6 +1291,10 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 13,
   },
+  subnavRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  subnavButton: { flex: 1, minHeight: 38, borderWidth: 1, borderRadius: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
+  managementCard: { minHeight: 88, borderWidth: 1, borderRadius: 14, padding: 14, flexDirection: "row", alignItems: "center", gap: 12 },
+  managementIcon: { width: 46, height: 46, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "bold",
@@ -1263,6 +1423,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 10,
   },
+  contentGridRow: { gap: 7, marginBottom: 7 },
+  contentTile: { flex: 1, maxWidth: "32.2%", minHeight: 198, padding: 7, borderRadius: 10, borderWidth: 1 },
+  contentTileHeader: { flexDirection: "row", alignItems: "center", minHeight: 22 },
+  contentTileAuthorRow: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 4, paddingRight: 3 },
+  contentTileAuthor: { flexShrink: 1, minWidth: 0, fontSize: 13 },
+  contentTileMenu: { width: 24, alignItems: "flex-end", justifyContent: "center" },
+  contentTileMenuButton: { width: 24, height: 24, alignItems: "center", justifyContent: "center" },
+  contentTileBody: { flex: 1, flexDirection: "column", marginTop: 8, gap: 7, alignItems: "stretch" },
+  contentTileImage: { width: "100%", height: 82, borderRadius: 7, backgroundColor: "#ccc" },
+  contentTileText: { width: "100%", height: 82, borderRadius: 7, justifyContent: "center", alignItems: "center", borderWidth: 1, padding: 7 },
   postAuthor: {
     fontSize: 14,
     fontWeight: "bold",
@@ -1271,6 +1441,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 6,
     lineHeight: 18,
+  },
+  contentTileFooter: { minHeight: 34, marginTop: 6, flexDirection: "row", justifyContent: "flex-end", alignItems: "center" },
+  contentTileDeleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 30,
+    paddingHorizontal: 7,
+    borderRadius: 8,
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.4)",
   },
   deletePostBtn: {
     flexDirection: "row",
@@ -1282,4 +1464,38 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(239, 68, 68, 0.4)",
   },
+  hiddenBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fef3c7",
+  },
+  managementMenuOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.28)",
+    padding: 24,
+  },
+  managementMenuCard: {
+    width: "100%",
+    maxWidth: 280,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 14,
+    elevation: 8,
+  },
+  managementMenuAction: {
+    minHeight: 46,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  managementMenuText: { fontSize: 15, fontWeight: "700" },
 });
