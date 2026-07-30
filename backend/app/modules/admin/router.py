@@ -592,9 +592,9 @@ async def get_admin_user_content(
             select(PostMedia).where(PostMedia.post_id.in_(post_ids)).order_by(PostMedia.order)
         )
     ).scalars().all() if post_ids else []
-    post_media_map: dict[uuid.UUID, list[dict[str, Any]]] = {}
+    post_media_map: dict[str, list[dict[str, Any]]] = {}
     for pm in post_media_res:
-        post_media_map.setdefault(pm.post_id, []).append({
+        post_media_map.setdefault(str(pm.post_id), []).append({
             "id": str(pm.id),
             "media_url": pm.media_url,
             "detail_media_url": pm.detail_media_url or pm.media_url,
@@ -636,7 +636,7 @@ async def get_admin_user_content(
             "title": row.title,
             "caption": row.caption,
             "display_text": row.title if row.title else row.caption,
-            "media": post_media_map.get(row.id, []) if not row.deleted else (
+            "media": post_media_map.get(str(row.id), []) if not row.deleted else (
                 latest_post_revisions[row.id].media_manifest if row.id in latest_post_revisions else []
             ),
             "created_at": row.created_at.isoformat(),
