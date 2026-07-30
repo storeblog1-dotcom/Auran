@@ -824,6 +824,10 @@ export const FeedScreen = ({ navigation }: any) => {
           setDmPost(null);
         }}
       />
+      <NoticeListModal
+        visible={noticeModalVisible}
+        onClose={() => setNoticeModalVisible(false)}
+      />
     </SafeAreaView>
   );
 };
