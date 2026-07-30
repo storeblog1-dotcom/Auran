@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -47,6 +47,8 @@ const isPartnerBoardRecord = (board: any) =>
 export const CommunityScreen = ({ navigation, route }: any) => {
   const { colors } = useTheme();
   const { setCommunityComposeDisabled } = useContextualCompose();
+  const subBoardScrollRef = useRef<ScrollView>(null);
+  const postFlatListRef = useRef<FlatList>(null);
   const isFocused = useIsFocused();
   const { user: currentUser } = useAuth();
   const requestedSection: CommunitySection = route?.params?.section === "partner"
@@ -208,6 +210,12 @@ export const CommunityScreen = ({ navigation, route }: any) => {
   useLayoutEffect(() => {
     if (boards.length) selectFirstBoard(boards, section);
   }, [boards, section]);
+
+  // Reset horizontal sub-board chip scroll position and post list scroll position when parent board changes
+  useEffect(() => {
+    subBoardScrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
+    postFlatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [section, selectedParentId]);
 
   useEffect(() => {
     setLoading(true);
@@ -462,7 +470,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
 
       {visibleChildBoards.length > 0 && (
         <View style={[styles.boardArea, { borderBottomColor: colors.borderLight }]}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subBoardScroll}>
+          <ScrollView ref={subBoardScrollRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subBoardScroll}>
             {visibleChildBoards.map((board) => (
               <TouchableOpacity key={board.id} style={[styles.subBoardChip, { backgroundColor: selectedBoardId === board.id ? colors.accentPurple + "12" : "transparent", borderColor: selectedBoardId === board.id ? colors.accentPurple : colors.borderColor }]} onPress={() => setSelectedBoardId(board.id)}>
                 <Text style={{ color: selectedBoardId === board.id ? colors.accentBlue : colors.textSecondary, fontWeight: "700" }}>{board.name}</Text>
@@ -479,6 +487,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
         </View>
       ) : (
         <FlatList
+          ref={postFlatListRef}
           data={posts}
           keyExtractor={(item) => item.id}
           renderItem={renderPostItem}
