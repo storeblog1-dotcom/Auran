@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Modal, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
+import { getDisplayName } from "../utils/displayName";
 
 interface Props {
   visible: boolean;
@@ -25,6 +26,14 @@ export const PostOptionsSheet = ({
   const [mode, setMode] = useState<"menu" | "visibility" | "delete">("menu");
   const close = () => { setMode("menu"); onClose(); };
   const action = (callback?: () => void) => { setMode("menu"); onClose(); callback?.(); };
+
+  const handleSharePost = () => {
+    const authorName = getDisplayName(post?.user, "사용자");
+    const tempUrl = post?.id ? `https://auran.app/posts/${post.id}` : "https://auran.app";
+    const message = `Aura+n 게시물 공유됨. ${authorName} 님의 게시물을 확인해보세요.\n${tempUrl}`;
+    Share.share({ message });
+  };
+
   const row = (icon: any, label: string, callback?: () => void, danger = false) => (
     <TouchableOpacity style={[styles.row, { borderBottomColor: colors.borderColor }]} onPress={() => action(callback)}>
       <View style={[styles.icon, { backgroundColor: danger ? "#fee2e2" : colors.bgInput }]}>
@@ -78,7 +87,7 @@ export const PostOptionsSheet = ({
                 <Text style={[styles.label, { color: colors.textPrimary }]}>공개 범위 변경</Text>
                 <Ionicons name="chevron-forward" size={17} color={colors.textMuted} />
               </TouchableOpacity>
-              {row("share-social-outline", "공유하기", () => Share.share({ message: post?.caption || post?.title || "Aura+n 게시물" }))}
+              {row("share-social-outline", "공유하기", handleSharePost)}
               <TouchableOpacity style={[styles.row, { borderBottomColor: colors.borderColor }]} onPress={() => setMode("delete")}>
                 <View style={[styles.icon, { backgroundColor: "#fee2e2" }]}><Ionicons name="trash-outline" size={20} color="#ef4444" /></View>
                 <Text style={[styles.label, { color: "#ef4444" }]}>게시물 삭제</Text>
@@ -89,6 +98,7 @@ export const PostOptionsSheet = ({
             <>
               {row("person-circle-outline", "프로필 보기", onProfile)}
               {row(post?.user?.is_following ? "person-remove-outline" : "person-add-outline", post?.user?.is_following ? "팔로우 취소" : "팔로우", onFollow)}
+              {row("share-social-outline", "공유하기", handleSharePost)}
               {row("eye-off-outline", "이 게시물 숨기기", onHide)}
               {row("ban-outline", "사용자 차단", onBlock, true)}
               {row("flag-outline", "신고하기", onReport, true)}
