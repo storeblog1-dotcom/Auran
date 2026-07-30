@@ -28,6 +28,7 @@ import { PostCarousel } from "../components/PostCarousel";
 import { VerifiedYouTubeCard } from "../components/VerifiedYouTubeCard";
 import { HashtagText } from "../components/HashtagText";
 import { PostDetailModal } from "../components/PostDetailModal";
+import { NoticeListModal } from "../components/NoticeListModal";
 import { AuraLogoText } from "../components/AuraLogoText";
 import { PostOptionsSheet } from "../components/PostOptionsSheet";
 import { ReportSheet } from "../components/ReportSheet";
@@ -58,6 +59,7 @@ export const FeedScreen = ({ navigation }: any) => {
   const [dmModalVisible, setDmModalVisible] = useState<boolean>(false);
   const [detailPostId, setDetailPostId] = useState<string | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState<boolean>(false);
+  const [noticeModalVisible, setNoticeModalVisible] = useState<boolean>(false);
   const [optionsPost, setOptionsPost] = useState<any | null>(null);
   const [reportPost, setReportPost] = useState<any | null>(null);
 
@@ -605,8 +607,13 @@ export const FeedScreen = ({ navigation }: any) => {
       <View style={[styles.header, { backgroundColor: colors.headerBg }]}>
         <AuraLogoText fontSize={26} />
         <View style={styles.headerActions}>
-          <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: colors.bgInput }]} onPress={() => navigation.navigate("Search")}>
-            <Ionicons name="search-outline" size={21} color={colors.textPrimary} />
+          <TouchableOpacity
+            style={[styles.noticeIconButton, { backgroundColor: colors.accentPurple + "18", borderColor: colors.accentPurple }]}
+            onPress={() => setNoticeModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="megaphone-outline" size={18} color={colors.accentPurple} />
+            <Text style={[styles.noticeIconText, { color: colors.accentPurple }]}>공지</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: colors.bgInput, position: "relative" }]} onPress={() => setNotificationsModalVisible(true)}>
             <Ionicons name="notifications-outline" size={20} color={colors.textPrimary} />
@@ -840,6 +847,19 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     justifyContent: "center",
     alignItems: "center",
+  },
+  noticeIconButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  noticeIconText: {
+    fontSize: 13,
+    fontWeight: "800",
   },
   sectionTabs: {
     maxHeight: 48,
