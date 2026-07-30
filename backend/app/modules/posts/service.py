@@ -664,13 +664,18 @@ async def delete_post(
     if record_audit:
         await record(
             db,
-            user_id=current_user.id,
+            user_id=post.user_id,
             event_type="post_deleted",
             ip_address=ip_address,
             target_type="post",
             target_id=post.id,
             revision_id=revision.id,
-            snapshot={"title": post.title, "caption": post.caption},
+            snapshot={
+                "title": post.title,
+                "caption": post.caption,
+                "deleted_by": str(current_user.id),
+                "deleted_by_admin": current_user.is_admin and current_user.id != post.user_id,
+            },
         )
     await db.delete(post)
     await db.commit()
@@ -1244,13 +1249,18 @@ async def delete_comment(
     )
     await record(
         db,
-        user_id=current_user.id,
+        user_id=comment.user_id,
         event_type="comment_deleted",
         ip_address=ip_address,
         target_type="comment",
         target_id=comment.id,
         revision_id=root_revision.id,
-        snapshot={"content": comment.content, "post_id": str(comment.post_id)},
+        snapshot={
+            "content": comment.content,
+            "post_id": str(comment.post_id),
+            "deleted_by": str(current_user.id),
+            "deleted_by_admin": current_user.is_admin and current_user.id != comment.user_id,
+        },
     )
     await db.delete(comment)
     await db.commit()
