@@ -69,10 +69,10 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
   // Global notice section displays the latest 1 overall notice at the top
   const globalNotices = rawGlobal.slice(0, 1);
 
-  // General notice list section includes ALL notices sorted by created_at descending (newest first)
-  const generalNotices = [...notices].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+  // General notice list section includes all other notices (including previous overall notices), excluding current top overall notice, sorted by created_at desc
+  const generalNotices = notices
+    .filter((n) => !globalNotices.some((g) => g.id === n.id))
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const renderNoticeItem = (notice: any, keyPrefix = "item") => {
     const isExpanded = expandedNoticeIds.includes(notice.id);
