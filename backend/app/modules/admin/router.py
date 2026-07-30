@@ -789,15 +789,37 @@ async def get_admin_users(
 
     res = await db.execute(query)
     users = res.scalars().all()
+    user_ids = [u.id for u in users]
+
     withdrawal_rows = []
+    post_counts = {}
+    comment_counts = {}
+
     if users:
         withdrawal_rows = (
             await db.execute(
                 select(WithdrawnAccount).where(
-                    WithdrawnAccount.user_id.in_([user.id for user in users])
+                    WithdrawnAccount.user_id.in_(user_ids)
                 )
             )
         ).scalars().all()
+
+        post_counts = dict((
+            await db.execute(
+                select(Post.user_id, func.count(Post.id))
+                .where(Post.user_id.in_(user_ids))
+                .group_by(Post.user_id)
+            )
+        ).all())
+
+        comment_counts = dict((
+            await db.execute(
+                select(Comment.user_id, func.count(Comment.id))
+                .where(Comment.user_id.in_(user_ids))
+                .group_by(Comment.user_id)
+            )
+        ).all())
+
     withdrawals_by_user = {row.user_id: row for row in withdrawal_rows}
 
     user_list = []
@@ -821,6 +843,8 @@ async def get_admin_users(
             "profile_image_url": u.profile_image_url,
             "is_active": u.is_active,
             "is_admin": u.is_admin,
+            "posts_count": post_counts.get(u.id, 0),
+            "comments_count": comment_counts.get(u.id, 0),
             "created_at": u.created_at.isoformat() if u.created_at else None,
             "withdrawal_status": withdrawal_status,
             "withdrawal_requested_at": (

@@ -17,6 +17,8 @@ export interface AdminUserItem {
   profile_image_url?: string;
   is_active: boolean;
   is_admin: boolean;
+  posts_count?: number;
+  comments_count?: number;
   created_at?: string;
   withdrawal_status?: "pending" | "finalized" | "purged" | null;
   withdrawal_requested_at?: string | null;
