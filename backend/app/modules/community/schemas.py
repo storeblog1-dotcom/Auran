@@ -43,6 +43,12 @@ class NoticeCreateRequest(BaseModel):
     board_id: UUID | None = None
 
 
+class NoticeUpdateRequest(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=255)
+    content: str | None = Field(None, min_length=1, max_length=3000)
+    board_id: UUID | None = None
+
+
 class NoticeResponse(BaseModel):
     id: UUID
     title: str

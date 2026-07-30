@@ -127,7 +127,12 @@ export const CommunityAdminScreen = ({ navigation, route }: any) => {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}><TouchableOpacity onPress={() => setParentId(null)} style={[styles.chip, { backgroundColor: !parentId ? colors.accentPurple : colors.bgCard }]}><Text style={{ color: !parentId ? "#fff" : colors.textPrimary }}>상위 없음</Text></TouchableOpacity>{parents.map((parent) => <TouchableOpacity key={parent.id} onPress={() => setParentId(parent.id)} style={[styles.chip, { backgroundColor: parentId === parent.id ? colors.accentPurple : colors.bgCard }]}><Text style={{ color: parentId === parent.id ? "#fff" : colors.textPrimary }}>{parent.name}</Text></TouchableOpacity>)}</ScrollView>
       <View style={styles.switchRow}><Text style={{ color: colors.textPrimary }}>익명 게시판</Text><Switch value={anonymous} onValueChange={setAnonymous} /></View>
       <TouchableOpacity style={[styles.primary, { backgroundColor: colors.accentBlue }]} onPress={save}><Text style={styles.primaryText}>{editing ? "수정 저장" : "게시판 생성"}</Text></TouchableOpacity>
-      <Text style={[styles.section, { color: colors.textPrimary }]}>전체 공지</Text>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 16, marginBottom: 10 }}>
+        <Text style={[styles.section, { color: colors.textPrimary, marginTop: 0, marginBottom: 0 }]}>전체 공지</Text>
+        <TouchableOpacity onPress={() => navigation.navigate("CommunityAdminNotice")} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <Text style={{ color: colors.accentPurple, fontWeight: "700", fontSize: 13 }}>전체 공지 관리 화면 목록/수정/삭제 ➔</Text>
+        </TouchableOpacity>
+      </View>
       <TextInput style={[styles.input, { color: colors.textPrimary, borderColor: colors.borderColor }]} placeholder="공지 제목" placeholderTextColor={colors.textMuted} value={noticeTitle} onChangeText={setNoticeTitle} />
       <TextInput style={[styles.input, styles.noticeInput, { color: colors.textPrimary, borderColor: colors.borderColor }]} placeholder="모든 게시판 상단에 표시할 공지 내용" placeholderTextColor={colors.textMuted} value={noticeContent} onChangeText={setNoticeContent} multiline />
       <TouchableOpacity style={[styles.primary, { backgroundColor: colors.accentPurple }]} onPress={postNotice}><Text style={styles.primaryText}>전체 공지 등록</Text></TouchableOpacity>

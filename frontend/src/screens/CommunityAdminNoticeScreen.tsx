@@ -1,0 +1,393 @@
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import api from "../services/api";
+import { useTheme } from "../context/ThemeContext";
+
+export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
+  const { colors } = useTheme();
+
+  const [notices, setNotices] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [expandedNoticeIds, setExpandedNoticeIds] = useState<string[]>([]);
+
+  // Form State (Create / Edit)
+  const [editingNotice, setEditingNotice] = useState<any | null>(null);
+  const [noticeTitle, setNoticeTitle] = useState("");
+  const [noticeContent, setNoticeContent] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const loadNotices = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/community/admin/notices");
+      const list = res.data?.data || [];
+      setNotices(list);
+      // Expand first notice by default if available
+      if (list.length > 0 && expandedNoticeIds.length === 0) {
+        setExpandedNoticeIds([list[0].id]);
+      }
+    } catch (e: any) {
+      Alert.alert("오류", e.response?.data?.detail || "공지사항 목록을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadNotices();
+  }, [loadNotices]);
+
+  const toggleNotice = (noticeId: string) => {
+    setExpandedNoticeIds((prev) =>
+      prev.includes(noticeId) ? prev.filter((id) => id !== noticeId) : [...prev, noticeId]
+    );
+  };
+
+  const resetForm = () => {
+    setEditingNotice(null);
+    setNoticeTitle("");
+    setNoticeContent("");
+  };
+
+  const startEdit = (notice: any) => {
+    setEditingNotice(notice);
+    setNoticeTitle(notice.title);
+    setNoticeContent(notice.content);
+    // Expand the notice being edited
+    if (!expandedNoticeIds.includes(notice.id)) {
+      setExpandedNoticeIds((prev) => [...prev, notice.id]);
+    }
+  };
+
+  const handleSaveNotice = async () => {
+    if (!noticeTitle.trim() || !noticeContent.trim()) {
+      Alert.alert("알림", "공지 제목과 내용을 입력해 주세요.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      if (editingNotice) {
+        await api.patch(`/community/admin/notices/${editingNotice.id}`, {
+          title: noticeTitle.trim(),
+          content: noticeContent.trim(),
+        });
+        Alert.alert("성공", "공지사항이 수정되었습니다.");
+      } else {
+        await api.post("/community/admin/notices", {
+          title: noticeTitle.trim(),
+          content: noticeContent.trim(),
+        });
+        Alert.alert("성공", "전체 공지가 등록되었습니다.");
+      }
+      resetForm();
+      loadNotices();
+    } catch (e: any) {
+      Alert.alert("오류", e.response?.data?.detail || "공지 저장에 실패했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteNotice = (notice: any) => {
+    Alert.alert(
+      "공지 삭제",
+      `‘${notice.title}’ 공지를 삭제할까요?`,
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "삭제",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await api.delete(`/community/admin/notices/${notice.id}`);
+              Alert.alert("완료", "공지사항이 삭제되었습니다.");
+              if (editingNotice?.id === notice.id) {
+                resetForm();
+              }
+              loadNotices();
+            } catch (e: any) {
+              Alert.alert("오류", e.response?.data?.detail || "공지 삭제에 실패했습니다.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: colors.borderColor }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <Ionicons name="chevron-back" size={26} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>전체 공지 관리</Text>
+        <TouchableOpacity onPress={resetForm} activeOpacity={0.7}>
+          <Text style={{ color: colors.accentBlue, fontWeight: "700" }}>새 공지</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {/* Form Card */}
+        <View style={[styles.formCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+          <View style={styles.formHeader}>
+            <Ionicons name={editingNotice ? "create-outline" : "add-circle-outline"} size={20} color={colors.accentPurple} />
+            <Text style={[styles.formTitle, { color: colors.textPrimary }]}>
+              {editingNotice ? "전체 공지 수정" : "새 전체 공지 작성"}
+            </Text>
+          </View>
+
+          <TextInput
+            style={[styles.input, { color: colors.textPrimary, borderColor: colors.borderColor, backgroundColor: colors.bgInput }]}
+            placeholder="공지 제목"
+            placeholderTextColor={colors.textMuted}
+            value={noticeTitle}
+            onChangeText={setNoticeTitle}
+          />
+          <TextInput
+            style={[styles.input, styles.contentInput, { color: colors.textPrimary, borderColor: colors.borderColor, backgroundColor: colors.bgInput }]}
+            placeholder="모든 게시판 상단에 표시할 공지 내용을 입력하세요."
+            placeholderTextColor={colors.textMuted}
+            value={noticeContent}
+            onChangeText={setNoticeContent}
+            multiline
+          />
+
+          <View style={styles.formBtnRow}>
+            {editingNotice && (
+              <TouchableOpacity
+                style={[styles.cancelBtn, { borderColor: colors.borderColor }]}
+                onPress={resetForm}
+              >
+                <Text style={{ color: colors.textSecondary, fontWeight: "700" }}>취소</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.saveBtn, { backgroundColor: colors.accentPurple, flex: 1 }]}
+              onPress={handleSaveNotice}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.saveBtnText}>{editingNotice ? "수정 저장" : "전체 공지 등록"}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Notices Section Header */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>등록된 전체 공지 목록</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 13 }}>총 {notices.length}건</Text>
+        </View>
+
+        {loading ? (
+          <ActivityIndicator size="large" color={colors.accentPurple} style={{ marginVertical: 30 }} />
+        ) : notices.length === 0 ? (
+          <View style={[styles.emptyBox, { borderColor: colors.borderColor, backgroundColor: colors.bgCard }]}>
+            <Ionicons name="megaphone-outline" size={36} color={colors.textMuted} />
+            <Text style={{ color: colors.textMuted, marginTop: 8 }}>등록된 전체 공지가 없습니다.</Text>
+          </View>
+        ) : (
+          notices.map((notice) => {
+            const isExpanded = expandedNoticeIds.includes(notice.id);
+            const isEditingThis = editingNotice?.id === notice.id;
+
+            return (
+              <View
+                key={notice.id}
+                style={[
+                  styles.noticeCard,
+                  {
+                    backgroundColor: colors.bgCard,
+                    borderColor: isEditingThis ? colors.accentPurple : colors.borderColor,
+                    borderWidth: isEditingThis ? 2 : 1,
+                  },
+                ]}
+              >
+                {/* Notice Card Header */}
+                <TouchableOpacity
+                  style={styles.noticeHeaderRow}
+                  onPress={() => toggleNotice(notice.id)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="megaphone-outline" size={18} color={colors.accentPurple} style={{ marginRight: 10 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.noticeCardTitle, { color: colors.textPrimary }]}>{notice.title}</Text>
+                    <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>
+                      {new Date(notice.created_at).toLocaleString("ko-KR", {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name={isExpanded ? "chevron-up" : "chevron-down"}
+                    size={20}
+                    color={colors.textSecondary}
+                  />
+                </TouchableOpacity>
+
+                {/* Notice Collapsible Content */}
+                {isExpanded && (
+                  <View style={[styles.noticeBody, { borderTopColor: colors.borderColor }]}>
+                    <Text style={[styles.noticeContentText, { color: colors.textPrimary }]}>
+                      {notice.content}
+                    </Text>
+
+                    {/* Action Buttons */}
+                    <View style={styles.actionRow}>
+                      <TouchableOpacity
+                        style={[styles.actionBtn, { backgroundColor: colors.accentBlue + "15" }]}
+                        onPress={() => startEdit(notice)}
+                      >
+                        <Ionicons name="create-outline" size={15} color={colors.accentBlue} />
+                        <Text style={[styles.actionBtnText, { color: colors.accentBlue }]}>수정</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.actionBtn, { backgroundColor: "#ef444415" }]}
+                        onPress={() => handleDeleteNotice(notice)}
+                      >
+                        <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                        <Text style={[styles.actionBtnText, { color: "#ef4444" }]}>삭제</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+            );
+          })
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  header: {
+    height: 54,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  title: { fontSize: 17, fontWeight: "800" },
+  content: { padding: 16, paddingBottom: 50 },
+  formCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 20,
+  },
+  formHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  formTitle: { fontSize: 15, fontWeight: "800" },
+  input: {
+    borderWidth: 1,
+    borderRadius: 10,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    fontSize: 14,
+  },
+  contentInput: {
+    minHeight: 110,
+    textAlignVertical: "top",
+    paddingTop: 10,
+  },
+  formBtnRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 4,
+  },
+  cancelBtn: {
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  saveBtn: {
+    height: 44,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  saveBtnText: { color: "#ffffff", fontWeight: "800", fontSize: 15 },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  sectionTitle: { fontSize: 16, fontWeight: "800" },
+  emptyBox: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 30,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  noticeCard: {
+    borderRadius: 14,
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  noticeHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+  },
+  noticeCardTitle: { fontSize: 15, fontWeight: "700" },
+  noticeBody: {
+    borderTopWidth: 1,
+    padding: 14,
+    paddingTop: 12,
+  },
+  noticeContentText: {
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 14,
+  },
+  actionRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
+  actionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  actionBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+});

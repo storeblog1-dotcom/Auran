@@ -35,6 +35,7 @@ import { NotificationScreen } from "../screens/NotificationScreen";
 import { CommunityScreen } from "../screens/CommunityScreen";
 import { AdminScreen } from "../screens/AdminScreen";
 import { CommunityAdminScreen } from "../screens/CommunityAdminScreen";
+import { CommunityAdminNoticeScreen } from "../screens/CommunityAdminNoticeScreen";
 
 import { Ionicons } from "@expo/vector-icons";
 
@@ -325,6 +326,7 @@ const AppContent = () => {
               <Stack.Screen name="Hashtag" component={HashtagScreen} />
               <Stack.Screen name="Admin" component={AdminScreen} />
               <Stack.Screen name="CommunityAdmin" component={CommunityAdminScreen} />
+              <Stack.Screen name="CommunityAdminNotice" component={CommunityAdminNoticeScreen} />
             </>
           ) : (
             <>

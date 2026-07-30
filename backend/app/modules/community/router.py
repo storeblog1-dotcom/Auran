@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.modules.auth.dependencies import get_current_active_user
 from app.modules.auth.models import User
 from app.modules.community.models import CommunityBoard, CommunityNotice
-from app.modules.community.schemas import BoardCreateRequest, BoardReorderRequest, BoardResponse, BoardUpdateRequest, NoticeCreateRequest, NoticeResponse
+from app.modules.community.schemas import BoardCreateRequest, BoardReorderRequest, BoardResponse, BoardUpdateRequest, NoticeCreateRequest, NoticeResponse, NoticeUpdateRequest
 
 router = APIRouter(prefix="/community", tags=["Community"])
 
@@ -35,6 +35,14 @@ async def list_notices(board_id: UUID | None = None, current_user: User = Depend
     result = await db.execute(stmt)
     notices = [n for n in result.scalars().all() if n.board_id is None or n.board_id == board_id]
     return ApiResponse.ok(notices)
+
+
+@router.get("/admin/notices", response_model=ApiResponse[list[NoticeResponse]])
+async def list_admin_notices(current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
+    require_admin(current_user)
+    stmt = select(CommunityNotice).where(CommunityNotice.is_active.is_(True)).order_by(CommunityNotice.created_at.desc())
+    result = await db.execute(stmt)
+    return ApiResponse.ok(result.scalars().all())
 
 
 @router.post("/admin/boards", response_model=ApiResponse[BoardResponse])
@@ -130,3 +138,35 @@ async def create_notice(body: NoticeCreateRequest, current_user: User = Depends(
     await db.commit()
     await db.refresh(notice)
     return ApiResponse.ok(notice)
+
+
+@router.patch("/admin/notices/{notice_id}", response_model=ApiResponse[NoticeResponse])
+async def update_notice(notice_id: UUID, body: NoticeUpdateRequest, current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
+    require_admin(current_user)
+    stmt = select(CommunityNotice).where(CommunityNotice.id == notice_id, CommunityNotice.is_active.is_(True))
+    result = await db.execute(stmt)
+    notice = result.scalar_one_or_none()
+    if not notice:
+        raise NotFoundException("공지사항을 찾을 수 없습니다.")
+    if body.title is not None:
+        notice.title = body.title
+    if body.content is not None:
+        notice.content = body.content
+    if body.board_id is not None:
+        notice.board_id = body.board_id
+    await db.commit()
+    await db.refresh(notice)
+    return ApiResponse.ok(notice)
+
+
+@router.delete("/admin/notices/{notice_id}", response_model=ApiResponse[dict])
+async def delete_notice(notice_id: UUID, current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
+    require_admin(current_user)
+    stmt = select(CommunityNotice).where(CommunityNotice.id == notice_id, CommunityNotice.is_active.is_(True))
+    result = await db.execute(stmt)
+    notice = result.scalar_one_or_none()
+    if not notice:
+        raise NotFoundException("공지사항을 찾을 수 없습니다.")
+    notice.is_active = False
+    await db.commit()
+    return ApiResponse.ok({"message": "공지사항이 성공적으로 삭제되었습니다."})

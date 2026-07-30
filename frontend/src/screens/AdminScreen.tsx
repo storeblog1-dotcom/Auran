@@ -1085,10 +1085,10 @@ export const AdminScreen = ({ navigation }: any) => {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.managementCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
-            onPress={() => navigation.navigate("CommunityAdmin", { mode: "notice" })}
+            onPress={() => navigation.navigate("CommunityAdminNotice")}
           >
             <View style={[styles.managementIcon, { backgroundColor: "rgba(245,158,11,0.14)" }]}><Ionicons name="megaphone-outline" size={25} color="#f59e0b" /></View>
-            <View style={{ flex: 1 }}><Text style={{ color: colors.textPrimary, fontWeight: "800", fontSize: 15 }}>전체 공지</Text><Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>커뮤니티 상단에 공지할 내용을 등록합니다.</Text></View>
+            <View style={{ flex: 1 }}><Text style={{ color: colors.textPrimary, fontWeight: "800", fontSize: 15 }}>전체 공지 관리</Text><Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4 }}>전체 공지 목록 조회, 펼침/접힘, 수정, 삭제 및 새 공지를 관리합니다.</Text></View>
             <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
           </TouchableOpacity>
         </ScrollView>
