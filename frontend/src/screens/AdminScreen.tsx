@@ -581,15 +581,36 @@ export const AdminScreen = ({ navigation }: any) => {
                 {withdrawalLabel}
             </Text>
           </View>
-          <View style={styles.detailLabel}>
-            <Text style={{ color: primaryAccent, fontSize: 11, fontWeight: "700" }}>
-              {isExpanded ? "접기" : "콘텐츠 보기"}
-            </Text>
-            <Ionicons
-              name={isExpanded ? "chevron-up" : "chevron-down"}
-              size={16}
-              color={primaryAccent}
-            />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <TouchableOpacity
+              onPress={(e) => {
+                e.stopPropagation();
+                setSelectedUserForModal({
+                  id: item.user_id,
+                  username: item.username,
+                  nickname: item.nickname,
+                  full_name: item.nickname || item.username,
+                  email: "",
+                  is_active: true,
+                  is_admin: false,
+                });
+                setUserPostsModalVisible(true);
+              }}
+              style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: `${primaryAccent}18` }}
+            >
+              <Text style={{ color: primaryAccent, fontSize: 11, fontWeight: "bold" }}>360° 모달</Text>
+            </TouchableOpacity>
+
+            <View style={styles.detailLabel}>
+              <Text style={{ color: primaryAccent, fontSize: 11, fontWeight: "700" }}>
+                {isExpanded ? "접기" : "콘텐츠 보기"}
+              </Text>
+              <Ionicons
+                name={isExpanded ? "chevron-up" : "chevron-down"}
+                size={16}
+                color={primaryAccent}
+              />
+            </View>
           </View>
         </View>
         {isExpanded && (
@@ -1146,8 +1167,23 @@ export const AdminScreen = ({ navigation }: any) => {
       <AdminUserActivityModal
         visible={userPostsModalVisible}
         user={selectedUserForModal}
-        onClose={() => setUserPostsModalVisible(false)}
+        onClose={() => {
+          setUserPostsModalVisible(false);
+          setSelectedUserForModal(null);
+        }}
         onUserUpdated={() => loadUsers(searchQuery, userPage)}
+        onOpenPost={(postId, boardLabel, auditContext) => {
+          setUserPostsModalVisible(false);
+          setSelectedPostId(postId);
+          setSelectedPostBoardLabel(boardLabel || null);
+          setSelectedPostAuditContext(auditContext || null);
+          setPostDetailModalVisible(true);
+        }}
+        onOpenRevision={(revisionId) => {
+          setUserPostsModalVisible(false);
+          setSelectedRevisionId(revisionId);
+          setRevisionModalVisible(true);
+        }}
       />
 
       {/* 게시물 상세 팝업 모달 */}
@@ -1165,15 +1201,20 @@ export const AdminScreen = ({ navigation }: any) => {
           />
           {managedPost && (
             <View style={[styles.managementMenuCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+              <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 12 }}>
+                {managedPost.title || managedPost.caption || "제목 없음"}
+              </Text>
               <TouchableOpacity
                 style={styles.managementMenuAction}
                 onPress={() => {
+                  const targetPost = managedPost;
                   setManagedPost(null);
-                  setSelectedPostId(managedPost.id);
+                  setSelectedPostId(targetPost.id);
+                  setSelectedPostBoardLabel(targetPost.board_name || targetPost.board_type || null);
                   setPostDetailModalVisible(true);
                 }}
               >
-                <Ionicons name="open-outline" size={18} color={colors.textPrimary} />
+                <Ionicons name="open-outline" size={18} color={primaryAccent} />
                 <Text style={[styles.managementMenuText, { color: colors.textPrimary }]}>상세 보기</Text>
               </TouchableOpacity>
               <TouchableOpacity

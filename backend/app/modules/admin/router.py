@@ -451,7 +451,7 @@ async def get_admin_user_content(
     user_id: uuid.UUID,
     post_page: int = Query(1, ge=1),
     comment_page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=50),
+    size: int = Query(100, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_admin_user),
 ) -> ApiResponse[dict[str, Any]]:
