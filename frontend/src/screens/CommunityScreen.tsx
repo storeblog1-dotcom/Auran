@@ -493,17 +493,6 @@ export const CommunityScreen = ({ navigation, route }: any) => {
           renderItem={renderPostItem}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={<>
-            {section === "info" && <LinearGradient colors={[colors.accentPurple + "22", colors.accentPink + "34", colors.accentCyan + "22"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.supportCard, { borderColor: colors.borderLight }]}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.supportTitle, { color: colors.textPrimary }]}>도움이 필요할 때</Text>
-                <Text style={[styles.supportBody, { color: colors.textSecondary }]}>혼자가 아니에요. 안전하고 익명으로 필요한 도움과 정보를 찾아보세요.</Text>
-                <TouchableOpacity style={[styles.supportButton, { backgroundColor: colors.bgCard }]} onPress={() => changeSection("info")}>
-                  <Text style={[styles.supportButtonText, { color: colors.accentPurple }]}>자세히 보기</Text>
-                  <Ionicons name="arrow-forward" size={15} color={colors.accentPurple} />
-                </TouchableOpacity>
-              </View>
-              <View style={[styles.supportIcon, { backgroundColor: colors.bgCard + "aa" }]}><Ionicons name="heart-outline" size={34} color={colors.accentPink} /></View>
-            </LinearGradient>}
             {notices.length ? <View style={styles.noticeList}>{notices.map((notice) => {
               const isExpanded = expandedNoticeIds.includes(notice.id);
               return (
