@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from "r
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../services/api";
 import { deactivateCurrentInstallationPushToken } from "../services/pushNotifications";
+import { clearCommunityCache } from "../screens/CommunityScreen";
 
 export interface User {
   id: string;
@@ -170,6 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Logout must still complete while offline. Invalid/expired tokens are
       // also retired by Expo ticket and receipt processing on the server.
     }
+    clearCommunityCache();
     await AsyncStorage.removeItem("access_token");
     await AsyncStorage.removeItem("refresh_token");
     await AsyncStorage.removeItem("withdrawal_token");

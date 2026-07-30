@@ -71,7 +71,13 @@ async def get_optional_current_user(
             return None
 
         user_id = uuid.UUID(user_id_str)
+        import time
+        from app.core.config import settings
+        t_auth_start = time.perf_counter()
         user = await get_user_by_id(db, user_id)
+        t_auth_end = time.perf_counter()
+        if settings.enable_perf_log:
+            print(f"[PERF_LOG] [AUTH] 인증 사용자 확인 시간: {(t_auth_end - t_auth_start)*1000:.2f} ms")
         if not user.is_active:
             return None
         return user

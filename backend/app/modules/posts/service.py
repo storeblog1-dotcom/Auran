@@ -1,9 +1,9 @@
 import uuid
 from typing import List, Optional
 
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, exists, func, literal_column, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.common.exceptions import BadRequestException, ForbiddenException, NotFoundException
 from app.modules.auth.models import User
@@ -129,16 +129,21 @@ async def _build_post_responses_batch(
     if not posts:
         return []
 
+    import time
+    t_batch_start = time.perf_counter()
     post_ids = [p.id for p in posts]
     board_ids = {p.board_id for p in posts if p.board_id}
     board_map: dict[uuid.UUID, CommunityBoard] = {}
+    t_boards_start = time.perf_counter()
     if board_ids:
         boards_res = await db.execute(
-            select(CommunityBoard).options(selectinload(CommunityBoard.parent)).where(CommunityBoard.id.in_(board_ids))
+            select(CommunityBoard).options(joinedload(CommunityBoard.parent)).where(CommunityBoard.id.in_(board_ids))
         )
         board_map = {board.id: board for board in boards_res.scalars().all()}
+    t_boards_end = time.perf_counter()
 
     following_user_ids: set[uuid.UUID] = set()
+    t_author_profile_start = time.perf_counter()
     if current_user:
         author_ids = {p.user_id for p in posts}
         following_res = await db.execute(
@@ -148,61 +153,69 @@ async def _build_post_responses_batch(
             )
         )
         following_user_ids = set(following_res.scalars().all())
+    t_author_profile_end = time.perf_counter()
 
-    # 1. 게시물별 좋아요 개수
-    likes_res = await db.execute(
-        select(PostLike.post_id, func.count(PostLike.id))
+    # 1. [통합 쿼리] 게시물별 좋아요 수, 댓글 수, 리포스트 수 (단 1회의 DB 왕복)
+    t_likes_start = time.perf_counter()
+    q_likes = (
+        select(PostLike.post_id.label("post_id"), literal_column("'like'").label("kind"), func.count(PostLike.id).label("cnt"))
         .where(PostLike.post_id.in_(post_ids))
         .group_by(PostLike.post_id)
     )
-    likes_map = dict(likes_res.all())
-
-    # 2. 게시물별 댓글 개수
-    comments_res = await db.execute(
-        select(Comment.post_id, func.count(Comment.id))
+    q_comments = (
+        select(Comment.post_id.label("post_id"), literal_column("'comment'").label("kind"), func.count(Comment.id).label("cnt"))
         .where(Comment.post_id.in_(post_ids), Comment.moderation_hidden.is_(False))
         .group_by(Comment.post_id)
     )
-    comments_map = dict(comments_res.all())
-
-    # 3. 게시물별 리포스트 개수
-    reposts_res = await db.execute(
-        select(PostRepost.post_id, func.count(PostRepost.id))
+    q_reposts = (
+        select(PostRepost.post_id.label("post_id"), literal_column("'repost'").label("kind"), func.count(PostRepost.id).label("cnt"))
         .where(PostRepost.post_id.in_(post_ids))
         .group_by(PostRepost.post_id)
     )
-    reposts_map = dict(reposts_res.all())
+    counts_union = union_all(q_likes, q_comments, q_reposts)
+    counts_res = await db.execute(counts_union)
 
-    # 4. 현재 사용자의 좋아요, 북마크, 리포스트 여부
+    likes_map = {}
+    comments_map = {}
+    reposts_map = {}
+    for pid, kind, cnt in counts_res.all():
+        if kind == 'like':
+            likes_map[pid] = cnt
+        elif kind == 'comment':
+            comments_map[pid] = cnt
+        elif kind == 'repost':
+            reposts_map[pid] = cnt
+
+    # 2. [통합 쿼리] 현재 사용자의 좋아요, 북마크, 리포스트 여부 (단 1회의 DB 왕복)
     liked_set = set()
     bookmarked_set = set()
     reposted_set = set()
     if current_user:
-        user_likes_res = await db.execute(
-            select(PostLike.post_id).where(
-                PostLike.post_id.in_(post_ids), PostLike.user_id == current_user.id
-            )
+        u_likes = select(PostLike.post_id.label("post_id"), literal_column("'like'").label("kind")).where(
+            PostLike.post_id.in_(post_ids), PostLike.user_id == current_user.id
         )
-        liked_set = set(user_likes_res.scalars().all())
-
-        user_bookmarks_res = await db.execute(
-            select(PostBookmark.post_id).where(
-                PostBookmark.post_id.in_(post_ids), PostBookmark.user_id == current_user.id
-            )
+        u_bookmarks = select(PostBookmark.post_id.label("post_id"), literal_column("'bookmark'").label("kind")).where(
+            PostBookmark.post_id.in_(post_ids), PostBookmark.user_id == current_user.id
         )
-        bookmarked_set = set(user_bookmarks_res.scalars().all())
-
-        user_reposts_res = await db.execute(
-            select(PostRepost.post_id).where(
-                PostRepost.post_id.in_(post_ids), PostRepost.user_id == current_user.id
-            )
+        u_reposts = select(PostRepost.post_id.label("post_id"), literal_column("'repost'").label("kind")).where(
+            PostRepost.post_id.in_(post_ids), PostRepost.user_id == current_user.id
         )
-        reposted_set = set(user_reposts_res.scalars().all())
+        user_union = union_all(u_likes, u_bookmarks, u_reposts)
+        user_res = await db.execute(user_union)
+        for pid, kind in user_res.all():
+            if kind == 'like':
+                liked_set.add(pid)
+            elif kind == 'bookmark':
+                bookmarked_set.add(pid)
+            elif kind == 'repost':
+                reposted_set.add(pid)
+    t_likes_end = time.perf_counter()
 
-    # 5. 게시물별 댓글 미리보기 (최대 2개)
+    # 3. [통합 쿼리] 게시물별 댓글 미리보기 및 작성자 프로필 JOIN (단 1회의 DB 왕복)
+    t_comments_preview_start = time.perf_counter()
     comments_preview_res = await db.execute(
         select(Comment)
-        .options(selectinload(Comment.user))
+        .options(joinedload(Comment.user))
         .where(Comment.post_id.in_(post_ids), Comment.moderation_hidden.is_(False))
         .order_by(Comment.created_at.asc())
     )
@@ -230,7 +243,9 @@ async def _build_post_responses_batch(
                     updated_at=c.updated_at,
                 )
             )
+    t_comments_preview_end = time.perf_counter()
 
+    t_anonymize_start = time.perf_counter()
     result = []
     for post in posts:
         media_responses = [
@@ -312,6 +327,14 @@ async def _build_post_responses_batch(
                 updated_at=post.updated_at,
             )
         )
+    t_anonymize_end = time.perf_counter()
+
+    print(f"[PERF_LOG] [SERVICE] 작성자 프로필/팔로우 조회 시간: {(t_author_profile_end - t_author_profile_start)*1000:.2f} ms")
+    print(f"[PERF_LOG] [SERVICE] 통합 집계수 (좋아요/댓글/리포스트) & 내 반응 상태 조회 시간: {(t_likes_end - t_likes_start)*1000:.2f} ms")
+    print(f"[PERF_LOG] [SERVICE] 댓글 미리보기 및 댓글 유저 JOIN 조회 시간: {(t_comments_preview_end - t_comments_preview_start)*1000:.2f} ms")
+    print(f"[PERF_LOG] [SERVICE] 익명 닉네임/DTO 가공 시간: {(t_anonymize_end - t_anonymize_start)*1000:.2f} ms")
+    print(f"[PERF_LOG] [SERVICE] _build_post_responses_batch 전체 소요시간: {(t_anonymize_end - t_batch_start)*1000:.2f} ms")
+
     return result
 
 
@@ -427,31 +450,33 @@ async def get_feed_posts(
     offset: int = 0,
 ) -> tuple[List[PostResponse], int]:
     """로그인한 사용자가 팔로우하는 사람들과 본인의 피드 게시물을 최신순으로 조회합니다 (게시판 글 제외)."""
-    count_res = await db.execute(
-        select(func.count(Post.id))
-        .join(User, Post.user_id == User.id)
-        .where(
-            Post.board_type.is_(None),
-            _post_visibility_clause(current_user),
-        )
-    )
-    total = count_res.scalar() or 0
-
+    import time
+    from app.core.config import settings
+    t_posts_start = time.perf_counter()
+    # COUNT(*) 쿼리를 제거하고 limit + 1 조회를 통해 has_more 및 total을 연산 (SQL 1회 절감)
     result = await db.execute(
         select(Post)
         .join(User, Post.user_id == User.id)
-        .options(selectinload(Post.user), selectinload(Post.media))
+        .options(joinedload(Post.user), selectinload(Post.media))
         .where(
             Post.board_type.is_(None),
             _post_visibility_clause(current_user),
         )
-        .order_by(Post.created_at.desc())
+        .order_by(Post.created_at.desc(), Post.id.desc())
         .offset(offset)
-        .limit(limit)
+        .limit(limit + 1)
     )
-    posts = result.scalars().all()
+    fetched_posts = list(result.scalars().all())
+    t_posts_end = time.perf_counter()
 
-    items = await _build_post_responses_batch(db, list(posts), current_user=current_user)
+    has_more = len(fetched_posts) > limit
+    posts = fetched_posts[:limit] if has_more else fetched_posts
+    total = offset + len(posts)
+
+    if settings.enable_perf_log:
+        print(f"[PERF_LOG] [FEED] 기본 게시물 목록 쿼리 시간 (joinedload user + selectinload media 포함): {(t_posts_end - t_posts_start)*1000:.2f} ms")
+
+    items = await _build_post_responses_batch(db, posts, current_user=current_user)
     return items, total
 
 
@@ -465,34 +490,38 @@ async def get_community_posts(
     offset: int = 0,
 ) -> tuple[List[PostResponse], int]:
     """커뮤니티 게시판(익명게시판 / 정보게시판) 게시물 목록 조회"""
+    import time
+    from app.core.config import settings
     visibility_clause = _post_visibility_clause(current_user)
     board_filter = (
         CommunityBoard.parent_id == parent_board_id
         if parent_board_id
         else (Post.board_id == board_id) if board_id else (Post.board_type == board_type)
     )
-    count_res = await db.execute(
-        select(func.count(Post.id))
-        .join(User, Post.user_id == User.id)
-        .outerjoin(CommunityBoard, CommunityBoard.id == Post.board_id)
-        .where(board_filter, visibility_clause)
-    )
-    total = count_res.scalar() or 0
 
+    t_posts_start = time.perf_counter()
+    # COUNT(*) 쿼리를 제거하고 limit + 1 조회를 통해 has_more 및 total을 연산 (SQL 1회 절감)
     query = (
         select(Post)
         .join(User, Post.user_id == User.id)
         .outerjoin(CommunityBoard, CommunityBoard.id == Post.board_id)
-        .options(selectinload(Post.user), selectinload(Post.media))
+        .options(joinedload(Post.user), selectinload(Post.media))
         .where(board_filter, visibility_clause)
-        .order_by(Post.created_at.desc())
+        .order_by(Post.created_at.desc(), Post.id.desc())
         .offset(offset)
-        .limit(limit)
+        .limit(limit + 1)
     )
     res = await db.execute(query)
-    posts = res.scalars().all()
+    fetched_posts = list(res.scalars().all())
+    t_posts_end = time.perf_counter()
 
-    items = await _build_post_responses_batch(db, list(posts), current_user=current_user)
+    has_more = len(fetched_posts) > limit
+    posts = fetched_posts[:limit] if has_more else fetched_posts
+    total = offset + len(posts)
+
+    print(f"[PERF_LOG] [COMMUNITY] 기본 게시물 목록 쿼리 시간 (joinedload user + selectinload media 포함): {(t_posts_end - t_posts_start)*1000:.2f} ms")
+
+    items = await _build_post_responses_batch(db, posts, current_user=current_user)
     return items, total
 
 

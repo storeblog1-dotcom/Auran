@@ -5,6 +5,7 @@ from app.common.client_ip import get_client_ip
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.response import ApiResponse
+from app.core.config import settings
 from app.core.database import get_db
 from app.modules.auth.dependencies import (
     get_current_active_user,
@@ -72,12 +73,21 @@ async def get_feed_posts(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[list[PostResponse]]:
+    import time
+    t_start = time.perf_counter()
     offset = (page - 1) * size
     posts, total = await service.get_feed_posts(
         db, current_user=current_user, limit=size, offset=offset
     )
     has_more = (offset + len(posts)) < total
-    return ApiResponse.paginated(data=posts, total=total, has_more=has_more)
+    from app.core.config import settings
+    t_ser_start = time.perf_counter()
+    res = ApiResponse.paginated(data=posts, total=total, has_more=has_more)
+    t_ser_end = time.perf_counter()
+    if settings.enable_perf_log:
+        print(f"[PERF_LOG] [ROUTER] [/feed] ApiResponse/JSON 모델 변환 시간: {(t_ser_end - t_ser_start)*1000:.2f} ms")
+        print(f"[PERF_LOG] [ROUTER] [/feed] 엔드포인트 전체 처리 시간: {(t_ser_end - t_start)*1000:.2f} ms")
+    return res
 
 
 @router.get(
@@ -113,12 +123,20 @@ async def get_community_posts(
     current_user: User | None = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[list[PostResponse]]:
+    import time
+    t_start = time.perf_counter()
     offset = (page - 1) * size
     posts, total = await service.get_community_posts(
         db, board_type=board_type, board_id=board_id, parent_board_id=parent_board_id, current_user=current_user, limit=size, offset=offset
     )
     has_more = (offset + len(posts)) < total
-    return ApiResponse.paginated(data=posts, total=total, has_more=has_more)
+    t_ser_start = time.perf_counter()
+    res = ApiResponse.paginated(data=posts, total=total, has_more=has_more)
+    t_ser_end = time.perf_counter()
+    if settings.enable_perf_log:
+        print(f"[PERF_LOG] [ROUTER] [/community] ApiResponse/JSON 모델 변환 시간: {(t_ser_end - t_ser_start)*1000:.2f} ms")
+        print(f"[PERF_LOG] [ROUTER] [/community] 엔드포인트 전체 처리 시간: {(t_ser_end - t_start)*1000:.2f} ms")
+    return res
 
 
 @router.get(

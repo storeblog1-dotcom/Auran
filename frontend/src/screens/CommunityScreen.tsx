@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -11,6 +11,7 @@ import {
   Dimensions,
   Alert,
   ScrollView,
+  InteractionManager,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -21,6 +22,7 @@ import { useContextualCompose } from "../context/ContextualComposeContext";
 import { useIsFocused } from "@react-navigation/native";
 import { getDisplayName } from "../utils/displayName";
 import api from "../services/api";
+import axios from "axios";
 import { getFullImageUrl } from "../config";
 import { CreateCommunityPostModal } from "../components/CreateCommunityPostModal";
 import { CommunityPostDetailModal } from "../components/CommunityPostDetailModal";
@@ -41,233 +43,124 @@ const ANONYMOUS_CATEGORY_ORDER = [
   { slug: "anonymous-daily", name: "일상" },
   { slug: "anonymous-coming-out", name: "커밍아웃" },
 ];
+
+const FRESH_TTL = 30_000;       // 30 seconds: Fresh cache (no background fetch needed)
+const STALE_TTL = 300_000;      // 5 minutes: Stale cache (show cache + background refresh)
+
+export interface CommunityPost {
+  id: string;
+  user_id: string;
+  board_id?: string | null;
+  board_type?: string | null;
+  board_name?: string | null;
+  title?: string | null;
+  caption?: string | null;
+  likes_count?: number;
+  comments_count?: number;
+  reposts_count?: number;
+  is_liked?: boolean;
+  is_bookmarked?: boolean;
+  is_reposted?: boolean;
+  is_mine?: boolean;
+  user?: any;
+  media?: any[];
+  youtube_url?: string | null;
+  youtube_title?: string | null;
+  youtube_thumbnail_url?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommunityNotice {
+  id: string;
+  title: string;
+  content: string;
+  created_at: string;
+}
+
+export interface CommunityBoard {
+  id: string;
+  name: string;
+  slug?: string;
+  parent_id?: string | null;
+  is_anonymous?: boolean;
+  is_default?: boolean;
+  sort_order?: number;
+}
+
+export interface BoardCacheEntry {
+  data: CommunityPost[];
+  notices: CommunityNotice[];
+  timestamp: number;
+  hasMore: boolean;
+  page: number;
+}
+
 const isPartnerBoardRecord = (board: any) =>
   String(board?.slug || "").toLowerCase().includes("partner")
   || String(board?.name || "").includes(PARTNER_BOARD_NAME);
 
-export const CommunityScreen = ({ navigation, route }: any) => {
-  const { colors } = useTheme();
-  const { setCommunityComposeDisabled } = useContextualCompose();
-  const subBoardScrollRef = useRef<ScrollView>(null);
-  const postFlatListRef = useRef<FlatList>(null);
-  const isFocused = useIsFocused();
-  const { user: currentUser } = useAuth();
-  const requestedSection: CommunitySection = route?.params?.section === "partner"
-    ? "partner"
-    : route?.params?.section === "info"
-      ? "info"
-      : "anonymous";
-  const [section, setSection] = useState<CommunitySection>(requestedSection);
-  const [boards, setBoards] = useState<any[]>([]);
-  const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
-  const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
-  const [notices, setNotices] = useState<any[]>([]);
-  const [expandedNoticeIds, setExpandedNoticeIds] = useState<string[]>([]);
-  const [posts, setPosts] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
+// ─── Typed In-Memory Cache Store ──────────────
+let cachedBoardsList: CommunityBoard[] | null = null;
+const cachedPostsMap: Record<string, BoardCacheEntry> = {};
 
-  // Modals
-  const [createModalVisible, setCreateModalVisible] = useState<boolean>(false);
-  const [editingPost, setEditingPost] = useState<any | null>(null);
-  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
-  const [detailModalVisible, setDetailModalVisible] = useState<boolean>(false);
-  const [noticeModalVisible, setNoticeModalVisible] = useState<boolean>(false);
+export const clearCommunityCache = () => {
+  cachedBoardsList = null;
+  Object.keys(cachedPostsMap).forEach((key) => delete cachedPostsMap[key]);
+};
 
-  // Image Viewer State
-  const [viewerVisible, setViewerVisible] = useState<boolean>(false);
-  const [viewerMedia, setViewerMedia] = useState<any[]>([]);
-  const [viewerIndex, setViewerIndex] = useState<number>(0);
+// ─── Skeleton Component ──────────────
+const CommunitySkeleton = React.memo(({ colors }: { colors: any }) => (
+  <View style={{ padding: 16, gap: 16 }}>
+    {[1, 2, 3, 4].map((i) => (
+      <View
+        key={i}
+        style={[
+          styles.postCard,
+          {
+            backgroundColor: colors.bgCard || "#18181b",
+            borderColor: colors.borderColor || "#27272a",
+            opacity: 0.6,
+            minHeight: 110,
+            padding: 16,
+            justifyContent: "space-between",
+          },
+        ]}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.borderLight || "#27272a" }} />
+          <View style={{ width: 80, height: 12, borderRadius: 6, backgroundColor: colors.borderLight || "#27272a" }} />
+        </View>
+        <View style={{ width: "85%", height: 14, borderRadius: 7, backgroundColor: colors.borderLight || "#27272a" }} />
+        <View style={{ width: "55%", height: 12, borderRadius: 6, backgroundColor: colors.borderLight || "#27272a" }} />
+      </View>
+    ))}
+  </View>
+));
 
-  const selectedBoard = boards.find((board) => board.id === selectedBoardId)
-    || (selectedBoardId === ALL_CHILD_BOARDS_ID ? boards.find((board) => board.id === selectedParentId) : undefined);
-  const selectedParentBoard = boards.find((board) => board.id === selectedParentId)
-    || (selectedBoard && !selectedBoard.parent_id ? selectedBoard : undefined);
-  const isPartnerBoard = Boolean(
-    selectedBoard &&
-      (String(selectedBoard.slug || "").toLowerCase().includes("partner") ||
-        String(selectedBoard.name || "").includes("제휴업소"))
-  );
-  const selectedIsPartnerBoard = Boolean(selectedBoard && isPartnerBoardRecord(selectedBoard));
-  const canComposeInSelectedBoard = !selectedIsPartnerBoard || Boolean(currentUser?.is_admin);
-  const sectionBoards = boards.filter((board) => {
-    const isAnonymous = Boolean(board.is_anonymous || String(board.slug || "").toLowerCase().includes("anonymous"));
-    const isPartner = isPartnerBoardRecord(board);
-    if (section === "anonymous") return isAnonymous;
-    if (section === "partner") return !isAnonymous && isPartner;
-    return !isAnonymous && !isPartner;
-  });
-  const parentBoards = sectionBoards.filter((board) => !board.parent_id);
-  const childBoards = sectionBoards.filter((board) => board.parent_id === selectedParentId);
-  const orderedChildBoards = [...childBoards]
-    .sort((a, b) => {
-      if (Boolean(a.is_default) !== Boolean(b.is_default)) return a.is_default ? 1 : -1;
-      if (section === "anonymous") {
-        const aIndex = ANONYMOUS_CATEGORY_ORDER.findIndex((category) => category.slug === a.slug);
-        const bIndex = ANONYMOUS_CATEGORY_ORDER.findIndex((category) => category.slug === b.slug);
-        if (aIndex >= 0 || bIndex >= 0) {
-          if (aIndex < 0) return 1;
-          if (bIndex < 0) return -1;
-          if (aIndex !== bIndex) return aIndex - bIndex;
-        }
-      }
-      const sortDifference = Number(a.sort_order || 0) - Number(b.sort_order || 0);
-      if (sortDifference !== 0) return sortDifference;
-      return String(a.name || "").localeCompare(String(b.name || ""), "ko");
-    })
-    .map((board) => {
-      const category = ANONYMOUS_CATEGORY_ORDER.find((item) => item.slug === board.slug);
-      return section === "anonymous" && category ? { ...board, name: category.name } : board;
-    });
-  const visibleChildBoards = selectedParentId
-    ? [{ id: ALL_CHILD_BOARDS_ID, name: "전체", is_anonymous: selectedBoard?.is_anonymous }, ...orderedChildBoards]
-    : childBoards;
-  const defaultChildBoard = childBoards.find((board) => board.is_default) || childBoards[0];
-
-  const selectFirstBoard = (list: any[], nextSection: CommunitySection) => {
-    const candidates = list.filter((board) => {
-      const isAnonymous = Boolean(board.is_anonymous || String(board.slug || "").toLowerCase().includes("anonymous"));
-      const isPartner = isPartnerBoardRecord(board);
-      if (nextSection === "anonymous") return isAnonymous;
-      if (nextSection === "partner") return !isAnonymous && isPartner;
-      return !isAnonymous && !isPartner;
-    });
-    const first = candidates.find((board) => !board.parent_id) || candidates[0];
-    const firstChild = candidates.find((board) => board.parent_id === first?.id);
-    setSelectedParentId(first?.id || null);
-    setSelectedBoardId(firstChild ? ALL_CHILD_BOARDS_ID : (first?.id || null));
-  };
-
-  const fetchBoards = async () => {
-    try {
-      const res = await api.get("/community/boards");
-      const list = res.data?.data || [];
-      setBoards(list);
-    } catch (err) {
-      console.log("Error fetching community boards", err);
-      setBoards([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const fetchCommunityPosts = async (boardId: string | null) => {
-    if (!boardId) {
-      setPosts([]);
-      setNotices([]);
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-    try {
-      const isAllChildren = boardId === ALL_CHILD_BOARDS_ID;
-      const [postRes, noticeRes] = await Promise.all([
-        api.get(isAllChildren ? `/posts/community?parent_board_id=${selectedParentId}` : `/posts/community?board_id=${boardId}`),
-        api.get("/community/notices?notice_type=global"),
-      ]);
-      if (postRes.data && postRes.data.data) {
-        const list = postRes.data.data || [];
-        setPosts(list);
-      }
-      setNotices(noticeRes.data?.data || []);
-    } catch (err) {
-      console.log("Error fetching community posts", err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    setLoading(true);
-    fetchBoards();
-  }, []);
-
-  useLayoutEffect(() => {
-    setSection(requestedSection);
-  }, [requestedSection]);
-
-  useEffect(() => {
-    setCommunityComposeDisabled(isFocused && !canComposeInSelectedBoard);
-  }, [isFocused, canComposeInSelectedBoard, setCommunityComposeDisabled]);
-
-  useEffect(() => {
-    if (!route?.params?.composeNonce) return;
-    navigation.setParams({ composeNonce: undefined });
-    if (!canComposeInSelectedBoard) {
-      Alert.alert("글쓰기 제한", "제휴업소 게시판은 관리자만 글을 작성할 수 있습니다.");
-      return;
-    }
-    setEditingPost(null);
-    setCreateModalVisible(true);
-  }, [route?.params?.composeNonce, navigation, canComposeInSelectedBoard]);
-
-  const changeSection = (nextSection: CommunitySection) => {
-    setSection(nextSection);
-    navigation.setParams({ section: nextSection });
-  };
-
-  useLayoutEffect(() => {
-    if (boards.length) selectFirstBoard(boards, section);
-  }, [boards, section]);
-
-  // Reset horizontal sub-board chip scroll position and post list scroll position when parent board changes
-  useEffect(() => {
-    subBoardScrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
-    postFlatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-  }, [section, selectedParentId]);
-
-  useEffect(() => {
-    setLoading(true);
-    fetchCommunityPosts(selectedBoardId);
-  }, [selectedBoardId, selectedParentId]);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchBoards();
-    fetchCommunityPosts(selectedBoardId);
-  };
-
-  const toggleNotice = (noticeId: string) => {
-    setExpandedNoticeIds((current) =>
-      current.includes(noticeId)
-        ? current.filter((id) => id !== noticeId)
-        : [...current, noticeId]
-    );
-  };
-
-  const handleToggleLike = async (postId: string) => {
-    setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id === postId) {
-          const nextIsLiked = !p.is_liked;
-          const nextCount = nextIsLiked
-            ? (p.likes_count || 0) + 1
-            : Math.max(0, (p.likes_count || 0) - 1);
-          return { ...p, is_liked: nextIsLiked, likes_count: nextCount };
-        }
-        return p;
-      })
-    );
-
-    try {
-      const res = await api.post(`/posts/${postId}/like`);
-      if (res.data && res.data.data) {
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId
-              ? { ...p, is_liked: res.data.data.is_liked, likes_count: res.data.data.likes_count }
-              : p
-          )
-        );
-      }
-    } catch (e) {
-      console.log("Error toggling like", e);
-    }
-  };
-
-  const renderPostItem = ({ item }: { item: any }) => {
+// ─── Memoized Post Card Component ──────────────
+const CommunityPostCard = React.memo(
+  ({
+    item,
+    colors,
+    currentUser,
+    selectedBoardId,
+    onPress,
+    onEdit,
+    onDelete,
+    onMediaPress,
+    onToggleLike,
+  }: {
+    item: CommunityPost;
+    colors: any;
+    currentUser: any;
+    selectedBoardId: string | null;
+    onPress: (id: string) => void;
+    onEdit: (item: CommunityPost) => void;
+    onDelete: (id: string) => void;
+    onMediaPress: (media: any[]) => void;
+    onToggleLike: (id: string) => void;
+  }) => {
     const isAnonymous = item.board_type === "anonymous";
     const hideIdentity = isAnonymous && !item.user?.is_admin;
     const mediaUrl = item.media && item.media.length > 0 ? item.media[0].media_url : null;
@@ -282,13 +175,10 @@ export const CommunityScreen = ({ navigation, route }: any) => {
             borderColor: colors.borderColor || "#27272a",
           },
         ]}
-        onPress={() => {
-          setSelectedPostId(item.id);
-          setDetailModalVisible(true);
-        }}
+        onPress={() => onPress(item.id)}
         activeOpacity={0.8}
       >
-        {/* Header (Author & Date & Edit/Delete for Owner) */}
+        {/* Header */}
         <View style={styles.cardHeader}>
           <View style={styles.authorGroup}>
             {hideIdentity ? (
@@ -309,8 +199,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
                 <TouchableOpacity
                   onPress={(e) => {
                     e.stopPropagation();
-                    setEditingPost(item);
-                    setCreateModalVisible(true);
+                    onEdit(item);
                   }}
                   style={{ padding: 2 }}
                 >
@@ -324,14 +213,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
                       {
                         text: "삭제",
                         style: "destructive",
-                        onPress: async () => {
-                          try {
-                            await api.delete(`/posts/${item.id}`);
-                            setPosts((prev) => prev.filter((p) => p.id !== item.id));
-                          } catch (err) {
-                            Alert.alert("오류", "삭제에 실패했습니다.");
-                          }
-                        },
+                        onPress: () => onDelete(item.id),
                       },
                     ]);
                   }}
@@ -381,9 +263,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
             <TouchableOpacity
               onPress={(e) => {
                 e.stopPropagation();
-                setViewerMedia(item.media && item.media.length > 0 ? item.media : [{ media_url: mediaUrl }]);
-                setViewerIndex(0);
-                setViewerVisible(true);
+                onMediaPress(item.media && item.media.length > 0 ? item.media : [{ media_url: mediaUrl }]);
               }}
               activeOpacity={0.85}
             >
@@ -392,13 +272,13 @@ export const CommunityScreen = ({ navigation, route }: any) => {
           ) : null}
         </View>
 
-        {/* Footer (Likes & Comments) */}
+        {/* Footer */}
         <View style={[styles.cardFooter, { borderTopColor: colors.borderColor || "#27272a" }]}>
           <TouchableOpacity
             style={styles.footerAction}
             onPress={(e) => {
               e.stopPropagation();
-              handleToggleLike(item.id);
+              onToggleLike(item.id);
             }}
           >
             <Ionicons
@@ -425,7 +305,478 @@ export const CommunityScreen = ({ navigation, route }: any) => {
         </View>
       </TouchableOpacity>
     );
+  }
+);
+
+// ─── Main Screen Component ──────────────
+export const CommunityScreen = ({ navigation, route }: any) => {
+  const { colors } = useTheme();
+  const { setCommunityComposeDisabled } = useContextualCompose();
+  const subBoardScrollRef = useRef<ScrollView>(null);
+  const postFlatListRef = useRef<FlatList>(null);
+
+  const isMountedRef = useRef<boolean>(true);
+  const activeRequestKeyRef = useRef<string | null>(null);
+  const activeAbortControllerRef = useRef<AbortController | null>(null);
+  const inFlightPrefetchMapRef = useRef<Record<string, boolean>>({});
+  const interactionTaskRef = useRef<any>(null);
+
+  const isFocused = useIsFocused();
+  const { user: currentUser } = useAuth();
+  const requestedSection: CommunitySection = route?.params?.section === "partner"
+    ? "partner"
+    : route?.params?.section === "info"
+      ? "info"
+      : "anonymous";
+
+  const [section, setSection] = useState<CommunitySection>(requestedSection);
+  const [boards, setBoards] = useState<CommunityBoard[]>(cachedBoardsList || []);
+  const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
+  const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
+  const [notices, setNotices] = useState<CommunityNotice[]>([]);
+  const [expandedNoticeIds, setExpandedNoticeIds] = useState<string[]>([]);
+  const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [loading, setLoading] = useState<boolean>(!cachedBoardsList);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState<boolean>(false);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [fetchError, setFetchError] = useState<boolean>(false);
+
+  // Modals
+  const [createModalVisible, setCreateModalVisible] = useState<boolean>(false);
+  const [editingPost, setEditingPost] = useState<any | null>(null);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [detailModalVisible, setDetailModalVisible] = useState<boolean>(false);
+  const [noticeModalVisible, setNoticeModalVisible] = useState<boolean>(false);
+
+  // Image Viewer State
+  const [viewerVisible, setViewerVisible] = useState<boolean>(false);
+  const [viewerMedia, setViewerMedia] = useState<any[]>([]);
+  const [viewerIndex, setViewerIndex] = useState<number>(0);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (activeAbortControllerRef.current) {
+        activeAbortControllerRef.current.abort();
+      }
+      if (interactionTaskRef.current && interactionTaskRef.current.cancel) {
+        interactionTaskRef.current.cancel();
+      }
+    };
+  }, []);
+
+  const selectedBoard = boards.find((board) => board.id === selectedBoardId)
+    || (selectedBoardId === ALL_CHILD_BOARDS_ID ? boards.find((board) => board.id === selectedParentId) : undefined);
+  const selectedParentBoard = boards.find((board) => board.id === selectedParentId)
+    || (selectedBoard && !selectedBoard.parent_id ? selectedBoard : undefined);
+  const isPartnerBoard = Boolean(
+    selectedBoard &&
+      (String(selectedBoard.slug || "").toLowerCase().includes("partner") ||
+        String(selectedBoard.name || "").includes("제휴업소"))
+  );
+  const selectedIsPartnerBoard = Boolean(selectedBoard && isPartnerBoardRecord(selectedBoard));
+  const canComposeInSelectedBoard = !selectedIsPartnerBoard || Boolean(currentUser?.is_admin);
+
+  const sectionBoards = boards.filter((board) => {
+    const isAnonymous = Boolean(board.is_anonymous || String(board.slug || "").toLowerCase().includes("anonymous"));
+    const isPartner = isPartnerBoardRecord(board);
+    if (section === "anonymous") return isAnonymous;
+    if (section === "partner") return !isAnonymous && isPartner;
+    return !isAnonymous && !isPartner;
+  });
+
+  const parentBoards = sectionBoards.filter((board) => !board.parent_id);
+  const childBoards = sectionBoards.filter((board) => board.parent_id === selectedParentId);
+  const orderedChildBoards = [...childBoards]
+    .sort((a, b) => {
+      if (Boolean(a.is_default) !== Boolean(b.is_default)) return a.is_default ? 1 : -1;
+      if (section === "anonymous") {
+        const aIndex = ANONYMOUS_CATEGORY_ORDER.findIndex((category) => category.slug === a.slug);
+        const bIndex = ANONYMOUS_CATEGORY_ORDER.findIndex((category) => category.slug === b.slug);
+        if (aIndex >= 0 || bIndex >= 0) {
+          if (aIndex < 0) return 1;
+          if (bIndex < 0) return -1;
+          if (aIndex !== bIndex) return aIndex - bIndex;
+        }
+      }
+      const sortDifference = Number(a.sort_order || 0) - Number(b.sort_order || 0);
+      if (sortDifference !== 0) return sortDifference;
+      return String(a.name || "").localeCompare(String(b.name || ""), "ko");
+    })
+    .map((board) => {
+      const category = ANONYMOUS_CATEGORY_ORDER.find((item) => item.slug === board.slug);
+      return section === "anonymous" && category ? { ...board, name: category.name } : board;
+    });
+
+  const visibleChildBoards = selectedParentId
+    ? [{ id: ALL_CHILD_BOARDS_ID, name: "전체", is_anonymous: selectedBoard?.is_anonymous }, ...orderedChildBoards]
+    : childBoards;
+  const defaultChildBoard = childBoards.find((board) => board.is_default) || childBoards[0];
+
+  const selectFirstBoard = (list: CommunityBoard[], nextSection: CommunitySection) => {
+    const candidates = list.filter((board) => {
+      const isAnonymous = Boolean(board.is_anonymous || String(board.slug || "").toLowerCase().includes("anonymous"));
+      const isPartner = isPartnerBoardRecord(board);
+      if (nextSection === "anonymous") return isAnonymous;
+      if (nextSection === "partner") return !isAnonymous && isPartner;
+      return !isAnonymous && !isPartner;
+    });
+    const first = candidates.find((board) => !board.parent_id) || candidates[0];
+    const firstChild = candidates.find((board) => board.parent_id === first?.id);
+    setSelectedParentId(first?.id || null);
+    setSelectedBoardId(firstChild ? ALL_CHILD_BOARDS_ID : (first?.id || null));
   };
+
+  const fetchBoards = async () => {
+    try {
+      const res = await api.get("/community/boards");
+      const list = res.data?.data || [];
+      cachedBoardsList = list;
+      if (isMountedRef.current) setBoards(list);
+    } catch (err) {
+      console.log("Error fetching community boards", err);
+      if (!cachedBoardsList && isMountedRef.current) setBoards([]);
+    } finally {
+      if (isMountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  };
+
+  // ─── Separate Prefetch Function ──────────────
+  const prefetchBoard = async (targetBoardId: string) => {
+    if (!targetBoardId) return;
+    const userIdStr = currentUser?.id || "guest";
+    const cacheKey = `${userIdStr}_${selectedParentId}_${targetBoardId}`;
+
+    const existing = cachedPostsMap[cacheKey];
+    if (existing && Date.now() - existing.timestamp < FRESH_TTL) return;
+    if (inFlightPrefetchMapRef.current[cacheKey]) return;
+
+    inFlightPrefetchMapRef.current[cacheKey] = true;
+    try {
+      const isAllChildren = targetBoardId === ALL_CHILD_BOARDS_ID;
+      const [postRes, noticeRes] = await Promise.all([
+        api.get(
+          isAllChildren
+            ? `/posts/community?parent_board_id=${selectedParentId}`
+            : `/posts/community?board_id=${targetBoardId}`
+        ),
+        api.get("/community/notices?notice_type=global"),
+      ]);
+
+      if (postRes.data && postRes.data.data) {
+        const list = postRes.data.data || [];
+        const noticeList = noticeRes.data?.data || [];
+        const meta = postRes.data.meta || {};
+
+        cachedPostsMap[cacheKey] = {
+          data: list,
+          notices: noticeList,
+          timestamp: Date.now(),
+          hasMore: meta.has_more || false,
+          page: 1,
+        };
+        // Prefetch ONLY writes to cachedPostsMap! NEVER touches active screen state!
+      }
+    } catch (e) {
+      // Silently catch prefetch failures
+    } finally {
+      delete inFlightPrefetchMapRef.current[cacheKey];
+    }
+  };
+
+  const triggerAdjacentPrefetch = useCallback((currentBoardId: string) => {
+    const runPrefetch = () => {
+      if (!visibleChildBoards || visibleChildBoards.length <= 1) return;
+      const currentIndex = visibleChildBoards.findIndex((b) => b.id === currentBoardId);
+      if (currentIndex < 0) return;
+
+      const targets: string[] = [];
+      if (currentIndex > 0) targets.push(visibleChildBoards[currentIndex - 1].id);
+      if (currentIndex < visibleChildBoards.length - 1) targets.push(visibleChildBoards[currentIndex + 1].id);
+
+      targets.forEach((bId) => prefetchBoard(bId));
+    };
+
+    if (InteractionManager && InteractionManager.runAfterInteractions) {
+      interactionTaskRef.current = InteractionManager.runAfterInteractions(runPrefetch);
+    } else {
+      interactionTaskRef.current = setTimeout(runPrefetch, 200);
+    }
+  }, [visibleChildBoards, selectedParentId, currentUser?.id]);
+
+  // ─── Active Fetch Function ──────────────
+  const fetchCommunityPosts = async (boardId: string | null, forceRefresh: boolean = false) => {
+    if (!boardId) {
+      if (isMountedRef.current) {
+        setPosts([]);
+        setNotices([]);
+        setLoading(false);
+        setRefreshing(false);
+        setBackgroundRefreshing(false);
+      }
+      return;
+    }
+
+    // Cancel previous active request immediately upon board switch
+    if (activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    activeAbortControllerRef.current = controller;
+
+    const userIdStr = currentUser?.id || "guest";
+    const cacheKey = `${userIdStr}_${selectedParentId}_${boardId}`;
+    activeRequestKeyRef.current = cacheKey;
+
+    const now = Date.now();
+    const cachedEntry = cachedPostsMap[cacheKey];
+
+    if (!forceRefresh && cachedEntry && cachedEntry.data) {
+      const age = now - cachedEntry.timestamp;
+      if (isMountedRef.current) {
+        setPosts(cachedEntry.data);
+        setNotices(cachedEntry.notices || []);
+        setLoading(false);
+        setFetchError(false);
+      }
+
+      if (age < FRESH_TTL) {
+        // Very fresh cache (< 30s) -> Display cache immediately and skip network request
+        triggerAdjacentPrefetch(boardId);
+        return;
+      }
+      // Stale cache (30s ~ 5min) -> Display cache immediately, background refresh
+      if (isMountedRef.current) setBackgroundRefreshing(true);
+    } else {
+      // Cache Miss or Expired -> Show Skeleton UI! Clear previous board posts immediately!
+      if (isMountedRef.current) {
+        setPosts([]);
+        setNotices([]);
+        setLoading(true);
+        setFetchError(false);
+      }
+    }
+
+    try {
+      const isAllChildren = boardId === ALL_CHILD_BOARDS_ID;
+      const [postRes, noticeRes] = await Promise.all([
+        api.get(
+          isAllChildren ? `/posts/community?parent_board_id=${selectedParentId}` : `/posts/community?board_id=${boardId}`,
+          { signal: controller.signal }
+        ),
+        api.get("/community/notices?notice_type=global", { signal: controller.signal }),
+      ]);
+
+      if (activeRequestKeyRef.current !== cacheKey) return;
+
+      if (postRes.data && postRes.data.data) {
+        const list = postRes.data.data || [];
+        const noticeList = noticeRes.data?.data || [];
+        const meta = postRes.data.meta || {};
+
+        cachedPostsMap[cacheKey] = {
+          data: list,
+          notices: noticeList,
+          timestamp: Date.now(),
+          hasMore: meta.has_more || false,
+          page: 1,
+        };
+
+        if (isMountedRef.current) {
+          setPosts(list);
+          setNotices(noticeList);
+          setFetchError(false);
+        }
+      }
+    } catch (err: any) {
+      if (err?.name === "CanceledError" || err?.name === "AbortError" || axios.isCancel(err)) {
+        return;
+      }
+      console.log("Error fetching community posts", err);
+      if (isMountedRef.current && (!cachedPostsMap[cacheKey] || cachedPostsMap[cacheKey].data.length === 0)) {
+        setFetchError(true);
+      }
+    } finally {
+      if (isMountedRef.current && activeRequestKeyRef.current === cacheKey) {
+        setLoading(false);
+        setRefreshing(false);
+        setBackgroundRefreshing(false);
+        triggerAdjacentPrefetch(boardId);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!cachedBoardsList) {
+      setLoading(true);
+      fetchBoards();
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    setSection(requestedSection);
+  }, [requestedSection]);
+
+  useEffect(() => {
+    setCommunityComposeDisabled(isFocused && !canComposeInSelectedBoard);
+  }, [isFocused, canComposeInSelectedBoard, setCommunityComposeDisabled]);
+
+  useEffect(() => {
+    if (!route?.params?.composeNonce) return;
+    navigation.setParams({ composeNonce: undefined });
+    if (!canComposeInSelectedBoard) {
+      Alert.alert("글쓰기 제한", "제휴업소 게시판은 관리자만 글을 작성할 수 있습니다.");
+      return;
+    }
+    setEditingPost(null);
+    setCreateModalVisible(true);
+  }, [route?.params?.composeNonce, navigation, canComposeInSelectedBoard]);
+
+  const changeSection = (nextSection: CommunitySection) => {
+    setSection(nextSection);
+    navigation.setParams({ section: nextSection });
+  };
+
+  useLayoutEffect(() => {
+    if (boards.length) selectFirstBoard(boards, section);
+  }, [boards, section]);
+
+  useEffect(() => {
+    subBoardScrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
+    postFlatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [section, selectedParentId]);
+
+  useEffect(() => {
+    if (selectedBoardId) {
+      fetchCommunityPosts(selectedBoardId);
+    }
+  }, [selectedBoardId, selectedParentId]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchBoards();
+    fetchCommunityPosts(selectedBoardId, true);
+  };
+
+  const toggleNotice = (noticeId: string) => {
+    setExpandedNoticeIds((current) =>
+      current.includes(noticeId)
+        ? current.filter((id) => id !== noticeId)
+        : [...current, noticeId]
+    );
+  };
+
+  const handleToggleLike = useCallback(async (postId: string) => {
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p.id === postId) {
+          const nextIsLiked = !p.is_liked;
+          const nextCount = nextIsLiked
+            ? (p.likes_count || 0) + 1
+            : Math.max(0, (p.likes_count || 0) - 1);
+          return { ...p, is_liked: nextIsLiked, likes_count: nextCount };
+        }
+        return p;
+      })
+    );
+
+    // Update all entries in cachedPostsMap that contain this post (e.g. child board + ALL_CHILD_BOARDS_ID)
+    Object.keys(cachedPostsMap).forEach((key) => {
+      if (cachedPostsMap[key]?.data) {
+        cachedPostsMap[key].data = cachedPostsMap[key].data.map((p) => {
+          if (p.id === postId) {
+            const nextIsLiked = !p.is_liked;
+            const nextCount = nextIsLiked
+              ? (p.likes_count || 0) + 1
+              : Math.max(0, (p.likes_count || 0) - 1);
+            return { ...p, is_liked: nextIsLiked, likes_count: nextCount };
+          }
+          return p;
+        });
+      }
+    });
+
+    try {
+      const res = await api.post(`/posts/${postId}/like`);
+      if (res.data && res.data.data) {
+        const updated = res.data.data;
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === postId
+              ? { ...p, is_liked: updated.is_liked, likes_count: updated.likes_count }
+              : p
+          )
+        );
+        Object.keys(cachedPostsMap).forEach((key) => {
+          if (cachedPostsMap[key]?.data) {
+            cachedPostsMap[key].data = cachedPostsMap[key].data.map((p) =>
+              p.id === postId
+                ? { ...p, is_liked: updated.is_liked, likes_count: updated.likes_count }
+                : p
+            );
+          }
+        });
+      }
+    } catch (e) {
+      console.log("Error toggling like", e);
+    }
+  }, []);
+
+  const handlePostPress = useCallback((id: string) => {
+    setSelectedPostId(id);
+    setDetailModalVisible(true);
+  }, []);
+
+  const handlePostEdit = useCallback((item: CommunityPost) => {
+    setEditingPost(item);
+    setCreateModalVisible(true);
+  }, []);
+
+  const handlePostDelete = useCallback((postId: string) => {
+    api.delete(`/posts/${postId}`)
+      .then(() => {
+        setPosts((prev) => prev.filter((p) => p.id !== postId));
+        Object.keys(cachedPostsMap).forEach((key) => {
+          if (cachedPostsMap[key]?.data) {
+            cachedPostsMap[key].data = cachedPostsMap[key].data.filter((p) => p.id !== postId);
+          }
+        });
+      })
+      .catch(() => {
+        Alert.alert("오류", "삭제에 실패했습니다.");
+      });
+  }, [currentUser?.id, selectedParentId, selectedBoardId]);
+
+  const handleMediaPress = useCallback((media: any[]) => {
+    setViewerMedia(media);
+    setViewerIndex(0);
+    setViewerVisible(true);
+  }, []);
+
+  const renderPostItem = useCallback(
+    ({ item }: { item: CommunityPost }) => (
+      <CommunityPostCard
+        item={item}
+        colors={colors}
+        currentUser={currentUser}
+        selectedBoardId={selectedBoardId}
+        onPress={handlePostPress}
+        onEdit={handlePostEdit}
+        onDelete={handlePostDelete}
+        onMediaPress={handleMediaPress}
+        onToggleLike={handleToggleLike}
+      />
+    ),
+    [colors, currentUser, selectedBoardId, handlePostPress, handlePostEdit, handlePostDelete, handleMediaPress, handleToggleLike]
+  );
+
+  const keyExtractor = useCallback((item: CommunityPost) => item.id, []);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary || "#09090b" }]}>
@@ -448,7 +799,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
         </View>
       </View>
 
-      {/* Section Tabs with guaranteed full-width bottom border */}
+      {/* Section Tabs */}
       <View style={[styles.sectionTabsWrapper, { borderBottomColor: colors.borderLight }]}>
         <ScrollView
           horizontal
@@ -474,63 +825,94 @@ export const CommunityScreen = ({ navigation, route }: any) => {
         </ScrollView>
       </View>
 
+      {/* Sub-Board Chips (Selects state IMMEDIATELY on click) */}
       {visibleChildBoards.length > 0 && (
         <View style={[styles.boardArea, { borderBottomColor: colors.borderLight }]}>
           <ScrollView ref={subBoardScrollRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subBoardScroll}>
             {visibleChildBoards.map((board) => (
-              <TouchableOpacity key={board.id} style={[styles.subBoardChip, { backgroundColor: selectedBoardId === board.id ? colors.accentPurple + "12" : "transparent", borderColor: selectedBoardId === board.id ? colors.accentPurple : colors.borderColor }]} onPress={() => setSelectedBoardId(board.id)}>
-                <Text style={{ color: selectedBoardId === board.id ? colors.accentBlue : colors.textSecondary, fontWeight: "700" }}>{board.name}</Text>
+              <TouchableOpacity
+                key={board.id}
+                style={[
+                  styles.subBoardChip,
+                  {
+                    backgroundColor: selectedBoardId === board.id ? colors.accentPurple + "12" : "transparent",
+                    borderColor: selectedBoardId === board.id ? colors.accentPurple : colors.borderColor,
+                  },
+                ]}
+                onPress={() => setSelectedBoardId(board.id)} // IMMEDIATE SELECTION CHANGE
+                activeOpacity={0.7}
+              >
+                <Text style={{ color: selectedBoardId === board.id ? colors.accentBlue : colors.textSecondary, fontWeight: "700" }}>
+                  {board.name}
+                </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
       )}
 
-      {/* Post List */}
+      {/* Subtle Background Refresh Indicator Bar */}
+      {backgroundRefreshing && (
+        <View style={{ height: 2, backgroundColor: colors.accentPurple || "#a855f7", width: "100%" }} />
+      )}
+
+      {/* Post List & Skeleton UI */}
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.accentPurple || "#a855f7"} />
+        <CommunitySkeleton colors={colors} />
+      ) : fetchError && posts.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color="#ef4444" style={{ marginBottom: 12 }} />
+          <Text style={[styles.emptyText, { color: colors.textPrimary }]}>목록을 불러오지 못했습니다.</Text>
+          <TouchableOpacity
+            style={{ marginTop: 12, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: colors.accentPurple, borderRadius: 8 }}
+            onPress={() => fetchCommunityPosts(selectedBoardId, true)}
+          >
+            <Text style={{ color: "#ffffff", fontWeight: "700" }}>다시 시도</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
           ref={postFlatListRef}
           data={posts}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
           renderItem={renderPostItem}
           contentContainerStyle={styles.listContent}
-          ListHeaderComponent={<>
-            {notices.length ? <View style={styles.noticeList}>{notices.map((notice) => {
-              const isExpanded = expandedNoticeIds.includes(notice.id);
-              return (
-                <TouchableOpacity
-                  key={notice.id}
-                  style={[styles.noticeCard, { backgroundColor: colors.bgCard, borderColor: colors.accentPurple }]}
-                  onPress={() => toggleNotice(notice.id)}
-                  activeOpacity={0.8}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${notice.title} 공지 ${isExpanded ? "접기" : "펼치기"}`}
-                  accessibilityState={{ expanded: isExpanded }}
-                >
-                  <View style={styles.noticeHeaderRow}>
-                    <Ionicons name="megaphone-outline" size={16} color={colors.accentPurple} style={{ marginRight: 8 }} />
-                    <Text style={[styles.noticeTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-                      {notice.title}
-                    </Text>
-                    <Ionicons name={isExpanded ? "chevron-up-outline" : "chevron-down-outline"} size={18} color={colors.textSecondary} style={{ marginLeft: 8 }} />
-                  </View>
-                  {isExpanded ? (
-                    <View style={[styles.noticeExpandedBody, { borderTopColor: colors.borderLight }]}>
-                      <HashtagText text={notice.content} style={styles.noticeContent} />
-                    </View>
-                  ) : (
-                    <Text style={[styles.noticeContentSnippet, { color: colors.textSecondary }]} numberOfLines={1}>
-                      {notice.content.replace(/<[^>]+>/g, "")}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              );
-            })}</View> : null}
-          </>}
+          ListHeaderComponent={
+            <>
+              {notices.length ? (
+                <View style={styles.noticeList}>
+                  {notices.map((notice) => {
+                    const isExpanded = expandedNoticeIds.includes(notice.id);
+                    return (
+                      <TouchableOpacity
+                        key={notice.id}
+                        style={[styles.noticeCard, { backgroundColor: colors.bgCard, borderColor: colors.accentPurple }]}
+                        onPress={() => toggleNotice(notice.id)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={styles.noticeHeaderRow}>
+                          <Ionicons name="megaphone-outline" size={16} color={colors.accentPurple} style={{ marginRight: 8 }} />
+                          <Text style={[styles.noticeTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                            {notice.title}
+                          </Text>
+                          <Ionicons name={isExpanded ? "chevron-up-outline" : "chevron-down-outline"} size={18} color={colors.textSecondary} style={{ marginLeft: 8 }} />
+                        </View>
+                        {isExpanded ? (
+                          <View style={[styles.noticeExpandedBody, { borderTopColor: colors.borderLight }]}>
+                            <HashtagText text={notice.content} style={styles.noticeContent} />
+                          </View>
+                        ) : (
+                          <Text style={[styles.noticeContentSnippet, { color: colors.textSecondary }]} numberOfLines={1}>
+                            {notice.content.replace(/<[^>]+>/g, "")}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </>
+          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -572,14 +954,14 @@ export const CommunityScreen = ({ navigation, route }: any) => {
           setCreateModalVisible(false);
           setEditingPost(null);
         }}
-        onPostCreated={() => fetchCommunityPosts(selectedBoardId)}
+        onPostCreated={() => fetchCommunityPosts(selectedBoardId, true)}
       />
 
       <CommunityPostDetailModal
         visible={detailModalVisible}
         postId={selectedPostId}
         onClose={() => setDetailModalVisible(false)}
-        onPostUpdated={() => fetchCommunityPosts(selectedBoardId)}
+        onPostUpdated={() => fetchCommunityPosts(selectedBoardId, true)}
       />
 
       <ImageDetailViewerModal
@@ -588,7 +970,6 @@ export const CommunityScreen = ({ navigation, route }: any) => {
         initialIndex={viewerIndex}
         onClose={() => setViewerVisible(false)}
       />
-      {/* General Notice List Modal */}
       <NoticeListModal
         visible={noticeModalVisible}
         onClose={() => setNoticeModalVisible(false)}
@@ -637,140 +1018,61 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   sectionTabsWrapper: {
-    width: "100%",
     borderBottomWidth: 1,
-    zIndex: 10,
   },
   sectionTabs: {
-    height: 48,
+    maxHeight: 46,
   },
   sectionTabsContent: {
-    minHeight: 48,
+    flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    gap: 6,
+    paddingHorizontal: 16,
   },
   sectionTab: {
-    minWidth: 88,
-    height: 48,
-    paddingHorizontal: 12,
-    alignItems: "center",
-    justifyContent: "center",
+    paddingVertical: 12,
+    marginRight: 20,
     position: "relative",
   },
-  sectionTabText: { fontSize: 14, fontWeight: "800" },
+  sectionTabText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
   sectionIndicator: {
     position: "absolute",
     bottom: 0,
-    width: 42,
+    left: 0,
+    right: 0,
     height: 3,
-    borderRadius: 3,
-  },
-  tabContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderRadius: 1.5,
   },
   boardArea: {
-    width: "100%",
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    paddingVertical: 8,
-    zIndex: 5,
   },
-  boardScroll: { paddingHorizontal: 16, gap: 8 },
-  subBoardScroll: { paddingHorizontal: 16, gap: 8 },
-  boardChip: { paddingHorizontal: 16, height: 38, borderRadius: 19, borderWidth: 1, justifyContent: "center" },
-  subBoardChip: { paddingHorizontal: 14, height: 34, borderRadius: 17, borderWidth: 1, justifyContent: "center" },
-  noticeList: { marginTop: 12, marginBottom: 14, gap: 10 },
-  noticeCard: { borderWidth: 1, borderRadius: 12, padding: 12, overflow: "hidden" },
-  noticeHeaderRow: { flexDirection: "row", alignItems: "center" },
-  noticeTitle: { fontSize: 13, fontWeight: "800", flex: 1 },
-  noticeContentSnippet: { fontSize: 12, lineHeight: 17, marginTop: 4 },
-  noticeExpandedBody: { marginTop: 10, paddingTop: 10, borderTopWidth: 1 },
-  noticeContent: { fontSize: 13, lineHeight: 19 },
-  supportCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
+  subBoardScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  subBoardChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 20,
-    padding: 18,
-    marginBottom: 14,
-    overflow: "hidden",
-  },
-  supportTitle: { fontSize: 20, fontWeight: "800", marginBottom: 7 },
-  supportBody: { fontSize: 13, lineHeight: 19, maxWidth: 220 },
-  supportButton: {
-    marginTop: 14,
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderRadius: 18,
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-  },
-  supportButtonText: { fontSize: 12, fontWeight: "800" },
-  supportIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: "center",
-    alignItems: "center",
-    marginLeft: 8,
-  },
-  capsuleBackground: {
-    flexDirection: "row",
-    borderRadius: 25,
-    padding: 4,
-    height: 48,
-  },
-  tabButton: {
-    flex: 1,
-    height: "100%",
-    borderRadius: 21,
-    overflow: "hidden",
-  },
-  activeGradientTab: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 21,
-  },
-  inactiveTab: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 21,
-  },
-  activeTabText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  inactiveTabText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    borderWidth: 1,
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 80,
+    padding: 16,
+    paddingBottom: 40,
   },
   postCard: {
     borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
     borderWidth: 1,
-    padding: 14,
-    marginBottom: 12,
   },
   cardHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 10,
   },
   authorGroup: {
@@ -779,43 +1081,47 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   anonAvatarBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
   },
   userAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
   },
   authorText: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
   },
   dateText: {
-    fontSize: 11,
+    fontSize: 12,
   },
   cardBodyRow: {
     flexDirection: "row",
-    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 12,
   },
+  boardLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
   postTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
     marginBottom: 4,
   },
-  boardLabel: { fontSize: 12, fontWeight: "800", marginBottom: 6 },
   postCaption: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 20,
   },
   thumbnailImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
+    width: 72,
+    height: 72,
+    borderRadius: 10,
   },
   cardFooter: {
     flexDirection: "row",
@@ -830,49 +1136,57 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   footerActionText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
   },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   emptyContainer: {
+    paddingVertical: 60,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 60,
-    width: "100%",
   },
   emptyText: {
     fontSize: 16,
     fontWeight: "700",
-    lineHeight: 22,
-    marginBottom: 6,
-    textAlign: "center",
-    width: "100%",
-    paddingHorizontal: 16,
+    marginBottom: 4,
   },
   emptySubText: {
     fontSize: 13,
-    lineHeight: 18,
-    textAlign: "center",
-    width: "100%",
-    paddingHorizontal: 16,
   },
-  fab: {
-    position: "absolute",
-    bottom: 24,
-    right: 20,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    shadowColor: "#7652df",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
+  noticeList: {
+    marginBottom: 14,
+    gap: 8,
   },
-  fabGradient: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 26,
-    justifyContent: "center",
+  noticeCard: {
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+  },
+  noticeHeaderRow: {
+    flexDirection: "row",
     alignItems: "center",
+  },
+  noticeTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  noticeContentSnippet: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  noticeExpandedBody: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+  },
+  noticeContent: {
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

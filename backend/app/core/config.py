@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     # App
     app_name: str = "Aura+n"
     app_env: str = "development"
+    enable_perf_log: bool = False
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5433/instagram"
