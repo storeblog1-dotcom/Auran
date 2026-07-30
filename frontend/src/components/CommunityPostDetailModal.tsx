@@ -13,6 +13,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -70,7 +71,39 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
   const [replyParentComment, setReplyParentComment] = useState<Comment | null>(null);
   const [editingComment, setEditingComment] = useState<Comment | null>(null);
 
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState<boolean>(false);
+  const [isInputFocused, setIsInputFocused] = useState<boolean>(false);
+
   const commentInputRef = useRef<TextInput>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  };
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => {
+        setIsKeyboardVisible(true);
+        scrollToBottom();
+      }
+    );
+
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => {
+        setIsKeyboardVisible(false);
+      }
+    );
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const fetchComments = async (targetPostId: string) => {
     setCommentsLoading(true);
@@ -107,6 +140,8 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
       setEditingComment(null);
       setReplyParentComment(null);
       setInputText("");
+      setIsKeyboardVisible(false);
+      setIsInputFocused(false);
       fetchPostDetail(postId);
       fetchComments(postId);
     } else {
@@ -115,6 +150,8 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
       setReplyParentComment(null);
       setEditingComment(null);
       setInputText("");
+      setIsKeyboardVisible(false);
+      setIsInputFocused(false);
     }
   }, [visible, postId]);
 
@@ -129,12 +166,13 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
       const res = await api.post(`/posts/${post.id}/like`);
       if (res.data && res.data.data) {
         setPost((prev: any) =>
-          prev ? { ...prev, is_liked: res.data.data.is_liked, likes_count: res.data.data.likes_count } : prev
+          prev ? { ...prev, is_liked: res.data.data.is_liked, likes_count: res.data.data.likes_count } : null
         );
         if (onPostUpdated) onPostUpdated();
       }
-    } catch (e) {
-      console.log("Error toggling like", e);
+    } catch (err) {
+      console.log("Error toggling like in community detail modal", err);
+      fetchPostDetail(post.id);
     }
   };
 
@@ -150,6 +188,9 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
         setInputText("");
         setEditingComment(null);
         fetchComments(post.id);
+        Keyboard.dismiss();
+        setIsKeyboardVisible(false);
+        setIsInputFocused(false);
       } else {
         await api.post(`/posts/${post.id}/comments`, {
           content: inputText.trim(),
@@ -164,6 +205,9 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
           prev ? { ...prev, comments_count: (prev.comments_count || 0) + 1 } : prev
         );
         if (onPostUpdated) onPostUpdated();
+        Keyboard.dismiss();
+        setIsKeyboardVisible(false);
+        setIsInputFocused(false);
       }
     } catch (err) {
       console.log("Error posting/editing comment", err);
@@ -176,18 +220,22 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
   const handleReplyPress = (comment: Comment) => {
     setEditingComment(null);
     setReplyParentComment(comment);
+    setIsKeyboardVisible(true);
     if (commentInputRef.current) {
       commentInputRef.current.focus();
     }
+    scrollToBottom();
   };
 
   const handleEditComment = (comment: Comment) => {
     setReplyParentComment(null);
     setEditingComment(comment);
     setInputText(comment.content);
+    setIsKeyboardVisible(true);
     if (commentInputRef.current) {
       commentInputRef.current.focus();
     }
+    scrollToBottom();
   };
 
   const handleDeleteComment = async (commentId: string) => {
@@ -277,7 +325,7 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
                 <ActivityIndicator size="large" color={colors.accentPurple || "#a855f7"} />
               </View>
             ) : (
-              <ScrollView contentContainerStyle={styles.scrollContent}>
+              <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent}>
                 {/* Author & Timestamp */}
                 <View style={styles.authorRow}>
                   {hideIdentity ? (
@@ -358,12 +406,16 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
                     </Text>
                   </TouchableOpacity>
 
-                  <View style={styles.actionItem}>
+                  <TouchableOpacity style={styles.actionItem} onPress={() => {
+                    setIsKeyboardVisible(true);
+                    if (commentInputRef.current) commentInputRef.current.focus();
+                    scrollToBottom();
+                  }}>
                     <Ionicons name="chatbubble-outline" size={20} color={colors.textPrimary} />
                     <Text style={[styles.actionCount, { color: colors.textPrimary }]}>
                       {post.comments_count || 0}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 </View>
 
                 {/* Comments Header */}
@@ -396,7 +448,7 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
             )}
 
             {/* Comment Input Footer */}
-            {post && (
+            {post && (isKeyboardVisible || isInputFocused || !!replyParentComment || !!editingComment) && (
               <View style={[styles.footerInputContainer, { backgroundColor: colors.bgCard || "#18181b", borderTopColor: colors.borderColor || "#27272a" }]}>
                 {editingComment ? (
                   <View style={styles.replyBanner}>
@@ -433,6 +485,11 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
                     placeholderTextColor={colors.textSecondary || "#71717a"}
                     value={inputText}
                     onChangeText={setInputText}
+                    onFocus={() => {
+                      setIsInputFocused(true);
+                      scrollToBottom();
+                    }}
+                    onBlur={() => setIsInputFocused(false)}
                     multiline
                   />
                   <TouchableOpacity

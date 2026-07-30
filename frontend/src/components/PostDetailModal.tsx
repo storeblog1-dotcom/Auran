@@ -12,6 +12,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -83,7 +84,39 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   const [replyTargetUser, setReplyTargetUser] = useState<any | null>(null);
   const [editingComment, setEditingComment] = useState<Comment | null>(null);
 
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState<boolean>(false);
+  const [isInputFocused, setIsInputFocused] = useState<boolean>(false);
+
   const commentInputRef = useRef<TextInput>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  };
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => {
+        setIsKeyboardVisible(true);
+        scrollToBottom();
+      }
+    );
+
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => {
+        setIsKeyboardVisible(false);
+      }
+    );
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const fetchComments = async (targetPostId: string) => {
     setCommentsLoading(true);
@@ -124,10 +157,14 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
       setReplyTargetUser(null);
       setEditingComment(null);
       setInputText("");
+      setIsKeyboardVisible(false);
+      setIsInputFocused(false);
       fetchPostDetail(postId);
     } else {
       setPost(null);
       setComments([]);
+      setIsKeyboardVisible(false);
+      setIsInputFocused(false);
     }
   }, [visible, postId]);
 
@@ -302,7 +339,9 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
     setReplyParentComment(comment);
     setReplyTargetUser(comment.user);
     setInputText("");
+    setIsKeyboardVisible(true);
     commentInputRef.current?.focus();
+    scrollToBottom();
   };
 
   const handleReplyToAuthor = () => {
@@ -311,13 +350,18 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
     setReplyParentComment(null);
     setReplyTargetUser(post.user);
     setInputText("");
+    setIsKeyboardVisible(true);
     commentInputRef.current?.focus();
+    scrollToBottom();
   };
 
   const handleCancelReply = () => {
     setReplyParentComment(null);
     setReplyTargetUser(null);
     setInputText("");
+    setIsKeyboardVisible(false);
+    setIsInputFocused(false);
+    Keyboard.dismiss();
   };
 
   const handleEditComment = (comment: Comment) => {
@@ -325,12 +369,17 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
     setReplyTargetUser(null);
     setEditingComment(comment);
     setInputText(comment.content);
+    setIsKeyboardVisible(true);
     commentInputRef.current?.focus();
+    scrollToBottom();
   };
 
   const handleCancelEdit = () => {
     setEditingComment(null);
     setInputText("");
+    setIsKeyboardVisible(false);
+    setIsInputFocused(false);
+    Keyboard.dismiss();
   };
 
   const handleAddComment = async () => {
@@ -345,6 +394,9 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
           setInputText("");
           setEditingComment(null);
           fetchComments(post.id);
+          Keyboard.dismiss();
+          setIsKeyboardVisible(false);
+          setIsInputFocused(false);
         }
       } else {
         const targetParentId = replyParentComment
@@ -363,6 +415,9 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
           fetchComments(post.id);
           setPost((prev: any) => (prev ? { ...prev, comments_count: (prev.comments_count || 0) + 1 } : prev));
           if (onPostUpdated) onPostUpdated();
+          Keyboard.dismiss();
+          setIsKeyboardVisible(false);
+          setIsInputFocused(false);
         }
       }
     } catch (err: any) {
@@ -400,6 +455,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   if (!visible) return null;
 
   const commentsCount = post?.comments_count || 0;
+  const showInputBar = isKeyboardVisible || isInputFocused || !!replyTargetUser || !!editingComment;
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
@@ -422,7 +478,11 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
             behavior={Platform.OS === "ios" ? "padding" : undefined}
             style={{ flex: 1 }}
           >
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
+            <ScrollView
+              ref={scrollViewRef}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingBottom: 20 }}
+            >
               {/* Post User Header */}
               <View style={styles.postHeader}>
                 <TouchableOpacity
@@ -537,7 +597,11 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                       color={post.is_liked ? "#ed4956" : colors.textPrimary}
                     />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => commentInputRef.current?.focus()}>
+                  <TouchableOpacity onPress={() => {
+                    setIsKeyboardVisible(true);
+                    commentInputRef.current?.focus();
+                    scrollToBottom();
+                  }}>
                     <Ionicons name="chatbubble-outline" size={22} color={colors.textPrimary} />
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => setDmModalVisible(true)}>
@@ -622,7 +686,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
             </ScrollView>
 
             {/* Target Reply Bar if replyParentComment is set */}
-            {replyTargetUser && (
+            {showInputBar && replyTargetUser && (
               <View style={[styles.replyingBar, { backgroundColor: colors.bgInput }]}>
                 <Text style={[styles.replyingText, { color: colors.textSecondary }]}>
                   <Text style={{ fontWeight: "bold", color: colors.accentBlue }}>{getDisplayName(replyTargetUser)}</Text> 님에게 답글 작성 중
@@ -634,7 +698,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
             )}
 
             {/* Editing Comment Bar if editingComment is set */}
-            {editingComment && (
+            {showInputBar && editingComment && (
               <View style={[styles.replyingBar, { backgroundColor: colors.bgInput }]}>
                 <Text style={[styles.replyingText, { color: colors.textSecondary }]}>
                   ✏️ <Text style={{ fontWeight: "bold", color: colors.accentPurple || "#a855f7" }}>댓글 수정 중</Text>
@@ -645,40 +709,47 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
               </View>
             )}
 
-            {/* Bottom Sticky Comment Input Bar */}
-            <View style={[styles.inputContainer, { backgroundColor: colors.bgCard }]}>
-              <TextInput
-                ref={commentInputRef}
-                style={[styles.textInput, { color: colors.textPrimary, backgroundColor: colors.bgInput, borderColor: colors.borderColor, borderWidth: 1 }]}
-                placeholder={
-                  replyTargetUser
-                    ? `${getDisplayName(replyTargetUser)} 님에게 답글 달기...`
-                    : "댓글 달기..."
-                }
-                placeholderTextColor={colors.textSecondary}
-                value={inputText}
-                onChangeText={setInputText}
-                multiline
-              />
-              <TouchableOpacity
-                onPress={handleAddComment}
-                disabled={!inputText.trim() || submittingComment}
-                style={styles.postBtn}
-              >
-                {submittingComment ? (
-                  <ActivityIndicator size="small" color={colors.accentBlue} />
-                ) : (
-                  <Text
-                    style={[
-                      styles.postBtnText,
-                      { color: inputText.trim() ? colors.accentBlue : colors.textMuted },
-                    ]}
-                  >
-                    게시
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
+            {/* Bottom Sticky Comment Input Bar (Visible only when keyboard is up / input active) */}
+            {showInputBar && (
+              <View style={[styles.inputContainer, { backgroundColor: colors.bgCard }]}>
+                <TextInput
+                  ref={commentInputRef}
+                  style={[styles.textInput, { color: colors.textPrimary, backgroundColor: colors.bgInput, borderColor: colors.borderColor, borderWidth: 1 }]}
+                  placeholder={
+                    replyTargetUser
+                      ? `${getDisplayName(replyTargetUser)} 님에게 답글 달기...`
+                      : "댓글 달기..."
+                  }
+                  placeholderTextColor={colors.textSecondary}
+                  value={inputText}
+                  onChangeText={setInputText}
+                  onFocus={() => {
+                    setIsInputFocused(true);
+                    scrollToBottom();
+                  }}
+                  onBlur={() => setIsInputFocused(false)}
+                  multiline
+                />
+                <TouchableOpacity
+                  onPress={handleAddComment}
+                  disabled={!inputText.trim() || submittingComment}
+                  style={styles.postBtn}
+                >
+                  {submittingComment ? (
+                    <ActivityIndicator size="small" color={colors.accentBlue} />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.postBtnText,
+                        { color: inputText.trim() ? colors.accentBlue : colors.textMuted },
+                      ]}
+                    >
+                      게시
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
           </KeyboardAvoidingView>
         )}
 
