@@ -139,6 +139,132 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
     );
   };
 
+  const isNoticeGlobal = (n: any) => Boolean(n.is_global && !n.board_id);
+
+  let globalNotices = notices
+    .filter(isNoticeGlobal)
+    .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  let generalNotices = notices
+    .filter((n: any) => !isNoticeGlobal(n))
+    .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  if (globalNotices.length === 0 && notices.length > 0) {
+    const mainNotice = notices.find((n) => !n.board_id) || notices[0];
+    if (mainNotice) {
+      globalNotices = [mainNotice];
+      generalNotices = notices.filter((n) => n.id !== mainNotice.id);
+    }
+  }
+
+  const renderNoticeCard = (notice: any, keyPrefix = "item") => {
+    const isExpanded = expandedNoticeIds.includes(notice.id);
+    const isEditingThis = editingNotice?.id === notice.id;
+    const isGlobalNotice = isNoticeGlobal(notice);
+
+    return (
+      <View
+        key={`${keyPrefix}-${notice.id}`}
+        style={[
+          styles.noticeCard,
+          {
+            backgroundColor: colors.bgCard,
+            borderColor: isEditingThis ? colors.accentPurple : colors.borderColor,
+            borderWidth: isEditingThis ? 2 : 1,
+          },
+        ]}
+      >
+        {/* Notice Card Header */}
+        <TouchableOpacity
+          style={styles.noticeHeaderRow}
+          onPress={() => toggleNotice(notice.id)}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name={isGlobalNotice ? "megaphone-outline" : "notifications-outline"}
+            size={18}
+            color={isGlobalNotice ? colors.accentPurple : colors.accentBlue}
+            style={{ marginRight: 10 }}
+          />
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <View
+                style={{
+                  backgroundColor: isGlobalNotice ? colors.accentPurple + "20" : colors.accentBlue + "20",
+                  paddingHorizontal: 6,
+                  paddingVertical: 1,
+                  borderRadius: 4,
+                }}
+              >
+                <Text
+                  style={{
+                    color: isGlobalNotice ? colors.accentPurple : colors.accentBlue,
+                    fontSize: 10,
+                    fontWeight: "800",
+                  }}
+                >
+                  {isGlobalNotice ? "전체공지" : "일반공지"}
+                </Text>
+              </View>
+              <Text style={[styles.noticeCardTitle, { color: colors.textPrimary, flex: 1 }]} numberOfLines={1}>
+                {notice.title}
+              </Text>
+            </View>
+            <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 3 }}>
+              {new Date(notice.created_at).toLocaleString("ko-KR", {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </Text>
+          </View>
+          {isEditingThis && (
+            <Text style={{ color: colors.accentPurple, fontSize: 12, fontWeight: "700", marginRight: 8 }}>
+              수정 중...
+            </Text>
+          )}
+          <Ionicons
+            name={isExpanded ? "chevron-up" : "chevron-down"}
+            size={20}
+            color={colors.textSecondary}
+          />
+        </TouchableOpacity>
+
+        {/* Notice Collapsible Content */}
+        {isExpanded && (
+          <View style={[styles.noticeBody, { borderTopColor: colors.borderColor }]}>
+            <Text style={[styles.noticeContentText, { color: colors.textPrimary }]}>
+              {notice.content}
+            </Text>
+
+            {/* Action Buttons */}
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: colors.accentBlue + "15" }]}
+                onPress={() => startEdit(notice)}
+              >
+                <Ionicons name="create-outline" size={15} color={colors.accentBlue} />
+                <Text style={[styles.actionBtnText, { color: colors.accentBlue }]}>
+                  {isEditingThis ? "상단 양식에서 수정 중" : "수정"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: "#ef444415" }]}
+                onPress={() => handleDeleteNotice(notice)}
+              >
+                <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                <Text style={[styles.actionBtnText, { color: "#ef4444" }]}>삭제</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
       {/* Header */}
@@ -257,113 +383,33 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
               <Text style={{ color: colors.textMuted, marginTop: 8 }}>등록된 공지가 없습니다.</Text>
             </View>
           ) : (
-            notices.map((notice) => {
-              const isExpanded = expandedNoticeIds.includes(notice.id);
-              const isEditingThis = editingNotice?.id === notice.id;
-              const isGlobalNotice = Boolean(notice.is_global && !notice.board_id);
-
-              return (
-                <View
-                  key={notice.id}
-                  style={[
-                    styles.noticeCard,
-                    {
-                      backgroundColor: colors.bgCard,
-                      borderColor: isEditingThis ? colors.accentPurple : colors.borderColor,
-                      borderWidth: isEditingThis ? 2 : 1,
-                    },
-                  ]}
-                >
-                  {/* Notice Card Header */}
-                  <TouchableOpacity
-                    style={styles.noticeHeaderRow}
-                    onPress={() => toggleNotice(notice.id)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons
-                      name={isGlobalNotice ? "megaphone-outline" : "notifications-outline"}
-                      size={18}
-                      color={isGlobalNotice ? colors.accentPurple : colors.accentBlue}
-                      style={{ marginRight: 10 }}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <View
-                          style={{
-                            backgroundColor: isGlobalNotice ? colors.accentPurple + "20" : colors.accentBlue + "20",
-                            paddingHorizontal: 6,
-                            paddingVertical: 1,
-                            borderRadius: 4,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              color: isGlobalNotice ? colors.accentPurple : colors.accentBlue,
-                              fontSize: 10,
-                              fontWeight: "800",
-                            }}
-                          >
-                            {isGlobalNotice ? "전체공지" : "일반공지"}
-                          </Text>
-                        </View>
-                        <Text style={[styles.noticeCardTitle, { color: colors.textPrimary, flex: 1 }]} numberOfLines={1}>
-                          {notice.title}
-                        </Text>
-                      </View>
-                      <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 3 }}>
-                        {new Date(notice.created_at).toLocaleString("ko-KR", {
-                          year: "numeric",
-                          month: "2-digit",
-                          day: "2-digit",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </Text>
-                    </View>
-                    {isEditingThis && (
-                      <Text style={{ color: colors.accentPurple, fontSize: 12, fontWeight: "700", marginRight: 8 }}>
-                        수정 중...
-                      </Text>
-                    )}
-                    <Ionicons
-                      name={isExpanded ? "chevron-up" : "chevron-down"}
-                      size={20}
-                      color={colors.textSecondary}
-                    />
-                  </TouchableOpacity>
-
-                  {/* Notice Collapsible Content */}
-                  {isExpanded && (
-                    <View style={[styles.noticeBody, { borderTopColor: colors.borderColor }]}>
-                      <Text style={[styles.noticeContentText, { color: colors.textPrimary }]}>
-                        {notice.content}
-                      </Text>
-
-                      {/* Action Buttons */}
-                      <View style={styles.actionRow}>
-                        <TouchableOpacity
-                          style={[styles.actionBtn, { backgroundColor: colors.accentBlue + "15" }]}
-                          onPress={() => startEdit(notice)}
-                        >
-                          <Ionicons name="create-outline" size={15} color={colors.accentBlue} />
-                          <Text style={[styles.actionBtnText, { color: colors.accentBlue }]}>
-                            {isEditingThis ? "상단 양식에서 수정 중" : "수정"}
-                          </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={[styles.actionBtn, { backgroundColor: "#ef444415" }]}
-                          onPress={() => handleDeleteNotice(notice)}
-                        >
-                          <Ionicons name="trash-outline" size={15} color="#ef4444" />
-                          <Text style={[styles.actionBtnText, { color: "#ef4444" }]}>삭제</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  )}
+            <>
+              {/* 1. 전체 공지 목록 */}
+              {globalNotices.length > 0 && (
+                <View style={{ marginBottom: 16 }}>
+                  <View style={styles.subSectionHeader}>
+                    <Ionicons name="megaphone-outline" size={16} color={colors.accentPurple} />
+                    <Text style={[styles.subSectionTitle, { color: colors.accentPurple }]}>
+                      전체 공지 목록 ({globalNotices.length}건)
+                    </Text>
+                  </View>
+                  {globalNotices.map((notice) => renderNoticeCard(notice, "global"))}
                 </View>
-              );
-            })
+              )}
+
+              {/* 2. 일반 공지 목록 */}
+              {generalNotices.length > 0 && (
+                <View style={{ marginBottom: 16 }}>
+                  <View style={styles.subSectionHeader}>
+                    <Ionicons name="list-outline" size={16} color={colors.accentBlue} />
+                    <Text style={[styles.subSectionTitle, { color: colors.textPrimary }]}>
+                      일반 공지 목록 ({generalNotices.length}건)
+                    </Text>
+                  </View>
+                  {generalNotices.map((notice) => renderNoticeCard(notice, "general"))}
+                </View>
+              )}
+            </>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -458,6 +504,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: { fontSize: 16, fontWeight: "800" },
+  subSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  subSectionTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
   emptyBox: {
     borderWidth: 1,
     borderRadius: 14,
