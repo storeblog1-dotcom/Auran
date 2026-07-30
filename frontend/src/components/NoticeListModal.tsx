@@ -185,7 +185,7 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
                   fontWeight: "800",
                 }}
               >
-                {isGlobalNotice ? "📌 전체공지" : "📋 일반공지"}
+                {isGlobalNotice ? "전체공지" : "일반공지"}
               </Text>
             </View>
             <Text style={[styles.noticeTitle, { color: colors.textPrimary }]} numberOfLines={1}>
@@ -287,7 +287,7 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
               <View style={[styles.switchRow, { borderColor: colors.borderColor, backgroundColor: colors.bgInput }]}>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: 13 }}>
-                    {isGlobal ? "📌 전체 공지 (상단 고정 - 1개 제한)" : "📋 일반 공지 (목록 노출)"}
+                    {isGlobal ? "전체 공지 (상단 고정 - 1개 제한)" : "일반 공지 (목록 노출)"}
                   </Text>
                   <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>
                     {isGlobal ? "※ 전체 공지는 항상 최상단에 고정 표시됩니다." : "※ 일반 공지는 작성일 순으로 아래에 표시됩니다."}
@@ -349,7 +349,7 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
                 {globalNotices.length > 0 && (
                   <View style={styles.sectionContainer}>
                     <View style={styles.sectionTitleRow}>
-                      <Ionicons name="megaphone" size={16} color={colors.accentPurple} />
+                      <Ionicons name="megaphone-outline" size={16} color={colors.accentPurple} />
                       <Text style={[styles.sectionTitleText, { color: colors.accentPurple }]}>
                         전체 공지 (상단 고정)
                       </Text>

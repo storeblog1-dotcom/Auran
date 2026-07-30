@@ -188,7 +188,7 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
             <View style={[styles.switchRow, { borderColor: colors.borderColor, backgroundColor: colors.bgInput }]}>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: 13 }}>
-                  {isGlobal ? "📌 전체 공지 (커뮤니티 메인 상단 노출)" : "📋 일반 공지 (공지 목록 팝업 노출)"}
+                  {isGlobal ? "전체 공지 (커뮤니티 메인 상단 노출)" : "일반 공지 (공지 목록 팝업 노출)"}
                 </Text>
                 <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>
                   {isGlobal ? "※ 전체 공지는 최신 1개만 상단에 표시됩니다." : "※ 일반 공지는 우측 상단 공지사항 목록에 노출됩니다."}
