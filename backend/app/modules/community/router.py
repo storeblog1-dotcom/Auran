@@ -30,10 +30,22 @@ async def list_boards(include_inactive: bool = False, current_user: User = Depen
 
 
 @router.get("/notices", response_model=ApiResponse[list[NoticeResponse]])
-async def list_notices(board_id: UUID | None = None, current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
+async def list_notices(
+    notice_type: str | None = None,
+    board_id: UUID | None = None,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
     stmt = select(CommunityNotice).where(CommunityNotice.is_active.is_(True)).order_by(CommunityNotice.created_at.desc())
+    if notice_type == "global":
+        stmt = stmt.where(CommunityNotice.is_global.is_(True))
+    elif notice_type == "general":
+        stmt = stmt.where(CommunityNotice.is_global.is_(False))
+
     result = await db.execute(stmt)
     notices = [n for n in result.scalars().all() if n.board_id is None or n.board_id == board_id]
+    if notice_type == "global":
+        notices = notices[:1]
     return ApiResponse.ok(notices)
 
 
@@ -57,8 +69,6 @@ async def create_board(body: BoardCreateRequest, current_user: User = Depends(ge
     board = CommunityBoard(**body.model_dump())
     db.add(board)
     await db.flush()
-    # Every top-level board has a real default child.  "전체" remains a UI-only
-    # aggregate, while posts are always assigned to a concrete child board.
     if body.parent_id is None:
         common_slug = f"{body.slug[:64]}-common-{str(board.id).replace('-', '')[:8]}"
         db.add(
@@ -103,8 +113,6 @@ async def reorder_board(board_id: UUID, body: BoardReorderRequest, current_user:
     if index < 0 or target_index < 0 or target_index >= len(siblings):
         return ApiResponse.ok(siblings)
     siblings[index], siblings[target_index] = siblings[target_index], siblings[index]
-    # Normalize positions so boards created before ordering was added (all 0)
-    # can also be reliably rearranged.
     for position, sibling in enumerate(siblings):
         sibling.sort_order = position
     await db.commit()
@@ -133,6 +141,14 @@ async def delete_board(board_id: UUID, confirm_name: str, current_user: User = D
 @router.post("/admin/notices", response_model=ApiResponse[NoticeResponse])
 async def create_notice(body: NoticeCreateRequest, current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
     require_admin(current_user)
+    from sqlalchemy import update
+    if body.is_global:
+        # Enforce max 1 active global notice: deactivate existing active global notices
+        await db.execute(
+            update(CommunityNotice)
+            .where(CommunityNotice.is_global.is_(True), CommunityNotice.is_active.is_(True))
+            .values(is_active=False)
+        )
     notice = CommunityNotice(**body.model_dump())
     db.add(notice)
     await db.commit()
@@ -150,6 +166,18 @@ async def update_notice(notice_id: UUID, body: NoticeUpdateRequest, current_user
     notice = result.scalar_one_or_none()
     if not notice:
         raise NotFoundException("공지사항을 찾을 수 없습니다.")
+
+    from sqlalchemy import update
+    if body.is_global is True:
+        await db.execute(
+            update(CommunityNotice)
+            .where(CommunityNotice.is_global.is_(True), CommunityNotice.is_active.is_(True), CommunityNotice.id != notice_id)
+            .values(is_active=False)
+        )
+        notice.is_global = True
+    elif body.is_global is False:
+        notice.is_global = False
+
     if body.title is not None:
         notice.title = body.title
     if body.content is not None:

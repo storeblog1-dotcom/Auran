@@ -29,6 +29,7 @@ import { AuraLogoText } from "../components/AuraLogoText";
 import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
 import { VerifiedYouTubeCard } from "../components/VerifiedYouTubeCard";
 import { HashtagText } from "../components/HashtagText";
+import { NoticeListModal } from "../components/NoticeListModal";
 
 const { width } = Dimensions.get("window");
 type CommunitySection = "anonymous" | "info" | "partner";
@@ -71,6 +72,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
   const [editingPost, setEditingPost] = useState<any | null>(null);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState<boolean>(false);
+  const [noticeModalVisible, setNoticeModalVisible] = useState<boolean>(false);
 
   // Image Viewer State
   const [viewerVisible, setViewerVisible] = useState<boolean>(false);
@@ -160,10 +162,9 @@ export const CommunityScreen = ({ navigation, route }: any) => {
     }
     try {
       const isAllChildren = boardId === ALL_CHILD_BOARDS_ID;
-      const queryBoardId = isAllChildren ? selectedParentId : boardId;
       const [postRes, noticeRes] = await Promise.all([
         api.get(isAllChildren ? `/posts/community?parent_board_id=${selectedParentId}` : `/posts/community?board_id=${boardId}`),
-        api.get(`/community/notices?board_id=${queryBoardId}`),
+        api.get("/community/notices?notice_type=global"),
       ]);
       if (postRes.data && postRes.data.data) {
         const list = postRes.data.data || [];
@@ -433,8 +434,13 @@ export const CommunityScreen = ({ navigation, route }: any) => {
         <AuraLogoText fontSize={26} />
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>커뮤니티</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: colors.bgInput }]} onPress={() => navigation.navigate("Search")}>
-            <Ionicons name="search-outline" size={21} color={colors.textPrimary} />
+          <TouchableOpacity
+            style={[styles.noticeIconButton, { backgroundColor: colors.accentPurple + "18", borderColor: colors.accentPurple }]}
+            onPress={() => setNoticeModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="megaphone-outline" size={18} color={colors.accentPurple} />
+            <Text style={[styles.noticeIconText, { color: colors.accentPurple }]}>공지</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: colors.bgInput }]} onPress={() => navigation.navigate("Notification")}>
             <Ionicons name="notifications-outline" size={20} color={colors.textPrimary} />
@@ -582,6 +588,11 @@ export const CommunityScreen = ({ navigation, route }: any) => {
         initialIndex={viewerIndex}
         onClose={() => setViewerVisible(false)}
       />
+      {/* General Notice List Modal */}
+      <NoticeListModal
+        visible={noticeModalVisible}
+        onClose={() => setNoticeModalVisible(false)}
+      />
     </SafeAreaView>
   );
 };
@@ -605,6 +616,19 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     justifyContent: "center",
     alignItems: "center",
+  },
+  noticeIconButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  noticeIconText: {
+    fontSize: 13,
+    fontWeight: "800",
   },
   headerTitle: {
     display: "none",

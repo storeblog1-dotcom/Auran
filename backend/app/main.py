@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI):
         from sqlalchemy import text
         try:
             await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;"))
+            await conn.execute(text("ALTER TABLE community_notices ADD COLUMN IF NOT EXISTS is_global BOOLEAN DEFAULT FALSE;"))
         except Exception as e:
             print(f"[STARTUP] Column alter notice: {e}")
 

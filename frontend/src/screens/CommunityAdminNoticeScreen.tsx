@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -29,6 +30,7 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
   const [editingNotice, setEditingNotice] = useState<any | null>(null);
   const [noticeTitle, setNoticeTitle] = useState("");
   const [noticeContent, setNoticeContent] = useState("");
+  const [isGlobal, setIsGlobal] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   const loadNotices = useCallback(async () => {
@@ -37,7 +39,6 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
       const res = await api.get("/community/admin/notices");
       const list = res.data?.data || [];
       setNotices(list);
-      // Expand first notice by default if available
       if (list.length > 0 && expandedNoticeIds.length === 0) {
         setExpandedNoticeIds([list[0].id]);
       }
@@ -62,17 +63,17 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
     setEditingNotice(null);
     setNoticeTitle("");
     setNoticeContent("");
+    setIsGlobal(true);
   };
 
   const startEdit = (notice: any) => {
     setEditingNotice(notice);
     setNoticeTitle(notice.title);
     setNoticeContent(notice.content);
-    // Expand the notice being edited
+    setIsGlobal(Boolean(notice.is_global));
     if (!expandedNoticeIds.includes(notice.id)) {
       setExpandedNoticeIds((prev) => [...prev, notice.id]);
     }
-    // Auto-scroll smoothly to top form card for easy editing
     setTimeout(() => {
       scrollViewRef.current?.scrollTo({ y: 0, animated: true });
     }, 50);
@@ -90,14 +91,16 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
         await api.patch(`/community/admin/notices/${editingNotice.id}`, {
           title: noticeTitle.trim(),
           content: noticeContent.trim(),
+          is_global: isGlobal,
         });
         Alert.alert("성공", "공지사항이 수정되었습니다.");
       } else {
         await api.post("/community/admin/notices", {
           title: noticeTitle.trim(),
           content: noticeContent.trim(),
+          is_global: isGlobal,
         });
-        Alert.alert("성공", "전체 공지가 등록되었습니다.");
+        Alert.alert("성공", isGlobal ? "전체 공지가 등록되었습니다." : "일반 공지가 등록되었습니다.");
       }
       resetForm();
       loadNotices();
@@ -141,7 +144,7 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
         <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={26} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>전체 공지 관리</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>공지사항 관리</Text>
         <TouchableOpacity onPress={resetForm} activeOpacity={0.7}>
           <Text style={{ color: colors.accentBlue, fontWeight: "700" }}>새 공지</Text>
         </TouchableOpacity>
@@ -172,13 +175,30 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
             <View style={styles.formHeader}>
               <Ionicons name={editingNotice ? "create-outline" : "add-circle-outline"} size={20} color={colors.accentPurple} />
               <Text style={[styles.formTitle, { color: colors.textPrimary }]}>
-                {editingNotice ? "전체 공지 수정" : "새 전체 공지 작성"}
+                {editingNotice ? "공지사항 수정" : "새 공지사항 작성"}
               </Text>
               {editingNotice && (
                 <View style={styles.editingTag}>
                   <Text style={styles.editingTagText}>수정 모드</Text>
                 </View>
               )}
+            </View>
+
+            {/* Type Selector (Global Notice vs General Notice) */}
+            <View style={[styles.switchRow, { borderColor: colors.borderColor, backgroundColor: colors.bgInput }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: 13 }}>
+                  {isGlobal ? "📌 전체 공지 (커뮤니티 메인 상단 노출)" : "📋 일반 공지 (공지 목록 팝업 노출)"}
+                </Text>
+                <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>
+                  {isGlobal ? "※ 전체 공지는 최신 1개만 상단에 표시됩니다." : "※ 일반 공지는 우측 상단 공지사항 목록에 노출됩니다."}
+                </Text>
+              </View>
+              <Switch
+                value={isGlobal}
+                onValueChange={setIsGlobal}
+                trackColor={{ false: colors.borderColor, true: colors.accentPurple }}
+              />
             </View>
 
             <TextInput
@@ -190,7 +210,7 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
             />
             <TextInput
               style={[styles.input, styles.contentInput, { color: colors.textPrimary, borderColor: colors.borderColor, backgroundColor: colors.bgInput }]}
-              placeholder="모든 게시판 상단에 표시할 공지 내용을 입력하세요."
+              placeholder="공지 내용을 입력하세요."
               placeholderTextColor={colors.textMuted}
               value={noticeContent}
               onChangeText={setNoticeContent}
@@ -215,7 +235,7 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
                 {submitting ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.saveBtnText}>{editingNotice ? "수정 저장" : "전체 공지 등록"}</Text>
+                  <Text style={styles.saveBtnText}>{editingNotice ? "수정 저장" : "공지사항 등록"}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -223,7 +243,7 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
 
           {/* Notices Section Header */}
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>등록된 전체 공지 목록</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>등록된 공지사항 목록</Text>
             <Text style={{ color: colors.textMuted, fontSize: 13 }}>총 {notices.length}건</Text>
           </View>
 
@@ -232,7 +252,7 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
           ) : notices.length === 0 ? (
             <View style={[styles.emptyBox, { borderColor: colors.borderColor, backgroundColor: colors.bgCard }]}>
               <Ionicons name="megaphone-outline" size={36} color={colors.textMuted} />
-              <Text style={{ color: colors.textMuted, marginTop: 8 }}>등록된 전체 공지가 없습니다.</Text>
+              <Text style={{ color: colors.textMuted, marginTop: 8 }}>등록된 공지가 없습니다.</Text>
             </View>
           ) : (
             notices.map((notice) => {
@@ -257,10 +277,37 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
                     onPress={() => toggleNotice(notice.id)}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="megaphone-outline" size={18} color={colors.accentPurple} style={{ marginRight: 10 }} />
+                    <Ionicons
+                      name={notice.is_global ? "megaphone-outline" : "notifications-outline"}
+                      size={18}
+                      color={notice.is_global ? colors.accentPurple : colors.accentBlue}
+                      style={{ marginRight: 10 }}
+                    />
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.noticeCardTitle, { color: colors.textPrimary }]}>{notice.title}</Text>
-                      <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <View
+                          style={{
+                            backgroundColor: notice.is_global ? colors.accentPurple + "20" : colors.accentBlue + "20",
+                            paddingHorizontal: 6,
+                            paddingVertical: 1,
+                            borderRadius: 4,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: notice.is_global ? colors.accentPurple : colors.accentBlue,
+                              fontSize: 10,
+                              fontWeight: "800",
+                            }}
+                          >
+                            {notice.is_global ? "전체공지" : "일반공지"}
+                          </Text>
+                        </View>
+                        <Text style={[styles.noticeCardTitle, { color: colors.textPrimary, flex: 1 }]} numberOfLines={1}>
+                          {notice.title}
+                        </Text>
+                      </View>
+                      <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 3 }}>
                         {new Date(notice.created_at).toLocaleString("ko-KR", {
                           year: "numeric",
                           month: "2-digit",
@@ -358,6 +405,16 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
   },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
   input: {
     borderWidth: 1,
     borderRadius: 10,
@@ -415,7 +472,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 14,
   },
-  noticeCardTitle: { fontSize: 15, fontWeight: "700" },
+  noticeCardTitle: { fontSize: 14, fontWeight: "700" },
   noticeBody: {
     borderTopWidth: 1,
     padding: 14,
