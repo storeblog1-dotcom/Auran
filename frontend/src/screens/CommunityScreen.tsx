@@ -506,7 +506,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
                 >
                   <View style={styles.noticeHeaderRow}>
                     <Ionicons name="megaphone-outline" size={16} color={colors.accentPurple} style={{ marginRight: 8 }} />
-                    <Text style={[styles.noticeTitle, { color: colors.textPrimary }]} numberOfLines={isExpanded ? undefined : 1}>
+                    <Text style={[styles.noticeTitle, { color: colors.textPrimary }]} numberOfLines={1}>
                       {notice.title}
                     </Text>
                     <Ionicons name={isExpanded ? "chevron-up-outline" : "chevron-down-outline"} size={18} color={colors.textSecondary} style={{ marginLeft: 8 }} />
