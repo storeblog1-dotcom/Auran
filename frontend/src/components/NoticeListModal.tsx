@@ -45,6 +45,7 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
       const res = await api.get("/community/notices?notice_type=all");
       const list = res.data?.data || [];
       setNotices(list);
+      // Auto-expand global notice or first notice
       if (list.length > 0 && expandedNoticeIds.length === 0) {
         setExpandedNoticeIds([list[0].id]);
       }
@@ -137,6 +138,111 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
     );
   };
 
+  const globalNotices = notices.filter((n) => n.is_global);
+  const generalNotices = notices.filter((n) => !n.is_global);
+
+  const renderNoticeItem = (notice: any) => {
+    const isExpanded = expandedNoticeIds.includes(notice.id);
+    const isGlobalNotice = Boolean(notice.is_global);
+
+    return (
+      <View
+        key={notice.id}
+        style={[
+          styles.noticeCard,
+          {
+            backgroundColor: isGlobalNotice ? colors.accentPurple + "0d" : colors.bgCard,
+            borderColor: isGlobalNotice ? colors.accentPurple : colors.borderColor,
+            borderWidth: isGlobalNotice ? 2 : 1,
+          },
+        ]}
+      >
+        {/* Header Row */}
+        <TouchableOpacity
+          style={styles.noticeHeaderRow}
+          onPress={() => toggleNotice(notice.id)}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name={isGlobalNotice ? "megaphone" : "sparkles-outline"}
+            size={17}
+            color={isGlobalNotice ? colors.accentPurple : colors.accentBlue}
+            style={{ marginRight: 8 }}
+          />
+          <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <View
+              style={{
+                backgroundColor: isGlobalNotice ? colors.accentPurple : colors.accentBlue + "20",
+                paddingHorizontal: 7,
+                paddingVertical: 2,
+                borderRadius: 5,
+              }}
+            >
+              <Text
+                style={{
+                  color: isGlobalNotice ? "#ffffff" : colors.accentBlue,
+                  fontSize: 10,
+                  fontWeight: "800",
+                }}
+              >
+                {isGlobalNotice ? "📌 전체공지" : "📋 일반공지"}
+              </Text>
+            </View>
+            <Text style={[styles.noticeTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+              {notice.title}
+            </Text>
+          </View>
+          <Ionicons
+            name={isExpanded ? "chevron-up" : "chevron-down"}
+            size={18}
+            color={colors.textSecondary}
+            style={{ marginLeft: 8 }}
+          />
+        </TouchableOpacity>
+
+        {/* Downward Expanded Content */}
+        {isExpanded ? (
+          <View style={[styles.noticeBody, { borderTopColor: colors.borderLight }]}>
+            <HashtagText text={notice.content} style={styles.noticeBodyText} />
+            <Text style={[styles.dateText, { color: colors.textMuted }]}>
+              {new Date(notice.created_at).toLocaleString("ko-KR", {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </Text>
+
+            {/* Admin Action Buttons */}
+            {isAdmin && (
+              <View style={styles.adminActionRow}>
+                <TouchableOpacity
+                  style={[styles.adminActionBtn, { backgroundColor: colors.accentBlue + "15" }]}
+                  onPress={() => handleStartEdit(notice)}
+                >
+                  <Ionicons name="create-outline" size={14} color={colors.accentBlue} />
+                  <Text style={[styles.adminActionText, { color: colors.accentBlue }]}>수정</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.adminActionBtn, { backgroundColor: "#ef444415" }]}
+                  onPress={() => handleDeleteNotice(notice)}
+                >
+                  <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                  <Text style={[styles.adminActionText, { color: "#ef4444" }]}>삭제</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        ) : (
+          <Text style={[styles.snippetText, { color: colors.textMuted }]} numberOfLines={1}>
+            {notice.content.replace(/<[^>]+>/g, "")}
+          </Text>
+        )}
+      </View>
+    );
+  };
+
   return (
     <Modal
       visible={visible}
@@ -179,9 +285,14 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
               </Text>
               
               <View style={[styles.switchRow, { borderColor: colors.borderColor, backgroundColor: colors.bgInput }]}>
-                <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: 13 }}>
-                  {isGlobal ? "📌 전체 공지 (커뮤니티 상단 노출)" : "📋 일반 공지 (공지 목록 전용)"}
-                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: 13 }}>
+                    {isGlobal ? "📌 전체 공지 (상단 고정 - 1개 제한)" : "📋 일반 공지 (목록 노출)"}
+                  </Text>
+                  <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>
+                    {isGlobal ? "※ 전체 공지는 항상 최상단에 고정 표시됩니다." : "※ 일반 공지는 작성일 순으로 아래에 표시됩니다."}
+                  </Text>
+                </View>
                 <Switch
                   value={isGlobal}
                   onValueChange={setIsGlobal}
@@ -233,105 +344,35 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
                 <Text style={[styles.emptyText, { color: colors.textMuted }]}>등록된 공지사항이 없습니다.</Text>
               </View>
             ) : (
-              notices.map((notice) => {
-                const isExpanded = expandedNoticeIds.includes(notice.id);
-                return (
-                  <View
-                    key={notice.id}
-                    style={[
-                      styles.noticeCard,
-                      {
-                        backgroundColor: colors.bgCard,
-                        borderColor: notice.is_global ? colors.accentPurple : colors.borderColor,
-                        borderWidth: notice.is_global ? 1.5 : 1,
-                      },
-                    ]}
-                  >
-                    {/* Header Row - Fixed Height Row */}
-                    <TouchableOpacity
-                      style={styles.noticeHeaderRow}
-                      onPress={() => toggleNotice(notice.id)}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons
-                        name={notice.is_global ? "megaphone-outline" : "sparkles-outline"}
-                        size={17}
-                        color={notice.is_global ? colors.accentPurple : colors.accentBlue}
-                        style={{ marginRight: 8 }}
-                      />
-                      <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <View
-                          style={{
-                            backgroundColor: notice.is_global ? colors.accentPurple + "22" : colors.accentBlue + "18",
-                            paddingHorizontal: 6,
-                            paddingVertical: 2,
-                            borderRadius: 4,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              color: notice.is_global ? colors.accentPurple : colors.accentBlue,
-                              fontSize: 10,
-                              fontWeight: "800",
-                            }}
-                          >
-                            {notice.is_global ? "전체공지" : "일반공지"}
-                          </Text>
-                        </View>
-                        <Text style={[styles.noticeTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-                          {notice.title}
-                        </Text>
-                      </View>
-                      <Ionicons
-                        name={isExpanded ? "chevron-up" : "chevron-down"}
-                        size={18}
-                        color={colors.textSecondary}
-                        style={{ marginLeft: 8 }}
-                      />
-                    </TouchableOpacity>
-
-                    {/* Downward Expanded Content */}
-                    {isExpanded ? (
-                      <View style={[styles.noticeBody, { borderTopColor: colors.borderLight }]}>
-                        <HashtagText text={notice.content} style={styles.noticeBodyText} />
-                        <Text style={[styles.dateText, { color: colors.textMuted }]}>
-                          {new Date(notice.created_at).toLocaleString("ko-KR", {
-                            year: "numeric",
-                            month: "2-digit",
-                            day: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </Text>
-
-                        {/* Admin Action Buttons */}
-                        {isAdmin && (
-                          <View style={styles.adminActionRow}>
-                            <TouchableOpacity
-                              style={[styles.adminActionBtn, { backgroundColor: colors.accentBlue + "15" }]}
-                              onPress={() => handleStartEdit(notice)}
-                            >
-                              <Ionicons name="create-outline" size={14} color={colors.accentBlue} />
-                              <Text style={[styles.adminActionText, { color: colors.accentBlue }]}>수정</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={[styles.adminActionBtn, { backgroundColor: "#ef444415" }]}
-                              onPress={() => handleDeleteNotice(notice)}
-                            >
-                              <Ionicons name="trash-outline" size={14} color="#ef4444" />
-                              <Text style={[styles.adminActionText, { color: "#ef4444" }]}>삭제</Text>
-                            </TouchableOpacity>
-                          </View>
-                        )}
-                      </View>
-                    ) : (
-                      <Text style={[styles.snippetText, { color: colors.textMuted }]} numberOfLines={1}>
-                        {notice.content.replace(/<[^>]+>/g, "")}
+              <>
+                {/* 1. 全體 (Global) Notices Section - Always Top Priority */}
+                {globalNotices.length > 0 && (
+                  <View style={styles.sectionContainer}>
+                    <View style={styles.sectionTitleRow}>
+                      <Ionicons name="megaphone" size={16} color={colors.accentPurple} />
+                      <Text style={[styles.sectionTitleText, { color: colors.accentPurple }]}>
+                        전체 공지 (상단 고정)
                       </Text>
-                    )}
+                    </View>
+                    {globalNotices.map(renderNoticeItem)}
                   </View>
-                );
-              })
+                )}
+
+                {/* 2. 一般 (General) Notices Section */}
+                {generalNotices.length > 0 && (
+                  <View style={styles.sectionContainer}>
+                    {globalNotices.length > 0 && (
+                      <View style={styles.sectionTitleRow}>
+                        <Ionicons name="list-outline" size={16} color={colors.accentBlue} />
+                        <Text style={[styles.sectionTitleText, { color: colors.textPrimary }]}>
+                          일반 공지 목록
+                        </Text>
+                      </View>
+                    )}
+                    {generalNotices.map(renderNoticeItem)}
+                  </View>
+                )}
+              </>
             )}
           </ScrollView>
         </View>
@@ -347,7 +388,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalCard: {
-    height: "82%",
+    height: "85%",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderWidth: 1,
@@ -405,7 +446,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 8,
     marginBottom: 10,
   },
   input: {
@@ -450,6 +491,19 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
     paddingBottom: 40,
+  },
+  sectionContainer: {
+    marginBottom: 14,
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 10,
+  },
+  sectionTitleText: {
+    fontSize: 14,
+    fontWeight: "800",
   },
   emptyBox: {
     paddingVertical: 60,
