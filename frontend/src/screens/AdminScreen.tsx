@@ -815,6 +815,18 @@ export const AdminScreen = ({ navigation }: any) => {
                     </View>
                     <Text style={[styles.fullNameText, { color: colors.textMuted }]}>{item.full_name}</Text>
                     <Text style={[styles.emailText, { color: colors.textMuted }]}>{item.email}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                      <View style={[styles.statusBadge, { backgroundColor: "rgba(168, 85, 247, 0.12)" }]}>
+                        <Text style={{ color: primaryAccent, fontSize: 11, fontWeight: "bold" }}>
+                          🖼️ 게시물 {item.posts_count ?? 0}개
+                        </Text>
+                      </View>
+                      <View style={[styles.statusBadge, { backgroundColor: "rgba(59, 130, 246, 0.12)" }]}>
+                        <Text style={{ color: "#3b82f6", fontSize: 11, fontWeight: "bold" }}>
+                          💬 댓글 {item.comments_count ?? 0}개
+                        </Text>
+                      </View>
+                    </View>
                     {item.withdrawal_status === "pending" && item.withdrawal_cancelable_until && (
                       <Text style={[styles.emailText, { color: "#f59e0b" }]}>
                         취소 가능: {new Date(item.withdrawal_cancelable_until).toLocaleString("ko-KR")}
