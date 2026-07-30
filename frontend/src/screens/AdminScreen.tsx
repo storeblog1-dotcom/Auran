@@ -466,6 +466,24 @@ export const AdminScreen = ({ navigation }: any) => {
     contentType: "post" | "comment",
   ) => {
     const historyKey = `${contentType}:${content.id}`;
+    const mediaUrl =
+      content.media?.[0]?.media_url ||
+      content.media?.[0]?.url ||
+      content.media_manifest?.[0]?.media_url ||
+      content.image_url ||
+      content.url ||
+      null;
+    const dateText = content.latest_event_at || content.created_at;
+    const formattedDate = dateText
+      ? new Date(dateText).toLocaleString("ko-KR", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "시간 기록 없음";
+
     return (
       <View key={historyKey}>
         <TouchableOpacity
@@ -477,24 +495,40 @@ export const AdminScreen = ({ navigation }: any) => {
           style={[styles.activityContentRow, { borderColor: colors.borderColor }]}
         >
           <View style={{ flex: 1 }}>
-            <Text style={{ color: primaryAccent, fontWeight: "700" }}>
-              [{content.content_type}] [{content.board_label}] {content.content_number}
-            </Text>
-            <Text
-              numberOfLines={3}
-              style={{ color: colors.textPrimary, marginTop: 3 }}
-            >
-              {content.display_text || "(내용 없음)"}
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <Text style={{ color: primaryAccent, fontWeight: "700", fontSize: 12 }}>
+                [{content.content_type || (contentType === "post" ? "게시물" : "댓글")}] [{content.board_label || "피드"}] {content.content_number || ""}
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 4 }}>
+              <View style={{ flex: 1 }}>
+                {contentType === "post" && !!content.title && (
+                  <Text style={{ color: colors.textPrimary, fontWeight: "bold", fontSize: 13, marginBottom: 2 }} numberOfLines={1}>
+                    {content.title}
+                  </Text>
+                )}
+                <Text
+                  numberOfLines={3}
+                  style={{ color: colors.textPrimary, fontSize: 12, lineHeight: 17 }}
+                >
+                  {content.content || content.display_text || content.caption || "(내용 없음)"}
+                </Text>
+              </View>
+
+              {!!mediaUrl && (
+                <Image
+                  source={{ uri: getFullImageUrl(mediaUrl) }}
+                  style={{ width: 56, height: 56, borderRadius: 8 }}
+                  resizeMode="cover"
+                />
+              )}
+            </View>
+
             <Text style={{ color: colors.textMuted, marginTop: 6, fontSize: 11 }}>
-              최근 행위: {content.latest_event_type || "기록 없음"}
-              {" · "}IP {content.latest_event_ip || "기록 없음"}
+              최근 행위: {content.latest_event_type || "기록 없음"} · IP {content.latest_event_ip || "기록 없음"} · {formattedDate}
             </Text>
-            <Text style={{ color: colors.textMuted, marginTop: 2, fontSize: 11 }}>
-              {content.latest_event_at
-                ? new Date(content.latest_event_at).toLocaleString()
-                : "시간 기록 없음"}
-            </Text>
+
             <TouchableOpacity
               onPress={(event) => {
                 event.stopPropagation();
@@ -725,6 +759,10 @@ export const AdminScreen = ({ navigation }: any) => {
 
       {activeTab === "users" && (
         <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12 }}>
+          <View style={styles.subnavRow}>
+            <TouchableOpacity onPress={() => setActiveTab("users")} style={[styles.subnavButton, { borderColor: primaryAccent, backgroundColor: `${primaryAccent}18` }]}><Text style={{ color: primaryAccent, fontWeight: "700" }}>회원 목록</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setActiveTab("activity")} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>활동·보존 이력</Text></TouchableOpacity>
+          </View>
           {/* Search Box */}
           <View style={[styles.searchContainer, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
             <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
@@ -1020,6 +1058,42 @@ export const AdminScreen = ({ navigation }: any) => {
               )}
             />
           )}
+        </View>
+      )}
+
+      {activeTab === "activity" && (
+        <View style={{ flex: 1, padding: 16 }}>
+          <View style={styles.subnavRow}>
+            <TouchableOpacity onPress={() => setActiveTab("users")} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>회원 목록</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setActiveTab("activity")} style={[styles.subnavButton, { borderColor: primaryAccent, backgroundColor: `${primaryAccent}18` }]}><Text style={{ color: primaryAccent, fontWeight: "700" }}>활동·보존 이력</Text></TouchableOpacity>
+          </View>
+          <View style={styles.activitySearchRow}>
+            <View style={[styles.searchContainer, styles.activitySearchContainer, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+              <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
+              <TextInput value={activityQuery} onChangeText={setActivityQuery} placeholder="아이디 또는 닉네임 검색" placeholderTextColor={colors.textMuted} style={[styles.searchInput, { color: colors.textPrimary }]} />
+            </View>
+            <TouchableOpacity onPress={() => loadActivity(activityQuery)} style={[styles.activitySearchButton, { backgroundColor: primaryAccent }]}>
+              <Text style={{ color: "white", fontWeight: "bold" }}>검색</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={activityUsers}
+            keyExtractor={(item) => item.user_id}
+            contentContainerStyle={{ paddingTop: 12 }}
+            ListEmptyComponent={<Text style={{ color: colors.textMuted, textAlign: "center", marginTop: 24 }}>표시할 사용자 활동 기록이 없습니다.</Text>}
+            ListFooterComponent={
+              activityLoadingMore
+                ? <ActivityIndicator style={{ marginVertical: 14 }} color={primaryAccent} />
+                : null
+            }
+            onEndReachedThreshold={0.35}
+            onEndReached={() => {
+              if (!activityLoadingMore && activityUsers.length < totalActivityUsers) {
+                loadActivity(activityQuery, activityPage + 1, true);
+              }
+            }}
+            renderItem={renderActivityUser}
+          />
         </View>
       )}
 
