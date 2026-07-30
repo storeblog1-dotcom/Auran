@@ -850,7 +850,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   sectionTabs: {
-    maxHeight: 46,
+    height: 48,
   },
   sectionTabsContent: {
     flexDirection: "row",
@@ -858,13 +858,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   sectionTab: {
-    paddingVertical: 12,
+    height: 48,
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 20,
     position: "relative",
+    paddingBottom: 4,
   },
   sectionTabText: {
     fontSize: 15,
     fontWeight: "700",
+    includeFontPadding: false,
+    textAlignVertical: "center",
   },
   sectionIndicator: {
     position: "absolute",
