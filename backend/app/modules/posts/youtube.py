@@ -14,6 +14,7 @@ VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 WATCH_HOSTS = {"youtube.com", "www.youtube.com"}
 SHORT_HOSTS = {"youtu.be", "www.youtu.be"}
 YOUTUBE_VIDEOS_API = "https://www.googleapis.com/youtube/v3/videos"
+YOUTUBE_SEARCH_API = "https://www.googleapis.com/youtube/v3/search"
 
 
 @dataclass(frozen=True)
@@ -69,12 +70,22 @@ async def verify_youtube_watch_url(raw_url: str) -> VerifiedYouTubeVideo:
         raise BadRequestException("YouTube 안전 검증을 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.")
 
     try:
-        async with httpx.AsyncClient(timeout=6.0) as client:
+        async with httpx.AsyncClient(timeout=8.0) as client:
             response = await client.get(
                 YOUTUBE_VIDEOS_API,
                 params={
                     "part": "snippet,contentDetails,status",
                     "id": video_id,
+                    "key": settings.youtube_data_api_key,
+                },
+            )
+            search_response = await client.get(
+                YOUTUBE_SEARCH_API,
+                params={
+                    "part": "id",
+                    "q": video_id,
+                    "type": "video",
+                    "safeSearch": "strict",
                     "key": settings.youtube_data_api_key,
                 },
             )
@@ -96,6 +107,15 @@ async def verify_youtube_watch_url(raw_url: str) -> VerifiedYouTubeVideo:
         raise BadRequestException("외부 재생이 허용되지 않은 YouTube 영상입니다.")
     if _has_explicit_age_restriction(video.get("contentDetails") or {}):
         raise BadRequestException("연령 제한 또는 성인 등급이 있는 YouTube 영상은 등록할 수 없습니다.")
+
+    # ── SafeSearch=strict 2차 검증 ─────────────────────────────────────────────
+    if search_response.status_code == 200:
+        search_items = search_response.json().get("items") or []
+        found_in_safesearch = any(
+            item.get("id", {}).get("videoId") == video_id for item in search_items
+        )
+        if not found_in_safesearch:
+            raise BadRequestException("YouTube SafeSearch(안전 모드) 검증을 통과하지 못한 영상입니다.")
 
     snippet = video.get("snippet") or {}
     thumbnails = snippet.get("thumbnails") or {}
