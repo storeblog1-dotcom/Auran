@@ -30,6 +30,8 @@ interface AdminUserActivityModalProps {
   user: AdminUserItem | null;
   onClose: () => void;
   onUserUpdated?: () => void;
+  onOpenPost?: (postId: string, boardLabel?: string | null, auditContext?: AdminPostAuditContext | null) => void;
+  onOpenRevision?: (revisionId: string) => void;
 }
 
 type ModalTab = "overview" | "posts" | "comments" | "reports";
@@ -39,6 +41,8 @@ export const AdminUserActivityModal: React.FC<AdminUserActivityModalProps> = ({
   user,
   onClose,
   onUserUpdated,
+  onOpenPost,
+  onOpenRevision,
 }) => {
   const { colors, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<ModalTab>("overview");
@@ -126,8 +130,12 @@ export const AdminUserActivityModal: React.FC<AdminUserActivityModalProps> = ({
         Alert.alert("알림", "보존된 상세 버전을 찾을 수 없습니다.");
         return;
       }
-      setSelectedRevisionId(item.revision_id);
-      setRevisionModalVisible(true);
+      if (onOpenRevision) {
+        onOpenRevision(item.revision_id);
+      } else {
+        setSelectedRevisionId(item.revision_id);
+        setRevisionModalVisible(true);
+      }
       return;
     }
     const postId = contentType === "post" ? item.id : item.post_id;
@@ -135,16 +143,22 @@ export const AdminUserActivityModal: React.FC<AdminUserActivityModalProps> = ({
       Alert.alert("알림", "연결된 원 게시물을 찾을 수 없습니다.");
       return;
     }
-    setSelectedPostId(postId);
-    setSelectedPostBoardLabel(item.board_name || item.board_type || null);
-    setSelectedPostAuditContext({
+    const boardLabel = item.board_name || item.board_type || null;
+    const auditContext = {
       contentNumber: item.content_number || (item.display_number ? `P-${String(item.display_number).padStart(6, "0")}` : null),
       contentType: item.content_type || (contentType === "post" ? "게시물" : "댓글"),
       eventType: item.deleted ? "deleted" : "active",
       eventIp: null,
       eventAt: item.created_at,
-    });
-    setPostDetailModalVisible(true);
+    };
+    if (onOpenPost) {
+      onOpenPost(postId, boardLabel, auditContext);
+    } else {
+      setSelectedPostId(postId);
+      setSelectedPostBoardLabel(boardLabel);
+      setSelectedPostAuditContext(auditContext);
+      setPostDetailModalVisible(true);
+    }
   };
 
   const formatDateTime = (dateStr?: string | null) => {
