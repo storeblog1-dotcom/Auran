@@ -56,23 +56,22 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
 
   const isNoticeGlobal = (n: any) => Boolean(n.is_global && !n.board_id);
 
-  let rawGlobal = notices.filter(isNoticeGlobal);
+  let globalNotices = notices
+    .filter(isNoticeGlobal)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  let generalNotices = notices
+    .filter((n) => !isNoticeGlobal(n))
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   // Fallback: If DB is_global flag is not set yet, set the 1st main notice as Global Notice
-  if (rawGlobal.length === 0 && notices.length > 0) {
+  if (globalNotices.length === 0 && notices.length > 0) {
     const mainNotice = notices.find((n) => !n.board_id) || notices[0];
     if (mainNotice) {
-      rawGlobal = [mainNotice];
+      globalNotices = [mainNotice];
+      generalNotices = notices.filter((n) => n.id !== mainNotice.id);
     }
   }
-
-  // Global notice section displays the latest 1 overall notice at the top
-  const globalNotices = rawGlobal.slice(0, 1);
-
-  // General notice list section includes all other notices (including previous overall notices), excluding current top overall notice, sorted by created_at desc
-  const generalNotices = notices
-    .filter((n) => !globalNotices.some((g) => g.id === n.id))
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const renderNoticeItem = (notice: any, keyPrefix = "item") => {
     const isExpanded = expandedNoticeIds.includes(notice.id);
@@ -193,7 +192,7 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
                     <View style={styles.sectionTitleRow}>
                       <Ionicons name="megaphone-outline" size={16} color={colors.accentPurple} />
                       <Text style={[styles.sectionTitleText, { color: colors.accentPurple }]}>
-                        전체 공지 (상단 고정)
+                        전체 공지 목록
                       </Text>
                     </View>
                     {globalNotices.map((n) => renderNoticeItem(n, "global"))}
