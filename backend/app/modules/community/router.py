@@ -141,6 +141,8 @@ async def create_notice(body: NoticeCreateRequest, current_user: User = Depends(
 
 
 @router.patch("/admin/notices/{notice_id}", response_model=ApiResponse[NoticeResponse])
+@router.put("/admin/notices/{notice_id}", response_model=ApiResponse[NoticeResponse])
+@router.post("/admin/notices/{notice_id}", response_model=ApiResponse[NoticeResponse])
 async def update_notice(notice_id: UUID, body: NoticeUpdateRequest, current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
     require_admin(current_user)
     stmt = select(CommunityNotice).where(CommunityNotice.id == notice_id, CommunityNotice.is_active.is_(True))
@@ -160,6 +162,7 @@ async def update_notice(notice_id: UUID, body: NoticeUpdateRequest, current_user
 
 
 @router.delete("/admin/notices/{notice_id}", response_model=ApiResponse[dict])
+@router.post("/admin/notices/{notice_id}/delete", response_model=ApiResponse[dict])
 async def delete_notice(notice_id: UUID, current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
     require_admin(current_user)
     stmt = select(CommunityNotice).where(CommunityNotice.id == notice_id, CommunityNotice.is_active.is_(True))
