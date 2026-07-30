@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -8,6 +8,8 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,6 +18,8 @@ import { useTheme } from "../context/ThemeContext";
 
 export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
+
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const [notices, setNotices] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -68,6 +72,10 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
     if (!expandedNoticeIds.includes(notice.id)) {
       setExpandedNoticeIds((prev) => [...prev, notice.id]);
     }
+    // Auto-scroll smoothly to top form card for easy editing
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    }, 50);
   };
 
   const handleSaveNotice = async () => {
@@ -139,143 +147,176 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {/* Form Card */}
-        <View style={[styles.formCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
-          <View style={styles.formHeader}>
-            <Ionicons name={editingNotice ? "create-outline" : "add-circle-outline"} size={20} color={colors.accentPurple} />
-            <Text style={[styles.formTitle, { color: colors.textPrimary }]}>
-              {editingNotice ? "전체 공지 수정" : "새 전체 공지 작성"}
-            </Text>
-          </View>
-
-          <TextInput
-            style={[styles.input, { color: colors.textPrimary, borderColor: colors.borderColor, backgroundColor: colors.bgInput }]}
-            placeholder="공지 제목"
-            placeholderTextColor={colors.textMuted}
-            value={noticeTitle}
-            onChangeText={setNoticeTitle}
-          />
-          <TextInput
-            style={[styles.input, styles.contentInput, { color: colors.textPrimary, borderColor: colors.borderColor, backgroundColor: colors.bgInput }]}
-            placeholder="모든 게시판 상단에 표시할 공지 내용을 입력하세요."
-            placeholderTextColor={colors.textMuted}
-            value={noticeContent}
-            onChangeText={setNoticeContent}
-            multiline
-          />
-
-          <View style={styles.formBtnRow}>
-            {editingNotice && (
-              <TouchableOpacity
-                style={[styles.cancelBtn, { borderColor: colors.borderColor }]}
-                onPress={resetForm}
-              >
-                <Text style={{ color: colors.textSecondary, fontWeight: "700" }}>취소</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={[styles.saveBtn, { backgroundColor: colors.accentPurple, flex: 1 }]}
-              onPress={handleSaveNotice}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.saveBtnText}>{editingNotice ? "수정 저장" : "전체 공지 등록"}</Text>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          ref={scrollViewRef}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          scrollEnabled={true}
+          showsVerticalScrollIndicator={true}
+        >
+          {/* Form Card */}
+          <View
+            style={[
+              styles.formCard,
+              {
+                backgroundColor: colors.bgCard,
+                borderColor: editingNotice ? colors.accentPurple : colors.borderColor,
+                borderWidth: editingNotice ? 2 : 1,
+              },
+            ]}
+          >
+            <View style={styles.formHeader}>
+              <Ionicons name={editingNotice ? "create-outline" : "add-circle-outline"} size={20} color={colors.accentPurple} />
+              <Text style={[styles.formTitle, { color: colors.textPrimary }]}>
+                {editingNotice ? "전체 공지 수정" : "새 전체 공지 작성"}
+              </Text>
+              {editingNotice && (
+                <View style={styles.editingTag}>
+                  <Text style={styles.editingTagText}>수정 모드</Text>
+                </View>
               )}
-            </TouchableOpacity>
-          </View>
-        </View>
+            </View>
 
-        {/* Notices Section Header */}
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>등록된 전체 공지 목록</Text>
-          <Text style={{ color: colors.textMuted, fontSize: 13 }}>총 {notices.length}건</Text>
-        </View>
+            <TextInput
+              style={[styles.input, { color: colors.textPrimary, borderColor: colors.borderColor, backgroundColor: colors.bgInput }]}
+              placeholder="공지 제목"
+              placeholderTextColor={colors.textMuted}
+              value={noticeTitle}
+              onChangeText={setNoticeTitle}
+            />
+            <TextInput
+              style={[styles.input, styles.contentInput, { color: colors.textPrimary, borderColor: colors.borderColor, backgroundColor: colors.bgInput }]}
+              placeholder="모든 게시판 상단에 표시할 공지 내용을 입력하세요."
+              placeholderTextColor={colors.textMuted}
+              value={noticeContent}
+              onChangeText={setNoticeContent}
+              multiline
+              scrollEnabled={false}
+            />
 
-        {loading ? (
-          <ActivityIndicator size="large" color={colors.accentPurple} style={{ marginVertical: 30 }} />
-        ) : notices.length === 0 ? (
-          <View style={[styles.emptyBox, { borderColor: colors.borderColor, backgroundColor: colors.bgCard }]}>
-            <Ionicons name="megaphone-outline" size={36} color={colors.textMuted} />
-            <Text style={{ color: colors.textMuted, marginTop: 8 }}>등록된 전체 공지가 없습니다.</Text>
-          </View>
-        ) : (
-          notices.map((notice) => {
-            const isExpanded = expandedNoticeIds.includes(notice.id);
-            const isEditingThis = editingNotice?.id === notice.id;
-
-            return (
-              <View
-                key={notice.id}
-                style={[
-                  styles.noticeCard,
-                  {
-                    backgroundColor: colors.bgCard,
-                    borderColor: isEditingThis ? colors.accentPurple : colors.borderColor,
-                    borderWidth: isEditingThis ? 2 : 1,
-                  },
-                ]}
-              >
-                {/* Notice Card Header */}
+            <View style={styles.formBtnRow}>
+              {editingNotice && (
                 <TouchableOpacity
-                  style={styles.noticeHeaderRow}
-                  onPress={() => toggleNotice(notice.id)}
-                  activeOpacity={0.8}
+                  style={[styles.cancelBtn, { borderColor: colors.borderColor }]}
+                  onPress={resetForm}
                 >
-                  <Ionicons name="megaphone-outline" size={18} color={colors.accentPurple} style={{ marginRight: 10 }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.noticeCardTitle, { color: colors.textPrimary }]}>{notice.title}</Text>
-                    <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>
-                      {new Date(notice.created_at).toLocaleString("ko-KR", {
-                        year: "numeric",
-                        month: "2-digit",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </Text>
-                  </View>
-                  <Ionicons
-                    name={isExpanded ? "chevron-up" : "chevron-down"}
-                    size={20}
-                    color={colors.textSecondary}
-                  />
+                  <Text style={{ color: colors.textSecondary, fontWeight: "700" }}>취소</Text>
                 </TouchableOpacity>
-
-                {/* Notice Collapsible Content */}
-                {isExpanded && (
-                  <View style={[styles.noticeBody, { borderTopColor: colors.borderColor }]}>
-                    <Text style={[styles.noticeContentText, { color: colors.textPrimary }]}>
-                      {notice.content}
-                    </Text>
-
-                    {/* Action Buttons */}
-                    <View style={styles.actionRow}>
-                      <TouchableOpacity
-                        style={[styles.actionBtn, { backgroundColor: colors.accentBlue + "15" }]}
-                        onPress={() => startEdit(notice)}
-                      >
-                        <Ionicons name="create-outline" size={15} color={colors.accentBlue} />
-                        <Text style={[styles.actionBtnText, { color: colors.accentBlue }]}>수정</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[styles.actionBtn, { backgroundColor: "#ef444415" }]}
-                        onPress={() => handleDeleteNotice(notice)}
-                      >
-                        <Ionicons name="trash-outline" size={15} color="#ef4444" />
-                        <Text style={[styles.actionBtnText, { color: "#ef4444" }]}>삭제</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+              )}
+              <TouchableOpacity
+                style={[styles.saveBtn, { backgroundColor: colors.accentPurple, flex: 1 }]}
+                onPress={handleSaveNotice}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.saveBtnText}>{editingNotice ? "수정 저장" : "전체 공지 등록"}</Text>
                 )}
-              </View>
-            );
-          })
-        )}
-      </ScrollView>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Notices Section Header */}
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>등록된 전체 공지 목록</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 13 }}>총 {notices.length}건</Text>
+          </View>
+
+          {loading ? (
+            <ActivityIndicator size="large" color={colors.accentPurple} style={{ marginVertical: 30 }} />
+          ) : notices.length === 0 ? (
+            <View style={[styles.emptyBox, { borderColor: colors.borderColor, backgroundColor: colors.bgCard }]}>
+              <Ionicons name="megaphone-outline" size={36} color={colors.textMuted} />
+              <Text style={{ color: colors.textMuted, marginTop: 8 }}>등록된 전체 공지가 없습니다.</Text>
+            </View>
+          ) : (
+            notices.map((notice) => {
+              const isExpanded = expandedNoticeIds.includes(notice.id);
+              const isEditingThis = editingNotice?.id === notice.id;
+
+              return (
+                <View
+                  key={notice.id}
+                  style={[
+                    styles.noticeCard,
+                    {
+                      backgroundColor: colors.bgCard,
+                      borderColor: isEditingThis ? colors.accentPurple : colors.borderColor,
+                      borderWidth: isEditingThis ? 2 : 1,
+                    },
+                  ]}
+                >
+                  {/* Notice Card Header */}
+                  <TouchableOpacity
+                    style={styles.noticeHeaderRow}
+                    onPress={() => toggleNotice(notice.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="megaphone-outline" size={18} color={colors.accentPurple} style={{ marginRight: 10 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.noticeCardTitle, { color: colors.textPrimary }]}>{notice.title}</Text>
+                      <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>
+                        {new Date(notice.created_at).toLocaleString("ko-KR", {
+                          year: "numeric",
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </Text>
+                    </View>
+                    {isEditingThis && (
+                      <Text style={{ color: colors.accentPurple, fontSize: 12, fontWeight: "700", marginRight: 8 }}>
+                        수정 중...
+                      </Text>
+                    )}
+                    <Ionicons
+                      name={isExpanded ? "chevron-up" : "chevron-down"}
+                      size={20}
+                      color={colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+
+                  {/* Notice Collapsible Content */}
+                  {isExpanded && (
+                    <View style={[styles.noticeBody, { borderTopColor: colors.borderColor }]}>
+                      <Text style={[styles.noticeContentText, { color: colors.textPrimary }]}>
+                        {notice.content}
+                      </Text>
+
+                      {/* Action Buttons */}
+                      <View style={styles.actionRow}>
+                        <TouchableOpacity
+                          style={[styles.actionBtn, { backgroundColor: colors.accentBlue + "15" }]}
+                          onPress={() => startEdit(notice)}
+                        >
+                          <Ionicons name="create-outline" size={15} color={colors.accentBlue} />
+                          <Text style={[styles.actionBtnText, { color: colors.accentBlue }]}>
+                            {isEditingThis ? "상단 양식에서 수정 중" : "수정"}
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.actionBtn, { backgroundColor: "#ef444415" }]}
+                          onPress={() => handleDeleteNotice(notice)}
+                        >
+                          <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                          <Text style={[styles.actionBtnText, { color: "#ef4444" }]}>삭제</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              );
+            })
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -291,7 +332,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   title: { fontSize: 17, fontWeight: "800" },
-  content: { padding: 16, paddingBottom: 50 },
+  content: { padding: 16, paddingBottom: 60 },
   formCard: {
     borderWidth: 1,
     borderRadius: 14,
@@ -305,6 +346,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   formTitle: { fontSize: 15, fontWeight: "800" },
+  editingTag: {
+    backgroundColor: "#a855f720",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: "auto",
+  },
+  editingTagText: {
+    color: "#a855f7",
+    fontSize: 11,
+    fontWeight: "700",
+  },
   input: {
     borderWidth: 1,
     borderRadius: 10,
