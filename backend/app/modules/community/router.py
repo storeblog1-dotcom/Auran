@@ -36,11 +36,10 @@ async def list_notices(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    stmt = select(CommunityNotice).where(CommunityNotice.is_active.is_(True)).order_by(CommunityNotice.is_global.desc(), CommunityNotice.created_at.desc())
     if notice_type == "global":
-        stmt = stmt.where(CommunityNotice.is_global.is_(True))
-    elif notice_type == "general":
-        stmt = stmt.where(CommunityNotice.is_global.is_(False))
+        stmt = select(CommunityNotice).where(CommunityNotice.is_active.is_(True), CommunityNotice.is_global.is_(True)).order_by(CommunityNotice.created_at.desc())
+    else:
+        stmt = select(CommunityNotice).where(CommunityNotice.is_active.is_(True)).order_by(CommunityNotice.created_at.desc())
 
     result = await db.execute(stmt)
     notices = [n for n in result.scalars().all() if n.board_id is None or n.board_id == board_id]
@@ -143,11 +142,11 @@ async def create_notice(body: NoticeCreateRequest, current_user: User = Depends(
     require_admin(current_user)
     from sqlalchemy import update
     if body.is_global:
-        # Enforce max 1 active global notice: deactivate existing active global notices
+        # Convert previous global notices to general notices (is_global = False)
         await db.execute(
             update(CommunityNotice)
-            .where(CommunityNotice.is_global.is_(True), CommunityNotice.is_active.is_(True))
-            .values(is_active=False)
+            .where(CommunityNotice.is_global.is_(True))
+            .values(is_global=False)
         )
     notice = CommunityNotice(**body.model_dump())
     db.add(notice)
@@ -171,8 +170,8 @@ async def update_notice(notice_id: UUID, body: NoticeUpdateRequest, current_user
     if body.is_global is True:
         await db.execute(
             update(CommunityNotice)
-            .where(CommunityNotice.is_global.is_(True), CommunityNotice.is_active.is_(True), CommunityNotice.id != notice_id)
-            .values(is_active=False)
+            .where(CommunityNotice.is_global.is_(True), CommunityNotice.id != notice_id)
+            .values(is_global=False)
         )
         notice.is_global = True
     elif body.is_global is False:

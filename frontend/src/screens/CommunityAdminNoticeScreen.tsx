@@ -37,7 +37,9 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
     setLoading(true);
     try {
       const res = await api.get("/community/admin/notices");
-      const list = res.data?.data || [];
+      const list = (res.data?.data || []).sort(
+        (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
       setNotices(list);
       if (list.length > 0 && expandedNoticeIds.length === 0) {
         setExpandedNoticeIds([list[0].id]);
