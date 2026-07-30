@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   TextInput,
+  Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../services/api";
@@ -35,19 +36,20 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
   const [editingNotice, setEditingNotice] = useState<any | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [isGlobal, setIsGlobal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchGeneralNotices = useCallback(async () => {
+  const fetchNotices = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get("/community/notices?notice_type=general");
+      const res = await api.get("/community/notices?notice_type=all");
       const list = res.data?.data || [];
       setNotices(list);
       if (list.length > 0 && expandedNoticeIds.length === 0) {
         setExpandedNoticeIds([list[0].id]);
       }
     } catch (err: any) {
-      console.log("Error fetching general notices", err);
+      console.log("Error fetching notices", err);
     } finally {
       setLoading(false);
     }
@@ -55,9 +57,9 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
 
   useEffect(() => {
     if (visible) {
-      fetchGeneralNotices();
+      fetchNotices();
     }
-  }, [visible, fetchGeneralNotices]);
+  }, [visible, fetchNotices]);
 
   const toggleNotice = (id: string) => {
     setExpandedNoticeIds((prev) =>
@@ -70,12 +72,14 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
     setEditingNotice(null);
     setTitle("");
     setContent("");
+    setIsGlobal(false);
   };
 
   const handleStartEdit = (notice: any) => {
     setEditingNotice(notice);
     setTitle(notice.title);
     setContent(notice.content);
+    setIsGlobal(Boolean(notice.is_global));
     setShowForm(true);
   };
 
@@ -90,19 +94,19 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
         await api.patch(`/community/admin/notices/${editingNotice.id}`, {
           title: title.trim(),
           content: content.trim(),
-          is_global: false,
+          is_global: isGlobal,
         });
         Alert.alert("성공", "공지사항이 수정되었습니다.");
       } else {
         await api.post("/community/admin/notices", {
           title: title.trim(),
           content: content.trim(),
-          is_global: false,
+          is_global: isGlobal,
         });
-        Alert.alert("성공", "일반 공지가 등록되었습니다.");
+        Alert.alert("성공", isGlobal ? "전체 공지가 등록되었습니다." : "일반 공지가 등록되었습니다.");
       }
       resetForm();
-      fetchGeneralNotices();
+      fetchNotices();
     } catch (err: any) {
       Alert.alert("오류", err.response?.data?.detail || "공지 저장에 실패했습니다.");
     } finally {
@@ -123,7 +127,7 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
             try {
               await api.delete(`/community/admin/notices/${notice.id}`);
               Alert.alert("완료", "공지가 삭제되었습니다.");
-              fetchGeneralNotices();
+              fetchNotices();
             } catch (err: any) {
               Alert.alert("오류", err.response?.data?.detail || "공지 삭제에 실패했습니다.");
             }
@@ -145,8 +149,8 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
           {/* Header */}
           <View style={[styles.modalHeader, { borderBottomColor: colors.borderLight }]}>
             <View style={styles.headerTitleGroup}>
-              <Ionicons name="notifications-outline" size={22} color={colors.accentPurple} />
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>공지사항</Text>
+              <Ionicons name="megaphone-outline" size={22} color={colors.accentPurple} />
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>공지사항 목록</Text>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
               {isAdmin && !showForm && (
@@ -171,8 +175,20 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
           {showForm && (
             <View style={[styles.formContainer, { backgroundColor: colors.bgCard, borderColor: colors.accentPurple }]}>
               <Text style={[styles.formTitle, { color: colors.textPrimary }]}>
-                {editingNotice ? "일반 공지 수정" : "새 일반 공지 작성"}
+                {editingNotice ? "공지사항 수정" : "새 공지사항 작성"}
               </Text>
+              
+              <View style={[styles.switchRow, { borderColor: colors.borderColor, backgroundColor: colors.bgInput }]}>
+                <Text style={{ color: colors.textPrimary, fontWeight: "700", fontSize: 13 }}>
+                  {isGlobal ? "📌 전체 공지 (커뮤니티 상단 노출)" : "📋 일반 공지 (공지 목록 전용)"}
+                </Text>
+                <Switch
+                  value={isGlobal}
+                  onValueChange={setIsGlobal}
+                  trackColor={{ false: colors.borderColor, true: colors.accentPurple }}
+                />
+              </View>
+
               <TextInput
                 style={[styles.input, { color: colors.textPrimary, borderColor: colors.borderColor, backgroundColor: colors.bgInput }]}
                 placeholder="공지 제목"
@@ -224,19 +240,48 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
                     key={notice.id}
                     style={[
                       styles.noticeCard,
-                      { backgroundColor: colors.bgCard, borderColor: colors.borderColor },
+                      {
+                        backgroundColor: colors.bgCard,
+                        borderColor: notice.is_global ? colors.accentPurple : colors.borderColor,
+                        borderWidth: notice.is_global ? 1.5 : 1,
+                      },
                     ]}
                   >
-                    {/* Header Row */}
+                    {/* Header Row - Fixed Height Row */}
                     <TouchableOpacity
                       style={styles.noticeHeaderRow}
                       onPress={() => toggleNotice(notice.id)}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name="sparkles-outline" size={16} color={colors.accentPurple} style={{ marginRight: 8 }} />
-                      <Text style={[styles.noticeTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-                        {notice.title}
-                      </Text>
+                      <Ionicons
+                        name={notice.is_global ? "megaphone-outline" : "sparkles-outline"}
+                        size={17}
+                        color={notice.is_global ? colors.accentPurple : colors.accentBlue}
+                        style={{ marginRight: 8 }}
+                      />
+                      <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <View
+                          style={{
+                            backgroundColor: notice.is_global ? colors.accentPurple + "22" : colors.accentBlue + "18",
+                            paddingHorizontal: 6,
+                            paddingVertical: 2,
+                            borderRadius: 4,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: notice.is_global ? colors.accentPurple : colors.accentBlue,
+                              fontSize: 10,
+                              fontWeight: "800",
+                            }}
+                          >
+                            {notice.is_global ? "전체공지" : "일반공지"}
+                          </Text>
+                        </View>
+                        <Text style={[styles.noticeTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                          {notice.title}
+                        </Text>
+                      </View>
                       <Ionicons
                         name={isExpanded ? "chevron-up" : "chevron-down"}
                         size={18}
@@ -246,7 +291,7 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
                     </TouchableOpacity>
 
                     {/* Downward Expanded Content */}
-                    {isExpanded && (
+                    {isExpanded ? (
                       <View style={[styles.noticeBody, { borderTopColor: colors.borderLight }]}>
                         <HashtagText text={notice.content} style={styles.noticeBodyText} />
                         <Text style={[styles.dateText, { color: colors.textMuted }]}>
@@ -279,6 +324,10 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
                           </View>
                         )}
                       </View>
+                    ) : (
+                      <Text style={[styles.snippetText, { color: colors.textMuted }]} numberOfLines={1}>
+                        {notice.content.replace(/<[^>]+>/g, "")}
+                      </Text>
                     )}
                   </View>
                 );
@@ -349,6 +398,16 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginBottom: 10,
   },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 10,
+  },
   input: {
     borderWidth: 1,
     borderRadius: 8,
@@ -416,6 +475,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     flex: 1,
+  },
+  snippetText: {
+    fontSize: 12,
+    paddingHorizontal: 14,
+    paddingBottom: 12,
   },
   noticeBody: {
     borderTopWidth: 1,

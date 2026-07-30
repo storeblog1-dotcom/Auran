@@ -36,7 +36,7 @@ async def list_notices(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    stmt = select(CommunityNotice).where(CommunityNotice.is_active.is_(True)).order_by(CommunityNotice.created_at.desc())
+    stmt = select(CommunityNotice).where(CommunityNotice.is_active.is_(True)).order_by(CommunityNotice.is_global.desc(), CommunityNotice.created_at.desc())
     if notice_type == "global":
         stmt = stmt.where(CommunityNotice.is_global.is_(True))
     elif notice_type == "general":
