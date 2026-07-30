@@ -2,7 +2,7 @@ import uuid
 from typing import Any
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, delete, desc, update, literal, union_all
+from sqlalchemy import select, func, delete, desc, update, literal, union_all, cast, null, String
 from sqlalchemy.orm import aliased
 
 from app.common.response import ApiResponse
@@ -18,7 +18,7 @@ from app.modules.audit.models import (
     WithdrawnAccount,
 )
 import json
-from app.modules.posts.models import Post, Comment, PostLike
+from app.modules.posts.models import Post, Comment, PostLike, PostMedia
 from app.modules.community.models import CommunityBoard
 from app.modules.stories.models import Story
 
@@ -468,7 +468,7 @@ async def get_admin_user_content(
             Post.caption.label("caption"),
             Post.created_at.label("created_at"),
             literal(False).label("deleted"),
-            literal(None).label("revision_id"),
+            cast(null(), String).label("revision_id"),
         )
         .outerjoin(CommunityBoard, CommunityBoard.id == Post.board_id)
         .where(Post.user_id == user_id)
@@ -482,7 +482,7 @@ async def get_admin_user_content(
         PostRevision.caption.label("caption"),
         PostRevision.source_created_at.label("created_at"),
         literal(True).label("deleted"),
-        PostRevision.id.label("revision_id"),
+        cast(PostRevision.id, String).label("revision_id"),
     ).where(
         PostRevision.user_id == user_id,
         PostRevision.lifecycle_event == "deleted",
@@ -509,7 +509,7 @@ async def get_admin_user_content(
             Comment.content.label("content"),
             Comment.created_at.label("created_at"),
             literal(False).label("deleted"),
-            literal(None).label("revision_id"),
+            cast(null(), String).label("revision_id"),
         )
         .join(Post, Post.id == Comment.post_id)
         .outerjoin(comment_board, comment_board.id == Post.board_id)
@@ -542,7 +542,7 @@ async def get_admin_user_content(
         CommentRevision.content.label("content"),
         CommentRevision.source_created_at.label("created_at"),
         literal(True).label("deleted"),
-        CommentRevision.id.label("revision_id"),
+        cast(CommentRevision.id, String).label("revision_id"),
     ).where(
         CommentRevision.user_id == user_id,
         CommentRevision.lifecycle_event == "deleted",
@@ -617,8 +617,33 @@ async def get_admin_user_content(
             .limit(50)
         )
     ).scalars().all()
+
+    # Total counts (independent of pagination)
+    total_posts_count = (await db.scalar(
+        select(func.count(Post.id)).where(Post.user_id == user_id)
+    )) or 0
+    total_comments_count = (await db.scalar(
+        select(func.count(Comment.id)).where(Comment.user_id == user_id)
+    )) or 0
+    total_deleted_posts = (await db.scalar(
+        select(func.count(PostRevision.id)).where(
+            PostRevision.user_id == user_id,
+            PostRevision.lifecycle_event == "deleted",
+        )
+    )) or 0
+    total_deleted_comments = (await db.scalar(
+        select(func.count(CommentRevision.id)).where(
+            CommentRevision.user_id == user_id,
+            CommentRevision.lifecycle_event == "deleted",
+        )
+    )) or 0
+
     return ApiResponse.ok({
         "user": {"id": str(user.id), "username": user.username, "nickname": user.nickname},
+        "posts_count": total_posts_count,
+        "comments_count": total_comments_count,
+        "deleted_posts_count": total_deleted_posts,
+        "deleted_comments_count": total_deleted_comments,
         "account_events": [{
             "id": str(event.id),
             "event_type": event.event_type,

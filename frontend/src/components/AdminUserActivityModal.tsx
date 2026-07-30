@@ -68,10 +68,17 @@ export const AdminUserActivityModal: React.FC<AdminUserActivityModalProps> = ({
     setLoading(true);
     try {
       const [contentData, reportsRes] = await Promise.all([
-        adminService.getUserContent(userId, 1, 1, 50).catch(() => null),
-        adminService.getReports().catch(() => ({ items: [] })),
+        adminService.getUserContent(userId, 1, 1, 100).catch((e) => {
+          console.error("[AdminUserActivityModal] getUserContent FAILED:", e?.response?.status, e?.response?.data || e?.message);
+          return null;
+        }),
+        adminService.getReports().catch((e) => {
+          console.error("[AdminUserActivityModal] getReports FAILED:", e?.message);
+          return { items: [] };
+        }),
       ]);
 
+      console.log("[AdminUserActivityModal] contentData:", contentData ? `posts=${contentData.posts?.length}, comments=${contentData.comments?.length}, posts_count=${contentData.posts_count}, comments_count=${contentData.comments_count}` : "NULL");
       setUserContent(contentData);
       if (reportsRes && reportsRes.items) {
         const filtered = reportsRes.items.filter(
@@ -80,7 +87,7 @@ export const AdminUserActivityModal: React.FC<AdminUserActivityModalProps> = ({
         setUserReports(filtered);
       }
     } catch (err) {
-      console.log("Failed to fetch user activity data", err);
+      console.error("[AdminUserActivityModal] fetchUserData EXCEPTION:", err);
     } finally {
       setLoading(false);
     }
@@ -246,6 +253,11 @@ export const AdminUserActivityModal: React.FC<AdminUserActivityModalProps> = ({
   const liveComments = userContent?.comments?.filter((c: any) => !c.deleted) || [];
   const deletedComments = userContent?.comments?.filter((c: any) => c.deleted) || [];
 
+  // Use server-side total counts if available (accurate across pagination), fallback to array length
+  const totalPostsCount = userContent?.posts_count ?? livePosts.length;
+  const totalCommentsCount = userContent?.comments_count ?? liveComments.length;
+  const totalDeletedCount = (userContent?.deleted_posts_count ?? deletedPosts.length) + (userContent?.deleted_comments_count ?? deletedComments.length);
+
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
       <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
@@ -306,18 +318,18 @@ export const AdminUserActivityModal: React.FC<AdminUserActivityModalProps> = ({
         {/* Quick Summary Chips Banner */}
         <View style={[styles.summaryChipsRow, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
           <View style={styles.chipItem}>
-            <Text style={[styles.chipNumber, { color: primaryAccent }]}>{livePosts.length}</Text>
+            <Text style={[styles.chipNumber, { color: primaryAccent }]}>{totalPostsCount}</Text>
             <Text style={[styles.chipLabel, { color: colors.textMuted }]}>게시물</Text>
           </View>
           <View style={styles.chipDivider} />
           <View style={styles.chipItem}>
-            <Text style={[styles.chipNumber, { color: "#3b82f6" }]}>{liveComments.length}</Text>
+            <Text style={[styles.chipNumber, { color: "#3b82f6" }]}>{totalCommentsCount}</Text>
             <Text style={[styles.chipLabel, { color: colors.textMuted }]}>댓글</Text>
           </View>
           <View style={styles.chipDivider} />
           <View style={styles.chipItem}>
             <Text style={[styles.chipNumber, { color: "#ef4444" }]}>
-              {deletedPosts.length + deletedComments.length}
+              {totalDeletedCount}
             </Text>
             <Text style={[styles.chipLabel, { color: colors.textMuted }]}>보존/삭제</Text>
           </View>
@@ -343,7 +355,7 @@ export const AdminUserActivityModal: React.FC<AdminUserActivityModalProps> = ({
             onPress={() => setActiveTab("posts")}
           >
             <Text style={[styles.tabLabel, activeTab === "posts" ? { color: primaryAccent, fontWeight: "bold" } : { color: colors.textMuted }]}>
-              게시물 ({userContent?.posts?.length || 0})
+              게시물 ({userContent?.posts_count ?? userContent?.posts?.length ?? 0})
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -351,7 +363,7 @@ export const AdminUserActivityModal: React.FC<AdminUserActivityModalProps> = ({
             onPress={() => setActiveTab("comments")}
           >
             <Text style={[styles.tabLabel, activeTab === "comments" ? { color: primaryAccent, fontWeight: "bold" } : { color: colors.textMuted }]}>
-              댓글 ({userContent?.comments?.length || 0})
+              댓글 ({userContent?.comments_count ?? userContent?.comments?.length ?? 0})
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
