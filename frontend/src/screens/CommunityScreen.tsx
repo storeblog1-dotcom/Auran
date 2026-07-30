@@ -434,31 +434,34 @@ export const CommunityScreen = ({ navigation, route }: any) => {
         </View>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={[styles.sectionTabs, { borderBottomColor: colors.borderLight }]}
-        contentContainerStyle={styles.sectionTabsContent}
-      >
-        <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("FeedHome")}>
-          <Text style={[styles.sectionTabText, { color: colors.textSecondary }]}>피드</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.sectionTab} onPress={() => changeSection("anonymous")}>
-          <Text style={[styles.sectionTabText, { color: section === "anonymous" ? colors.textPrimary : colors.textSecondary }]}>익명게시판</Text>
-          {section === "anonymous" && <LinearGradient colors={colors.auraGradient} style={styles.sectionIndicator} />}
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.sectionTab} onPress={() => changeSection("info")}>
-          <Text style={[styles.sectionTabText, { color: section === "info" ? colors.textPrimary : colors.textSecondary }]}>정보게시판</Text>
-          {section === "info" && <LinearGradient colors={colors.auraGradient} style={styles.sectionIndicator} />}
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.sectionTab} onPress={() => changeSection("partner")}>
-          <Text style={[styles.sectionTabText, { color: section === "partner" ? colors.textPrimary : colors.textSecondary }]}>제휴업소</Text>
-          {section === "partner" && <LinearGradient colors={colors.auraGradient} style={styles.sectionIndicator} />}
-        </TouchableOpacity>
-      </ScrollView>
+      {/* Section Tabs with guaranteed full-width bottom border */}
+      <View style={[styles.sectionTabsWrapper, { borderBottomColor: colors.borderLight }]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.sectionTabs}
+          contentContainerStyle={styles.sectionTabsContent}
+        >
+          <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("FeedHome")}>
+            <Text style={[styles.sectionTabText, { color: colors.textSecondary }]}>피드</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.sectionTab} onPress={() => changeSection("anonymous")}>
+            <Text style={[styles.sectionTabText, { color: section === "anonymous" ? colors.textPrimary : colors.textSecondary }]}>익명게시판</Text>
+            {section === "anonymous" && <LinearGradient colors={colors.auraGradient} style={styles.sectionIndicator} />}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.sectionTab} onPress={() => changeSection("info")}>
+            <Text style={[styles.sectionTabText, { color: section === "info" ? colors.textPrimary : colors.textSecondary }]}>정보게시판</Text>
+            {section === "info" && <LinearGradient colors={colors.auraGradient} style={styles.sectionIndicator} />}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.sectionTab} onPress={() => changeSection("partner")}>
+            <Text style={[styles.sectionTabText, { color: section === "partner" ? colors.textPrimary : colors.textSecondary }]}>제휴업소</Text>
+            {section === "partner" && <LinearGradient colors={colors.auraGradient} style={styles.sectionIndicator} />}
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
 
-      <View style={styles.boardArea}>
-        {visibleChildBoards.length > 0 && (
+      {visibleChildBoards.length > 0 && (
+        <View style={[styles.boardArea, { borderBottomColor: colors.borderLight }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subBoardScroll}>
             {visibleChildBoards.map((board) => (
               <TouchableOpacity key={board.id} style={[styles.subBoardChip, { backgroundColor: selectedBoardId === board.id ? colors.accentPurple + "12" : "transparent", borderColor: selectedBoardId === board.id ? colors.accentPurple : colors.borderColor }]} onPress={() => setSelectedBoardId(board.id)}>
@@ -466,8 +469,8 @@ export const CommunityScreen = ({ navigation, route }: any) => {
               </TouchableOpacity>
             ))}
           </ScrollView>
-        )}
-      </View>
+        </View>
+      )}
 
       {/* Post List */}
       {loading ? (
@@ -611,9 +614,13 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.5,
   },
-  sectionTabs: {
-    maxHeight: 48,
+  sectionTabsWrapper: {
+    width: "100%",
     borderBottomWidth: 1,
+    zIndex: 10,
+  },
+  sectionTabs: {
+    height: 48,
   },
   sectionTabsContent: {
     minHeight: 48,
@@ -641,12 +648,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  boardArea: { paddingVertical: 10 },
+  boardArea: {
+    width: "100%",
+    borderBottomWidth: 1,
+    paddingVertical: 8,
+    zIndex: 5,
+  },
   boardScroll: { paddingHorizontal: 16, gap: 8 },
-  subBoardScroll: { paddingHorizontal: 16, paddingTop: 8, gap: 8 },
+  subBoardScroll: { paddingHorizontal: 16, gap: 8 },
   boardChip: { paddingHorizontal: 16, height: 38, borderRadius: 19, borderWidth: 1, justifyContent: "center" },
   subBoardChip: { paddingHorizontal: 14, height: 34, borderRadius: 17, borderWidth: 1, justifyContent: "center" },
-  noticeList: { marginBottom: 12, gap: 8 },
+  noticeList: { marginTop: 12, marginBottom: 14, gap: 10 },
   noticeCard: { borderWidth: 1, borderRadius: 12, padding: 12, overflow: "hidden" },
   noticeHeaderRow: { flexDirection: "row", alignItems: "center" },
   noticeTitle: { fontSize: 13, fontWeight: "800", flex: 1 },
