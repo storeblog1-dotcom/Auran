@@ -52,9 +52,34 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
   const [hashtags, setHashtags] = useState("");
   const [locationName, setLocationName] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [verifyingYoutube, setVerifyingYoutube] = useState(false);
+  const [youtubeVerifyError, setYoutubeVerifyError] = useState("");
+  const [youtubeVerified, setYoutubeVerified] = useState(false);
+
   const [visibility, setVisibility] = useState<PostVisibility>("public");
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const verifyYoutubeUrl = async (url: string) => {
+    const clean = url.trim();
+    if (!clean) {
+      setYoutubeVerifyError("");
+      setYoutubeVerified(false);
+      return;
+    }
+    setVerifyingYoutube(true);
+    setYoutubeVerifyError("");
+    setYoutubeVerified(false);
+    try {
+      await api.post("/posts/verify-youtube", { url: clean });
+      setYoutubeVerified(true);
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || err.response?.data?.error?.message || "YouTube 영상 안전 검증에 실패했습니다.";
+      setYoutubeVerifyError(msg);
+    } finally {
+      setVerifyingYoutube(false);
+    }
+  };
 
   // 캡션 및 해시태그 파싱
   const parsePostCaptionAndHashtags = (rawCaption?: string | null) => {
@@ -412,20 +437,32 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
         {/* ── 2. 캡션 입력 박스 ── */}
         <View style={styles.inputSection}>
           <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>YouTube 일반 영상 (선택)</Text>
-          <View style={[styles.linkBox, { backgroundColor: colors.bgInput, borderColor: colors.borderColor }]}>
+          <View style={[styles.linkBox, { backgroundColor: colors.bgInput, borderColor: youtubeVerifyError ? "#ef4444" : youtubeVerified ? "#10b981" : colors.borderColor }]}>
             <Ionicons name="logo-youtube" size={20} color="#ff0033" style={{ marginRight: 10 }} />
             <TextInput
               style={[styles.locationInput, { color: colors.textPrimary }]}
               value={youtubeUrl}
-              onChangeText={setYoutubeUrl}
+              onChangeText={(t) => {
+                setYoutubeUrl(t);
+                setYoutubeVerifyError("");
+                setYoutubeVerified(false);
+              }}
+              onBlur={() => verifyYoutubeUrl(youtubeUrl)}
               placeholder="https://www.youtube.com/watch?v=..."
               placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
             />
+            {verifyingYoutube && <ActivityIndicator size="small" color={colors.textSecondary} />}
+            {youtubeVerified && <Ionicons name="checkmark-circle" size={20} color="#10b981" />}
+            {!!youtubeVerifyError && <Ionicons name="alert-circle" size={20} color="#ef4444" />}
           </View>
-          <Text style={[styles.linkHint, { color: colors.textSecondary }]}>일반 영상 1개만 가능하며, 공개·외부 재생 가능·연령 제한 없음이 API로 확인된 영상만 등록됩니다.</Text>
+          {youtubeVerifyError ? (
+            <Text style={[styles.linkHint, { color: "#ef4444" }]}>{youtubeVerifyError}</Text>
+          ) : (
+            <Text style={[styles.linkHint, { color: colors.textSecondary }]}>일반 영상 1개만 가능하며, 공개·외부 재생 가능·연령 제한 없음이 API로 확인된 영상만 등록됩니다.</Text>
+          )}
         </View>
 
         <View style={styles.inputSection}>

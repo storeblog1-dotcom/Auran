@@ -49,8 +49,32 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
   const [title, setTitle] = useState("");
   const [caption, setCaption] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [verifyingYoutube, setVerifyingYoutube] = useState(false);
+  const [youtubeVerifyError, setYoutubeVerifyError] = useState("");
+  const [youtubeVerified, setYoutubeVerified] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+
+  const verifyYoutubeUrl = async (url: string) => {
+    const clean = url.trim();
+    if (!clean) {
+      setYoutubeVerifyError("");
+      setYoutubeVerified(false);
+      return;
+    }
+    setVerifyingYoutube(true);
+    setYoutubeVerifyError("");
+    setYoutubeVerified(false);
+    try {
+      await api.post("/posts/verify-youtube", { url: clean });
+      setYoutubeVerified(true);
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || err.response?.data?.error?.message || "YouTube 영상 안전 검증에 실패했습니다.";
+      setYoutubeVerifyError(msg);
+    } finally {
+      setVerifyingYoutube(false);
+    }
+  };
 
   React.useEffect(() => {
     if (visible) {
@@ -311,21 +335,33 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
 
             {/* Image Attachment */}
             <View style={styles.inputGroup}>
-              <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>YouTube 일반 영상 (선택)</Text>
-              <View style={[styles.youtubeInputRow, { backgroundColor: colors.bgInput || "#18181b", borderColor: colors.borderColor || "#27272a" }]}>
-                <Ionicons name="logo-youtube" size={20} color="#ff0033" />
+              <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>유튜브 링크 입력 (선택)</Text>
+              <View style={[styles.youtubeInputRow, { backgroundColor: colors.bgInput, borderColor: youtubeVerifyError ? "#ef4444" : youtubeVerified ? "#10b981" : colors.borderColor }]}>
+                <Ionicons name="logo-youtube" size={20} color="#ff0033" style={{ marginRight: 10 }} />
                 <TextInput
                   style={[styles.youtubeInput, { color: colors.textPrimary }]}
-                  placeholder="https://www.youtube.com/watch?v=..."
-                  placeholderTextColor={colors.textSecondary || "#71717a"}
                   value={youtubeUrl}
-                  onChangeText={setYoutubeUrl}
+                  onChangeText={(t) => {
+                    setYoutubeUrl(t);
+                    setYoutubeVerifyError("");
+                    setYoutubeVerified(false);
+                  }}
+                  onBlur={() => verifyYoutubeUrl(youtubeUrl)}
+                  placeholder="https://www.youtube.com/watch?v=... (선택)"
+                  placeholderTextColor={colors.textSecondary}
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="url"
                 />
+                {verifyingYoutube && <ActivityIndicator size="small" color={colors.textSecondary} />}
+                {youtubeVerified && <Ionicons name="checkmark-circle" size={20} color="#10b981" />}
+                {!!youtubeVerifyError && <Ionicons name="alert-circle" size={20} color="#ef4444" />}
               </View>
-              <Text style={[styles.youtubeHint, { color: colors.textSecondary }]}>검증된 일반 영상 1개만 등록할 수 있습니다.</Text>
+              {youtubeVerifyError ? (
+                <Text style={[styles.youtubeHint, { color: "#ef4444" }]}>{youtubeVerifyError}</Text>
+              ) : (
+                <Text style={[styles.youtubeHint, { color: colors.textSecondary }]}>일반 영상 1개만 가능하며, 공개·외부 재생 가능·연령 제한 없음이 API로 확인된 영상만 등록됩니다.</Text>
+              )}
             </View>
 
             {/* Image Attachment */}

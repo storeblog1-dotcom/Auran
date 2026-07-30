@@ -62,6 +62,11 @@ class PostUpdateRequest(BaseModel):
     media: Optional[List[PostMediaCreate]] = Field(None, description="수정할 미디어 목록")
 
 
+class YouTubeVerifyRequest(BaseModel):
+    url: str = Field(..., description="검증할 YouTube URL")
+
+
+
 
 class PostUserSummary(BaseModel):
     """게시물 작성자 정보 요약 DTO"""

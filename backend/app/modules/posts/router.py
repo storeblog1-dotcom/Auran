@@ -24,7 +24,9 @@ from app.modules.posts.schemas import (
     PostResponse,
     PostUpdateRequest,
     PostUserSummary,
+    YouTubeVerifyRequest,
 )
+from app.modules.posts.youtube import verify_youtube_watch_url, VerifiedYouTubeVideo
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
 users_posts_router = APIRouter(prefix="/users", tags=["Posts"])
@@ -45,6 +47,18 @@ async def create_post(
 ) -> ApiResponse[PostResponse]:
     post = await service.create_post(db, current_user=current_user, data=body, ip_address=get_client_ip(request))
     return ApiResponse.ok(post)
+
+
+@router.post(
+    "/verify-youtube",
+    response_model=ApiResponse[VerifiedYouTubeVideo],
+    summary="YouTube URL API 안전 검증",
+)
+async def verify_youtube_url(
+    body: YouTubeVerifyRequest,
+) -> ApiResponse[VerifiedYouTubeVideo]:
+    verified = await verify_youtube_watch_url(body.url)
+    return ApiResponse.ok(verified)
 
 
 @router.get(
