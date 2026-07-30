@@ -258,6 +258,7 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
             notices.map((notice) => {
               const isExpanded = expandedNoticeIds.includes(notice.id);
               const isEditingThis = editingNotice?.id === notice.id;
+              const isGlobalNotice = Boolean(notice.is_global && !notice.board_id);
 
               return (
                 <View
@@ -278,16 +279,16 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
                     activeOpacity={0.8}
                   >
                     <Ionicons
-                      name={notice.is_global ? "megaphone-outline" : "notifications-outline"}
+                      name={isGlobalNotice ? "megaphone-outline" : "notifications-outline"}
                       size={18}
-                      color={notice.is_global ? colors.accentPurple : colors.accentBlue}
+                      color={isGlobalNotice ? colors.accentPurple : colors.accentBlue}
                       style={{ marginRight: 10 }}
                     />
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                         <View
                           style={{
-                            backgroundColor: notice.is_global ? colors.accentPurple + "20" : colors.accentBlue + "20",
+                            backgroundColor: isGlobalNotice ? colors.accentPurple + "20" : colors.accentBlue + "20",
                             paddingHorizontal: 6,
                             paddingVertical: 1,
                             borderRadius: 4,
@@ -295,12 +296,12 @@ export const CommunityAdminNoticeScreen = ({ navigation }: any) => {
                         >
                           <Text
                             style={{
-                              color: notice.is_global ? colors.accentPurple : colors.accentBlue,
+                              color: isGlobalNotice ? colors.accentPurple : colors.accentBlue,
                               fontSize: 10,
                               fontWeight: "800",
                             }}
                           >
-                            {notice.is_global ? "전체공지" : "일반공지"}
+                            {isGlobalNotice ? "전체공지" : "일반공지"}
                           </Text>
                         </View>
                         <Text style={[styles.noticeCardTitle, { color: colors.textPrimary, flex: 1 }]} numberOfLines={1}>

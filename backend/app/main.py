@@ -29,7 +29,17 @@ async def lifespan(app: FastAPI):
         try:
             await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;"))
             await conn.execute(text("ALTER TABLE community_notices ADD COLUMN IF NOT EXISTS is_global BOOLEAN DEFAULT FALSE;"))
-            await conn.execute(text("UPDATE community_notices SET is_global = TRUE WHERE is_active = TRUE;"))
+            await conn.execute(text("UPDATE community_notices SET is_global = FALSE WHERE board_id IS NOT NULL;"))
+            await conn.execute(text("""
+                UPDATE community_notices 
+                SET is_global = TRUE 
+                WHERE id IN (
+                    SELECT id FROM community_notices 
+                    WHERE board_id IS NULL AND is_active = TRUE 
+                    ORDER BY created_at DESC 
+                    LIMIT 1
+                );
+            """))
         except Exception as e:
             print(f"[STARTUP] Column alter notice: {e}")
 

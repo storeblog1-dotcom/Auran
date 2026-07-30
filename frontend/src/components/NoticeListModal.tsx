@@ -138,12 +138,23 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
     );
   };
 
-  const globalNotices = notices.filter((n) => n.is_global);
-  const generalNotices = notices.filter((n) => !n.is_global);
+  const isNoticeGlobal = (n: any) => Boolean(n.is_global && !n.board_id);
+
+  let globalNotices = notices.filter(isNoticeGlobal);
+  let generalNotices = notices.filter((n) => !isNoticeGlobal(n));
+
+  // Fallback: If DB is_global flag is not set yet, set the 1st main notice as Global Notice
+  if (globalNotices.length === 0 && notices.length > 0) {
+    const mainNotice = notices.find((n) => !n.board_id) || notices[0];
+    if (mainNotice) {
+      globalNotices = [mainNotice];
+      generalNotices = notices.filter((n) => n.id !== mainNotice.id);
+    }
+  }
 
   const renderNoticeItem = (notice: any) => {
     const isExpanded = expandedNoticeIds.includes(notice.id);
-    const isGlobalNotice = Boolean(notice.is_global);
+    const isGlobalNotice = globalNotices.some((g) => g.id === notice.id);
 
     return (
       <View
@@ -164,7 +175,7 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
           activeOpacity={0.8}
         >
           <Ionicons
-            name={isGlobalNotice ? "megaphone" : "sparkles-outline"}
+            name={isGlobalNotice ? "megaphone" : "notifications-outline"}
             size={17}
             color={isGlobalNotice ? colors.accentPurple : colors.accentBlue}
             style={{ marginRight: 8 }}
