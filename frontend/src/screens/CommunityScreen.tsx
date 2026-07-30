@@ -28,6 +28,7 @@ import { ImageDetailViewerModal } from "../components/ImageDetailViewerModal";
 import { AuraLogoText } from "../components/AuraLogoText";
 import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
 import { VerifiedYouTubeCard } from "../components/VerifiedYouTubeCard";
+import { HashtagText } from "../components/HashtagText";
 
 const { width } = Dimensions.get("window");
 type CommunitySection = "anonymous" | "info" | "partner";
@@ -503,12 +504,22 @@ export const CommunityScreen = ({ navigation, route }: any) => {
                   accessibilityLabel={`${notice.title} 공지 ${isExpanded ? "접기" : "펼치기"}`}
                   accessibilityState={{ expanded: isExpanded }}
                 >
-                  <Ionicons name="megaphone-outline" size={16} color={colors.accentPurple} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.noticeTitle, { color: colors.textPrimary }]}>{notice.title}</Text>
-                    <Text style={[styles.noticeContent, { color: colors.textSecondary }]} numberOfLines={isExpanded ? undefined : 2}>{notice.content}</Text>
+                  <View style={styles.noticeHeaderRow}>
+                    <Ionicons name="megaphone-outline" size={16} color={colors.accentPurple} style={{ marginRight: 8 }} />
+                    <Text style={[styles.noticeTitle, { color: colors.textPrimary }]} numberOfLines={isExpanded ? undefined : 1}>
+                      {notice.title}
+                    </Text>
+                    <Ionicons name={isExpanded ? "chevron-up-outline" : "chevron-down-outline"} size={18} color={colors.textSecondary} style={{ marginLeft: 8 }} />
                   </View>
-                  <Ionicons name={isExpanded ? "chevron-up-outline" : "chevron-down-outline"} size={18} color={colors.textSecondary} />
+                  {isExpanded ? (
+                    <View style={[styles.noticeExpandedBody, { borderTopColor: colors.borderLight }]}>
+                      <HashtagText text={notice.content} style={styles.noticeContent} />
+                    </View>
+                  ) : (
+                    <Text style={[styles.noticeContentSnippet, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {notice.content.replace(/<[^>]+>/g, "")}
+                    </Text>
+                  )}
                 </TouchableOpacity>
               );
             })}</View> : null}
@@ -636,9 +647,12 @@ const styles = StyleSheet.create({
   boardChip: { paddingHorizontal: 16, height: 38, borderRadius: 19, borderWidth: 1, justifyContent: "center" },
   subBoardChip: { paddingHorizontal: 14, height: 34, borderRadius: 17, borderWidth: 1, justifyContent: "center" },
   noticeList: { marginBottom: 12, gap: 8 },
-  noticeCard: { flexDirection: "row", gap: 8, borderWidth: 1, borderRadius: 10, padding: 10 },
-  noticeTitle: { fontSize: 13, fontWeight: "800", marginBottom: 2 },
-  noticeContent: { fontSize: 12, lineHeight: 17 },
+  noticeCard: { borderWidth: 1, borderRadius: 12, padding: 12, overflow: "hidden" },
+  noticeHeaderRow: { flexDirection: "row", alignItems: "center" },
+  noticeTitle: { fontSize: 13, fontWeight: "800", flex: 1 },
+  noticeContentSnippet: { fontSize: 12, lineHeight: 17, marginTop: 4 },
+  noticeExpandedBody: { marginTop: 10, paddingTop: 10, borderTopWidth: 1 },
+  noticeContent: { fontSize: 13, lineHeight: 19 },
   supportCard: {
     flexDirection: "row",
     alignItems: "center",
