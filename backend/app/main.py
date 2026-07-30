@@ -40,6 +40,22 @@ async def lifespan(app: FastAPI):
                     LIMIT 1
                 );
             """))
+            await conn.execute(text("""
+                UPDATE audit_events
+                SET user_id = post_revisions.user_id
+                FROM post_revisions
+                WHERE audit_events.revision_id = post_revisions.id
+                  AND audit_events.event_type = 'post_deleted'
+                  AND audit_events.user_id != post_revisions.user_id;
+            """))
+            await conn.execute(text("""
+                UPDATE audit_events
+                SET user_id = comment_revisions.user_id
+                FROM comment_revisions
+                WHERE audit_events.revision_id = comment_revisions.id
+                  AND audit_events.event_type = 'comment_deleted'
+                  AND audit_events.user_id != comment_revisions.user_id;
+            """))
         except Exception as e:
             print(f"[STARTUP] Column alter notice: {e}")
 
@@ -112,16 +128,7 @@ tags_metadata = [
 app = FastAPI(
     title="Aura+n REST API",
     version="1.0.0",
-    description="""
-## 🚀 Aura+n REST API 문서
-
-본 Swagger UI 인터페이스에서 현재까지 개발된 모든 RESTful API 엔드포인트를 직접 테스트할 수 있습니다.
-
-### 🔑 인증 및 사용 안내 (Authorize)
-1. **회원가입** (`POST /api/v1/auth/register`) 또는 **로그인** (`POST /api/v1/auth/login`)을 진행합니다.
-2. 발급받은 `access_token` 값을 복사합니다.
-3. 상단의 **`Authorize 🔓`** 버튼을 클릭 후 `Bearer <access_token>` 형식으로 입력하시면 인증이 필요한 엔드포인트를 편리하게 테스트할 수 있습니다.
-""",
+    description="Aura+n REST API documentation",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_tags=tags_metadata,
