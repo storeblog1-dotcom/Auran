@@ -19,12 +19,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../services/api";
 import { useTheme } from "../context/ThemeContext";
+import { SmartEditor } from "./SmartEditor";
 
 interface CreateCommunityPostModalProps {
   visible: boolean;
   initialBoardType?: "anonymous" | "info";
   boardId?: string | null;
   boardName?: string;
+  parentBoardName?: string;
   boardOptions?: any[];
   editPost?: any;
   onClose: () => void;
@@ -36,6 +38,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
   initialBoardType = "anonymous",
   boardId,
   boardName,
+  parentBoardName,
   boardOptions = [],
   editPost,
   onClose,
@@ -46,6 +49,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(boardId || null);
   const [title, setTitle] = useState("");
   const [caption, setCaption] = useState("");
+  const [youtubeUrl, setYoutubeUrl] = useState("");
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
@@ -56,6 +60,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
         setSelectedBoardId(editPost.board_id || boardId || null);
         setTitle(editPost.title || "");
         setCaption(editPost.caption || "");
+        setYoutubeUrl(editPost.youtube_url || "");
         if (editPost.media && editPost.media.length > 0) {
           setSelectedAsset({
             uri: editPost.media[0].media_url,
@@ -70,6 +75,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
         setSelectedBoardId(boardId || null);
         setTitle("");
         setCaption("");
+        setYoutubeUrl("");
         setSelectedAsset(null);
       }
     }
@@ -77,6 +83,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
 
   const selectedBoard = boardOptions.find((board) => board.id === selectedBoardId);
   const selectedBoardLabel = selectedBoard?.name || boardName || "게시판";
+  const parentBoardLabel = parentBoardName || boardName || "게시판";
   const selectBoard = (nextBoard: any) => {
     setSelectedBoardId(nextBoard.id);
     setBoardType(nextBoard.is_anonymous ? "anonymous" : "info");
@@ -108,6 +115,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
   const handleReset = () => {
     setTitle("");
     setCaption("");
+    setYoutubeUrl("");
     setSelectedAsset(null);
     setLoading(false);
   };
@@ -172,6 +180,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
           board_type: boardType,
           board_id: selectedBoardId,
           caption: caption.trim(),
+          youtube_url: youtubeUrl.trim() || null,
           media: mediaList,
         });
         Alert.alert("성공", "게시물이 수정되었습니다!");
@@ -182,6 +191,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
           board_type: boardType,
           board_id: selectedBoardId,
           media: mediaList,
+          youtube_url: youtubeUrl.trim() || null,
         });
 
         Alert.alert("성공", "게시물이 등록되었습니다!");
@@ -189,9 +199,15 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
 
       handleClose();
       onPostCreated();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error creating/editing community post", err);
-      Alert.alert("오류", editPost ? "게시물 수정에 실패했습니다." : "게시물 등록에 실패했습니다.");
+      const serverMessage = err.response?.data?.error?.message || err.response?.data?.detail;
+      Alert.alert(
+        "등록 실패",
+        typeof serverMessage === "string"
+          ? serverMessage
+          : editPost ? "게시물 수정에 실패했습니다." : "게시물 등록에 실패했습니다."
+      );
     } finally {
       setLoading(false);
     }
@@ -231,11 +247,15 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
           </View>
 
           <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>게시판</Text>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>상위 게시판</Text>
             <View style={[styles.selectedBoard, { backgroundColor: colors.bgCard || "#18181b" }]}>
-              <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{selectedBoardLabel}</Text>
+              <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{parentBoardLabel}</Text>
             </View>
-            {boardOptions.length > 1 && (
+            {boardOptions.length > 0 && <>
+              <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginTop: 16 }]}>하위 게시판</Text>
+              <View style={[styles.selectedBoard, { backgroundColor: colors.bgCard || "#18181b" }]}>
+                <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{selectedBoardLabel}</Text>
+              </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.boardOptions}>
                 {boardOptions.map((board) => (
                   <TouchableOpacity
@@ -247,7 +267,7 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-            )}
+            </>}
 
             {/* Title Input */}
             <View style={styles.inputGroup}>
@@ -269,25 +289,41 @@ export const CreateCommunityPostModal: React.FC<CreateCommunityPostModalProps> =
               />
             </View>
 
-            {/* Content Input */}
+            {/* Content Input (SmartEditor) */}
             <View style={styles.inputGroup}>
-              <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>내용</Text>
-              <TextInput
-                style={[
-                  styles.contentInput,
-                  {
-                    backgroundColor: colors.bgInput || "#18181b",
-                    color: colors.textPrimary,
-                    borderColor: colors.borderColor || "#27272a",
-                  },
-                ]}
-                placeholder="내용을 작성하세요 (익명 게시판 작성 시 본인 정보가 공개되지 않습니다)"
-                placeholderTextColor={colors.textSecondary || "#71717a"}
+              <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>내용 (스마트에디터)</Text>
+              <SmartEditor
                 value={caption}
-                onChangeText={setCaption}
-                multiline
-                textAlignVertical="top"
+                onChange={setCaption}
+                youtubeUrl={youtubeUrl}
+                onYoutubeUrlChange={setYoutubeUrl}
+                placeholder="스마트에디터로 자유롭게 본문을 작성하세요 (이미지, 유튜브, 디시콘, 표, AI 이미지 지원)"
+                minHeight={260}
+                onImagePicked={(uri) => {
+                  if (!selectedAsset) {
+                    setSelectedAsset({ uri });
+                  }
+                }}
               />
+            </View>
+
+            {/* Image Attachment */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>YouTube 일반 영상 (선택)</Text>
+              <View style={[styles.youtubeInputRow, { backgroundColor: colors.bgInput || "#18181b", borderColor: colors.borderColor || "#27272a" }]}>
+                <Ionicons name="logo-youtube" size={20} color="#ff0033" />
+                <TextInput
+                  style={[styles.youtubeInput, { color: colors.textPrimary }]}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  placeholderTextColor={colors.textSecondary || "#71717a"}
+                  value={youtubeUrl}
+                  onChangeText={setYoutubeUrl}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                />
+              </View>
+              <Text style={[styles.youtubeHint, { color: colors.textSecondary }]}>검증된 일반 영상 1개만 등록할 수 있습니다.</Text>
             </View>
 
             {/* Image Attachment */}
@@ -432,6 +468,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
+  youtubeInputRow: { minHeight: 48, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 10 },
+  youtubeInput: { flex: 1, fontSize: 14 },
+  youtubeHint: { fontSize: 12, lineHeight: 17, marginTop: 7 },
   imagePickerBtn: {
     height: 100,
     borderRadius: 12,

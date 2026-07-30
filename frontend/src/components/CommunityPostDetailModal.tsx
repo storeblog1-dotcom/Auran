@@ -20,12 +20,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { getDisplayName } from "../utils/displayName";
+import { RichTextRenderer } from "./RichTextRenderer";
 import api from "../services/api";
 import { getFullImageUrl } from "../config";
 import { Comment, CommentNode } from "./CommentsModal";
 
 import { CreateCommunityPostModal } from "./CreateCommunityPostModal";
 import { ImageDetailViewerModal } from "./ImageDetailViewerModal";
+import { VerifiedYouTubeCard } from "./VerifiedYouTubeCard";
 import { PostOptionsSheet } from "./PostOptionsSheet";
 import { ReportSheet } from "./ReportSheet";
 import {
@@ -317,7 +319,13 @@ export const CommunityPostDetailModal: React.FC<CommunityPostDetailModalProps> =
                 {post.title ? (
                   <Text style={[styles.postTitle, { color: colors.textPrimary }]}>{post.title}</Text>
                 ) : null}
-                <Text style={[styles.postBody, { color: colors.textPrimary }]}>{post.caption}</Text>
+                <RichTextRenderer content={post.caption} style={{ marginVertical: 8 }} />
+
+                <VerifiedYouTubeCard
+                  url={post.youtube_url}
+                  title={post.youtube_title}
+                  thumbnailUrl={post.youtube_thumbnail_url}
+                />
 
                 {/* Media Image */}
                 {post.media && post.media.length > 0 ? (

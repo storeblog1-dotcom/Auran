@@ -22,7 +22,9 @@ import api from "../services/api";
 import { Comment, CommentNode } from "./CommentsModal";
 import { SendPostDmModal } from "./SendPostDmModal";
 import { PostCarousel } from "./PostCarousel";
+import { VerifiedYouTubeCard } from "./VerifiedYouTubeCard";
 import { HashtagText } from "./HashtagText";
+import { RichTextRenderer } from "./RichTextRenderer";
 import { getDisplayName } from "../utils/displayName";
 import { PostOptionsSheet } from "./PostOptionsSheet";
 import { ReportSheet } from "./ReportSheet";
@@ -177,7 +179,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
             text: "수정하기",
             onPress: () => {
               onClose();
-              navigation.navigate("CreatePost", { editPost: post, onPostUpdated });
+              navigation.navigate("CreatePost", { mode: "edit", editPost: post, onPostUpdated });
             },
           },
           {
@@ -444,7 +446,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                         style={{ padding: 4 }}
                         onPress={() => {
                           onClose();
-                          navigation.navigate("CreatePost", { editPost: post, onPostUpdated });
+                          navigation.navigate("CreatePost", { mode: "edit", editPost: post, onPostUpdated });
                         }}
                       >
                         <Ionicons name="create-outline" size={20} color={colors.accentPurple || "#a855f7"} />
@@ -560,9 +562,15 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                 
                 {post.caption ? (
                   <View style={{ paddingVertical: 6 }}>
-                    <HashtagText text={post.caption} style={{ fontSize: 14, lineHeight: 20 }} />
+                    <RichTextRenderer content={post.caption} textStyle={{ fontSize: 14, lineHeight: 20 }} />
                   </View>
                 ) : null}
+
+                <VerifiedYouTubeCard
+                  url={post.youtube_url}
+                  title={post.youtube_title}
+                  thumbnailUrl={post.youtube_thumbnail_url}
+                />
 
                 <Text style={[styles.timeText, { color: colors.textMuted, marginTop: 4, marginBottom: 12 }]}>
                   {new Date(post.created_at).toLocaleDateString("ko-KR")}
@@ -684,7 +692,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
               onClose={() => setOptionsVisible(false)}
               onEdit={() => {
                 onClose();
-                navigation.navigate("CreatePost", { editPost: post, onPostUpdated });
+                navigation.navigate("CreatePost", { mode: "edit", editPost: post, onPostUpdated });
               }}
               onVisibility={async (visibility) => {
                 if (!post) return;

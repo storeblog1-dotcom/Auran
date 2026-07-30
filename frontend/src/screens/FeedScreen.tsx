@@ -25,7 +25,9 @@ import { NotificationsModal } from "../components/NotificationsModal";
 import { SendPostDmModal } from "../components/SendPostDmModal";
 import { MyStoriesGridModal } from "../components/MyStoriesGridModal";
 import { PostCarousel } from "../components/PostCarousel";
+import { VerifiedYouTubeCard } from "../components/VerifiedYouTubeCard";
 import { HashtagText } from "../components/HashtagText";
+import { RichTextRenderer } from "../components/RichTextRenderer";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { AuraLogoText } from "../components/AuraLogoText";
 import { PostOptionsSheet } from "../components/PostOptionsSheet";
@@ -337,7 +339,7 @@ export const FeedScreen = ({ navigation }: any) => {
         [
           {
             text: "수정하기",
-            onPress: () => navigation.navigate("CreatePost", { editPost: item }),
+            onPress: () => navigation.navigate("CreatePost", { mode: "edit", editPost: item }),
           },
           {
             text: item.visibility === "private" ? "전체 공개로 변경" : "비공개로 변경",
@@ -474,7 +476,7 @@ export const FeedScreen = ({ navigation }: any) => {
               <>
                 <TouchableOpacity
                   style={{ padding: 4 }}
-                  onPress={() => navigation.navigate("CreatePost", { editPost: item })}
+                  onPress={() => navigation.navigate("CreatePost", { mode: "edit", editPost: item })}
                 >
                   <Ionicons name="create-outline" size={20} color={colors.accentPurple || "#a855f7"} />
                 </TouchableOpacity>
@@ -511,14 +513,14 @@ export const FeedScreen = ({ navigation }: any) => {
         {/* Post Image Media Carousel */}
         {item.media && item.media.length > 0 ? (
           <PostCarousel media={item.media} onPress={() => { setDetailPostId(item.id); setDetailModalVisible(true); }} />
-        ) : (
+        ) : !item.youtube_url ? (
           <TouchableOpacity
             style={[styles.postImage, styles.noMedia, { backgroundColor: colors.bgCard }]}
             onPress={() => { setDetailPostId(item.id); setDetailModalVisible(true); }}
           >
             <Text style={{ color: colors.textMuted }}>이미지 없음</Text>
           </TouchableOpacity>
-        )}
+        ) : null}
 
         {/* Action Row */}
         <View style={styles.actionRow}>
@@ -578,9 +580,15 @@ export const FeedScreen = ({ navigation }: any) => {
           {/* Caption Section (Aligned with photo left edge) */}
           {item.caption ? (
             <View style={[styles.captionBlock, { paddingVertical: 6, paddingHorizontal: 0 }]}>
-              <HashtagText text={item.caption} style={{ fontSize: 14, lineHeight: 20 }} />
+              <RichTextRenderer content={item.caption} textStyle={{ fontSize: 14, lineHeight: 20 }} />
             </View>
           ) : null}
+
+          <VerifiedYouTubeCard
+            url={item.youtube_url}
+            title={item.youtube_title}
+            thumbnailUrl={item.youtube_thumbnail_url}
+          />
 
           {/* Created Date */}
           <Text style={[styles.timeText, { color: colors.textMuted, marginTop: 4 }]}>
@@ -675,12 +683,6 @@ export const FeedScreen = ({ navigation }: any) => {
             <View style={styles.emptyContainer}>
               <Text style={[styles.emptyText, { color: colors.textPrimary }]}>아직 피드 게시물이 없습니다.</Text>
               <Text style={[styles.emptySubText, { color: colors.textSecondary }]}>첫 번째 게시물을 작성해보세요!</Text>
-              <TouchableOpacity
-                style={styles.emptyBtn}
-                onPress={() => navigation.navigate("CreatePost")}
-              >
-                <Text style={styles.emptyBtnText}>게시물 작성하기</Text>
-              </TouchableOpacity>
             </View>
           }
         />
@@ -691,7 +693,7 @@ export const FeedScreen = ({ navigation }: any) => {
         post={optionsPost}
         isMine={!!optionsPost && (optionsPost.is_mine || currentUser?.username === optionsPost.user?.username)}
         onClose={() => setOptionsPost(null)}
-        onEdit={() => navigation.navigate("CreatePost", { editPost: optionsPost })}
+        onEdit={() => navigation.navigate("CreatePost", { mode: "edit", editPost: optionsPost })}
         onVisibility={async (visibility) => {
           if (!optionsPost) return;
           await api.patch(`/posts/${optionsPost.id}`, { visibility });
@@ -1012,7 +1014,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   captionBlock: {
-    paddingVertical: 6,
+    paddingTop: 2,
+    paddingBottom: 0,
     paddingHorizontal: 0,
     minWidth: 0,
   },

@@ -17,6 +17,7 @@ import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../services/api";
 import { useTheme } from "../context/ThemeContext";
+import { SmartEditor } from "../components/SmartEditor";
 
 const { width } = Dimensions.get("window");
 
@@ -42,7 +43,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
   const { colors } = useTheme();
 
   const editPost = route?.params?.editPost;
-  const isEditMode = !!editPost;
+  const isEditMode = route?.params?.mode === "edit" && !!editPost;
 
   // 선택된 미디어 목록 (최대 10장 내부 제한)
   const [selectedMedia, setSelectedMedia] = useState<MediaPickItem[]>([]);
@@ -51,6 +52,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
   const [caption, setCaption] = useState("");
   const [hashtags, setHashtags] = useState("");
   const [locationName, setLocationName] = useState("");
+  const [youtubeUrl, setYoutubeUrl] = useState("");
   const [visibility, setVisibility] = useState<PostVisibility>("public");
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -94,6 +96,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
       setCaption(captionText);
       setHashtags(hashtagsText);
       setLocationName(editPost.location || "");
+      setYoutubeUrl(editPost.youtube_url || "");
       setVisibility(editPost.visibility || "public");
 
       if (editPost.media && Array.isArray(editPost.media)) {
@@ -108,6 +111,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
       setCaption("");
       setHashtags("");
       setLocationName("");
+      setYoutubeUrl("");
       setVisibility("public");
       fetchCurrentGPSLocation();
     }
@@ -213,10 +217,18 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
     setSelectedMedia((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // 4. 피드에 게시물 업로드 / 수정
   const handleCreatePost = async () => {
-    if (selectedMedia.length === 0) {
-      Alert.alert("알림", "사진을 1장 이상 선택해주세요.");
+    // 본문 내 <img> 태그 주소 추출 함수
+    let targetMedia = [...selectedMedia];
+    if (targetMedia.length === 0 && caption) {
+      const imgMatch = caption.match(/<img[^>]+src=["']([^"']+)["']/i);
+      if (imgMatch && imgMatch[1]) {
+        targetMedia = [{ id: `extracted-${Date.now()}`, uri: imgMatch[1] }];
+      }
+    }
+
+    if (targetMedia.length === 0 && !caption.trim()) {
+      Alert.alert("알림", "사진을 선택하거나 본문 내용을 작성해 주세요.");
       return;
     }
 
@@ -234,6 +246,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
           caption: finalCaption,
           location: locationName || null,
           visibility,
+          youtube_url: youtubeUrl.trim() || null,
         });
 
         Alert.alert("성공", "게시물이 수정되었습니다.");
@@ -289,6 +302,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
           caption: finalCaption,
           location: locationName || null,
           visibility,
+          youtube_url: youtubeUrl.trim() || null,
           media: uploadedMediaList,
         });
 
@@ -296,6 +310,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
         setCaption("");
         setHashtags("");
         setLocationName("");
+        setYoutubeUrl("");
         navigation.navigate("Feed");
         Alert.alert("성공", "새 피드가 성공적으로 공유되었습니다!");
       }
@@ -405,17 +420,40 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
 
         {/* ── 2. 캡션 입력 박스 ── */}
         <View style={styles.inputSection}>
-          <TextInput
-            style={[
-              styles.captionInput,
-              { backgroundColor: colors.bgInput, borderColor: colors.borderColor, color: colors.textPrimary },
-            ]}
-            placeholder="캡션추가"
-            placeholderTextColor={colors.textSecondary}
-            multiline
-            numberOfLines={5}
+          <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>YouTube 일반 영상 (선택)</Text>
+          <View style={[styles.linkBox, { backgroundColor: colors.bgInput, borderColor: colors.borderColor }]}>
+            <Ionicons name="logo-youtube" size={20} color="#ff0033" style={{ marginRight: 10 }} />
+            <TextInput
+              style={[styles.locationInput, { color: colors.textPrimary }]}
+              value={youtubeUrl}
+              onChangeText={setYoutubeUrl}
+              placeholder="https://www.youtube.com/watch?v=..."
+              placeholderTextColor={colors.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+          </View>
+          <Text style={[styles.linkHint, { color: colors.textSecondary }]}>일반 영상 1개만 가능하며, 공개·외부 재생 가능·연령 제한 없음이 API로 확인된 영상만 등록됩니다.</Text>
+        </View>
+
+        <View style={styles.inputSection}>
+          <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>게시물 본문 (스마트에디터)</Text>
+          <SmartEditor
             value={caption}
-            onChangeText={setCaption}
+            onChange={setCaption}
+            youtubeUrl={youtubeUrl}
+            onYoutubeUrlChange={setYoutubeUrl}
+            placeholder="스마트에디터로 자유롭게 본문을 작성하세요 (이미지, 유튜브, 디시콘, 표, AI 이미지 지원)"
+            minHeight={280}
+            onImagePicked={(uri) => {
+              if (selectedMedia.length < 10) {
+                setSelectedMedia((prev) => [
+                  ...prev,
+                  { id: `editor-img-${Date.now()}`, uri },
+                ]);
+              }
+            }}
           />
         </View>
 
@@ -502,10 +540,10 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
         <TouchableOpacity
           style={[
             styles.shareBtn,
-            { backgroundColor: colors.accentBlue, opacity: selectedMedia.length === 0 || submitting ? 0.6 : 1 },
+            { backgroundColor: colors.accentBlue, opacity: (selectedMedia.length === 0 && !caption.trim()) || submitting ? 0.6 : 1 },
           ]}
           onPress={handleCreatePost}
-          disabled={selectedMedia.length === 0 || submitting}
+          disabled={(selectedMedia.length === 0 && !caption.trim()) || submitting}
           activeOpacity={0.8}
         >
           {submitting ? (
@@ -678,6 +716,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 14,
   },
+  linkBox: {
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+  },
+  linkHint: { fontSize: 12, lineHeight: 17, marginTop: 7 },
   locationInput: {
     flex: 1,
     fontSize: 14,

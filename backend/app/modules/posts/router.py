@@ -12,6 +12,7 @@ from app.modules.auth.dependencies import (
 )
 from app.modules.auth.models import User
 from app.modules.posts import service
+from app.modules.posts.youtube import verify_youtube_watch_url
 from app.modules.posts.schemas import (
     CommentCreateRequest,
     CommentLikeToggleResponse,
@@ -24,10 +25,31 @@ from app.modules.posts.schemas import (
     PostResponse,
     PostUpdateRequest,
     PostUserSummary,
+    YouTubeVerifyRequest,
+    YouTubeVerifyResponse,
 )
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
 users_posts_router = APIRouter(prefix="/users", tags=["Posts"])
+
+
+@router.post(
+    "/verify-youtube",
+    response_model=ApiResponse[YouTubeVerifyResponse],
+    summary="YouTube URL 영상 안전 검증 API",
+)
+async def verify_youtube(
+    body: YouTubeVerifyRequest,
+) -> ApiResponse[YouTubeVerifyResponse]:
+    verified = await verify_youtube_watch_url(body.url)
+    return ApiResponse.ok(
+        YouTubeVerifyResponse(
+            url=verified.url,
+            video_id=verified.video_id,
+            title=verified.title,
+            thumbnail_url=verified.thumbnail_url,
+        )
+    )
 
 
 
