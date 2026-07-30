@@ -725,10 +725,6 @@ export const AdminScreen = ({ navigation }: any) => {
 
       {activeTab === "users" && (
         <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12 }}>
-          <View style={styles.subnavRow}>
-            <TouchableOpacity onPress={() => setActiveTab("users")} style={[styles.subnavButton, { borderColor: primaryAccent, backgroundColor: `${primaryAccent}18` }]}><Text style={{ color: primaryAccent, fontWeight: "700" }}>회원 목록</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => setActiveTab("activity")} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>활동·보존 이력</Text></TouchableOpacity>
-          </View>
           {/* Search Box */}
           <View style={[styles.searchContainer, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
             <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
@@ -1027,41 +1023,7 @@ export const AdminScreen = ({ navigation }: any) => {
         </View>
       )}
 
-      {activeTab === "activity" && (
-        <View style={{ flex: 1, padding: 16 }}>
-          <View style={styles.subnavRow}>
-            <TouchableOpacity onPress={() => setActiveTab("users")} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>회원 목록</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => setActiveTab("activity")} style={[styles.subnavButton, { borderColor: primaryAccent, backgroundColor: `${primaryAccent}18` }]}><Text style={{ color: primaryAccent, fontWeight: "700" }}>활동·보존 이력</Text></TouchableOpacity>
-          </View>
-          <View style={styles.activitySearchRow}>
-            <View style={[styles.searchContainer, styles.activitySearchContainer, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
-              <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
-              <TextInput value={activityQuery} onChangeText={setActivityQuery} placeholder="아이디 또는 닉네임 검색" placeholderTextColor={colors.textMuted} style={[styles.searchInput, { color: colors.textPrimary }]} />
-            </View>
-            <TouchableOpacity onPress={() => loadActivity(activityQuery)} style={[styles.activitySearchButton, { backgroundColor: primaryAccent }]}>
-              <Text style={{ color: "white", fontWeight: "bold" }}>검색</Text>
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={activityUsers}
-            keyExtractor={(item) => item.user_id}
-            contentContainerStyle={{ paddingTop: 12 }}
-            ListEmptyComponent={<Text style={{ color: colors.textMuted, textAlign: "center", marginTop: 24 }}>표시할 사용자 활동 기록이 없습니다.</Text>}
-            ListFooterComponent={
-              activityLoadingMore
-                ? <ActivityIndicator style={{ marginVertical: 14 }} color={primaryAccent} />
-                : null
-            }
-            onEndReachedThreshold={0.35}
-            onEndReached={() => {
-              if (!activityLoadingMore && activityUsers.length < totalActivityUsers) {
-                loadActivity(activityQuery, activityPage + 1, true);
-              }
-            }}
-            renderItem={renderActivityUser}
-          />
-        </View>
-      )}
+
 
       {activeTab === "community" && (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 12 }}>

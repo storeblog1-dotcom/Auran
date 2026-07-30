@@ -587,6 +587,21 @@ async def get_admin_user_content(
         comment_revisions,
         "comment_id",
     )
+    post_media_res = (
+        await db.execute(
+            select(PostMedia).where(PostMedia.post_id.in_(post_ids)).order_by(PostMedia.order)
+        )
+    ).scalars().all() if post_ids else []
+    post_media_map: dict[uuid.UUID, list[dict[str, Any]]] = {}
+    for pm in post_media_res:
+        post_media_map.setdefault(pm.post_id, []).append({
+            "id": str(pm.id),
+            "media_url": pm.media_url,
+            "detail_media_url": pm.detail_media_url or pm.media_url,
+            "media_type": pm.media_type,
+            "order": pm.order,
+        })
+
     account_events = (
         await db.execute(
             select(AuditEvent)
@@ -615,9 +630,15 @@ async def get_admin_user_content(
             "revision_id": str(row.revision_id) if row.revision_id else None,
             "content_number": f"P-{row.display_number:06d}" if row.display_number else None,
             "content_type": "삭제 게시물" if row.deleted else "게시물",
+            "board_type": row.board_type,
+            "board_name": row.board_name,
             "board_label": row.board_name or ("익명게시판" if row.board_type == "anonymous" else (row.board_type or "피드")),
             "title": row.title,
+            "caption": row.caption,
             "display_text": row.title if row.title else row.caption,
+            "media": post_media_map.get(row.id, []) if not row.deleted else (
+                latest_post_revisions[row.id].media_manifest if row.id in latest_post_revisions else []
+            ),
             "created_at": row.created_at.isoformat(),
             "deleted": row.deleted,
             "revision_count": post_revision_counts.get(row.id, 0),
@@ -637,6 +658,7 @@ async def get_admin_user_content(
             ) if row.post_display_number and row.display_number else None,
             "content_type": ("삭제 대댓글" if row.deleted else "대댓글") if row.parent_id else ("삭제 댓글" if row.deleted else "댓글"),
             "board_label": row.board_name or ("익명게시판" if row.board_type == "anonymous" else (row.board_type or "피드")),
+            "content": row.content,
             "display_text": row.content,
             "created_at": row.created_at.isoformat(),
             "deleted": row.deleted,
