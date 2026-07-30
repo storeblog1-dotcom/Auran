@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -41,100 +41,389 @@ import {
 } from "../components/AdminIdentity";
 
 const { width, height } = Dimensions.get("window");
-const DEVICE_ASPECT_RATIO = height / width;
+const FRESH_TTL = 30_000; // 30 seconds
 
+export interface FeedPostItem {
+  id: string;
+  display_number?: number;
+  user_id?: string;
+  title?: string | null;
+  caption?: string | null;
+  likes_count?: number;
+  comments_count?: number;
+  reposts_count?: number;
+  is_liked?: boolean;
+  is_bookmarked?: boolean;
+  is_reposted?: boolean;
+  is_mine?: boolean;
+  user?: any;
+  media?: any[];
+  youtube_url?: string | null;
+  youtube_title?: string | null;
+  youtube_thumbnail_url?: string | null;
+  visibility?: string;
+  location?: string | null;
+  created_at: string;
+  updated_at: string;
+  preview_comments?: any[];
+}
+
+export interface StoryGroupItem {
+  user_id: string;
+  username: string;
+  is_self?: boolean;
+  stories: any[];
+}
+
+const areFeedPostsEqual = (prev: FeedPostItem[], next: FeedPostItem[]): boolean => {
+  if (prev.length !== next.length) return false;
+  for (let i = 0; i < prev.length; i++) {
+    const a = prev[i];
+    const b = next[i];
+    if (
+      a.id !== b.id ||
+      a.likes_count !== b.likes_count ||
+      a.comments_count !== b.comments_count ||
+      a.reposts_count !== b.reposts_count ||
+      a.is_liked !== b.is_liked ||
+      a.is_bookmarked !== b.is_bookmarked ||
+      a.is_reposted !== b.is_reposted ||
+      a.user?.is_following !== b.user?.is_following
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
+// ─── Standalone Feed Post Card ──────────────
+const FeedPostCard = React.memo(
+  ({
+    item,
+    colors,
+    currentUser,
+    navigation,
+    onToggleLike,
+    onOpenComments,
+    onToggleRepost,
+    onOpenDm,
+    onToggleBookmark,
+    onToggleFollowUser,
+    onMoreOptions,
+    onDetailPress,
+    onDeletePost,
+  }: {
+    item: FeedPostItem;
+    colors: any;
+    currentUser: any;
+    navigation: any;
+    onToggleLike: (id: string) => void;
+    onOpenComments: (id: string) => void;
+    onToggleRepost: (id: string) => void;
+    onOpenDm: (item: FeedPostItem) => void;
+    onToggleBookmark: (id: string) => void;
+    onToggleFollowUser: (username: string, isFollowing: boolean) => void;
+    onMoreOptions: (item: FeedPostItem) => void;
+    onDetailPress: (id: string) => void;
+    onDeletePost: (id: string) => void;
+  }) => {
+    const commentsCount = item.comments_count || 0;
+    const isMe = currentUser && currentUser.username === item.user?.username;
+    const isFollowing = item.user?.is_following || false;
+
+    return (
+      <LinearGradient
+        colors={["rgba(139, 92, 246, 0.50)", "rgba(236, 72, 153, 0.50)", "rgba(6, 182, 212, 0.50)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.postCardGradientBorder}
+      >
+        <View style={[styles.postCardInner, { backgroundColor: colors.bgCard || "#161622" }]}>
+          {/* Post Header */}
+          <View style={styles.postHeader}>
+            <TouchableOpacity
+              style={styles.userInfo}
+              onPress={() => openUserProfile(navigation, item.user)}
+            >
+              <AdminAvatar user={item.user} style={styles.avatar} />
+              <View style={styles.authorText}>
+                <View style={styles.authorLine}>
+                  <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(item.user)}</Text>
+                  {item.user?.is_admin && <AdminBadge />}
+                  {!isMe && (
+                    <TouchableOpacity
+                      style={[styles.headerFollowBtn, { backgroundColor: colors.bgInput, borderColor: colors.borderColor }]}
+                      onPress={() => onToggleFollowUser(item.user?.username, isFollowing)}
+                    >
+                      <Text style={[styles.headerFollowBtnText, { color: colors.textPrimary }]}>
+                        {isFollowing ? "팔로잉" : "팔로우"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {item.location ? <Text style={[styles.location, { color: colors.textSecondary }]}>{item.location}</Text> : null}
+              </View>
+            </TouchableOpacity>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              {isMe && (
+                <>
+                  <TouchableOpacity
+                    style={{ padding: 4 }}
+                    onPress={() => navigation.navigate("CreatePost", { editPost: item })}
+                  >
+                    <Ionicons name="create-outline" size={20} color={colors.accentPurple || "#a855f7"} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ padding: 4 }}
+                    onPress={() => {
+                      Alert.alert("게시물 삭제", "정말 삭제하시겠습니까?", [
+                        { text: "취소", style: "cancel" },
+                        {
+                          text: "삭제",
+                          style: "destructive",
+                          onPress: () => onDeletePost(item.id),
+                        },
+                      ]);
+                    }}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                  </TouchableOpacity>
+                </>
+              )}
+              <TouchableOpacity style={{ padding: 4 }} onPress={() => onMoreOptions(item)}>
+                <Ionicons name="ellipsis-horizontal" size={20} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Post Image Media Carousel */}
+          {item.media && item.media.length > 0 ? (
+            <PostCarousel media={item.media} onPress={() => onDetailPress(item.id)} />
+          ) : !item.youtube_url ? (
+            <TouchableOpacity
+              style={[styles.postImage, styles.noMedia, { backgroundColor: colors.bgCard }]}
+              onPress={() => onDetailPress(item.id)}
+            >
+              <Text style={{ color: colors.textMuted }}>이미지 없음</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {/* Action Row */}
+          <View style={styles.actionRow}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+              {/* Likes */}
+              <TouchableOpacity
+                style={styles.actionCountGroup}
+                onPress={() => onToggleLike(item.id)}
+              >
+                <Ionicons
+                  name={item.is_liked ? "heart" : "heart-outline"}
+                  size={24}
+                  color={item.is_liked ? "#ed4956" : colors.textPrimary}
+                />
+                <Text style={[styles.actionCountText, { color: colors.textPrimary }]}>{item.likes_count || 0}</Text>
+              </TouchableOpacity>
+
+              {/* Comments */}
+              <TouchableOpacity
+                style={styles.actionCountGroup}
+                onPress={() => onOpenComments(item.id)}
+              >
+                <Ionicons name="chatbubble-outline" size={22} color={colors.textPrimary} />
+                <Text style={[styles.actionCountText, { color: colors.textPrimary }]}>{commentsCount}</Text>
+              </TouchableOpacity>
+
+              {/* Repost */}
+              <TouchableOpacity style={styles.actionCountGroup} onPress={() => onToggleRepost(item.id)}>
+                <Ionicons
+                  name="repeat-outline"
+                  size={23}
+                  color={item.is_reposted ? "#10b981" : colors.textPrimary}
+                />
+                <Text style={[styles.actionCountText, { color: item.is_reposted ? "#10b981" : colors.textPrimary }]}>
+                  {item.reposts_count || 0}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Send by DM */}
+              <TouchableOpacity style={styles.actionCountGroup} onPress={() => onOpenDm(item)}>
+                <Ionicons name="paper-plane-outline" size={22} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Bookmark Button */}
+            <TouchableOpacity onPress={() => onToggleBookmark(item.id)}>
+              <Ionicons
+                name={item.is_bookmarked ? "bookmark" : "bookmark-outline"}
+                size={23}
+                color={colors.textPrimary}
+              />
+            </TouchableOpacity>
+          </View>
+
+          {/* Caption & Details Section */}
+          <View style={styles.postDetails}>
+            {item.caption ? (
+              <View style={[styles.captionBlock, { paddingVertical: 6, paddingHorizontal: 0 }]}>
+                <HashtagText text={item.caption} style={{ fontSize: 14, lineHeight: 20 }} />
+              </View>
+            ) : null}
+
+            <VerifiedYouTubeCard
+              url={item.youtube_url}
+              title={item.youtube_title}
+              thumbnailUrl={item.youtube_thumbnail_url}
+            />
+
+            {/* Created Date */}
+            <Text style={[styles.timeText, { color: colors.textMuted, marginTop: 4 }]}>
+              {new Date(item.created_at).toLocaleDateString("ko-KR")}
+            </Text>
+          </View>
+        </View>
+      </LinearGradient>
+    );
+  }
+);
+
+// ─── Main Feed Screen ──────────────
 export const FeedScreen = ({ navigation }: any) => {
   const { user } = useAuth();
   const { colors } = useTheme();
   const { unreadCount } = useNotification();
-  const [posts, setPosts] = useState<any[]>([]);
+
+  const [posts, setPosts] = useState<FeedPostItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
-  const [commentsModalVisible, setCommentsModalVisible] = useState<boolean>(false);
 
   // Modal States
   const [notificationsModalVisible, setNotificationsModalVisible] = useState<boolean>(false);
-  const [dmPost, setDmPost] = useState<any | null>(null);
+  const [dmPost, setDmPost] = useState<FeedPostItem | null>(null);
   const [dmModalVisible, setDmModalVisible] = useState<boolean>(false);
   const [detailPostId, setDetailPostId] = useState<string | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState<boolean>(false);
   const [noticeModalVisible, setNoticeModalVisible] = useState<boolean>(false);
-  const [optionsPost, setOptionsPost] = useState<any | null>(null);
-  const [reportPost, setReportPost] = useState<any | null>(null);
+  const [optionsPost, setOptionsPost] = useState<FeedPostItem | null>(null);
+  const [reportPost, setReportPost] = useState<FeedPostItem | null>(null);
 
-  // 스토리 관련 상태
-  const [storyGroups, setStoryGroups] = useState<any[]>([]);
+  // Story States
+  const [storyGroups, setStoryGroups] = useState<StoryGroupItem[]>([]);
   const [selectedStoryGroupIndex, setSelectedStoryGroupIndex] = useState<number>(0);
   const [storyViewerVisible, setStoryViewerVisible] = useState<boolean>(false);
   const [createStoryVisible, setCreateStoryVisible] = useState<boolean>(false);
   const [myStoriesGridVisible, setMyStoriesGridVisible] = useState<boolean>(false);
 
-  const selfGroup = storyGroups.find((g) => g.is_self);
-  const selfStories = selfGroup ? selfGroup.stories : [];
+  // High-performance timestamps & locks per user
+  const feedUpdatedAtRef = useRef<number>(0);
+  const storiesUpdatedAtRef = useRef<number>(0);
+  const inFlightFeedRef = useRef<boolean>(false);
+  const inFlightStoriesRef = useRef<boolean>(false);
+  const lastUserIdRef = useRef<string | undefined>(user?.id);
 
-  const handleDeleteStory = async (storyId: string) => {
-    try {
-      await api.delete(`/stories/${storyId}`);
-      Alert.alert("알림", "스토리가 삭제되었습니다.");
-      fetchStories();
-    } catch (err) {
-      console.log("Error deleting story", err);
-      Alert.alert("오류", "스토리 삭제에 실패했습니다.");
+  // Check user change & reset
+  useEffect(() => {
+    if (lastUserIdRef.current !== user?.id) {
+      lastUserIdRef.current = user?.id;
+      feedUpdatedAtRef.current = 0;
+      storiesUpdatedAtRef.current = 0;
+      setPosts([]);
+      setStoryGroups([]);
+      setLoading(true);
     }
-  };
+  }, [user?.id]);
 
-  const fetchStories = async () => {
+  const fetchStories = async (force: boolean = false) => {
+    const now = Date.now();
+    if (!force && now - storiesUpdatedAtRef.current < FRESH_TTL && storyGroups.length > 0) {
+      return;
+    }
+    if (inFlightStoriesRef.current) return;
+    inFlightStoriesRef.current = true;
+
     try {
       const response = await api.get("/stories/feed");
       if (response.data && response.data.data) {
         setStoryGroups(response.data.data);
+        storiesUpdatedAtRef.current = Date.now();
       }
     } catch (err) {
       console.log("Error fetching stories feed", err);
+    } finally {
+      inFlightStoriesRef.current = false;
     }
   };
 
-  const fetchFeed = async () => {
+  const fetchFeed = async (force: boolean = false) => {
+    const now = Date.now();
+    const isFresh = now - feedUpdatedAtRef.current < FRESH_TTL;
+    const hasData = posts.length > 0;
+
+    console.log(`[FEED_PERF] focus fetchFeed - now=${now}, isFresh=${isFresh}, hasData=${hasData}`);
+
+    if (!force && isFresh && hasData) {
+      // Very fresh (<30s) -> Skip API call completely!
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    if (inFlightFeedRef.current) return;
+    inFlightFeedRef.current = true;
+
+    if (hasData && !force) {
+      setBackgroundRefreshing(true);
+    } else if (!hasData) {
+      setLoading(true);
+    }
+
     try {
       const response = await api.get("/posts/feed");
       if (response.data) {
-        const feedItems = response.data.data || (Array.isArray(response.data) ? response.data : []);
-        setPosts(feedItems);
+        const feedItems: FeedPostItem[] = response.data.data || (Array.isArray(response.data) ? response.data : []);
+        
+        // Shallow reconciliation check before calling setPosts!
+        setPosts((prevPosts) => {
+          if (areFeedPostsEqual(prevPosts, feedItems)) {
+            console.log("[FEED_PERF] Posts identical, skipping setPosts state update!");
+            return prevPosts;
+          }
+          console.log("[FEED_PERF] Feed updated with new data, committing setPosts.");
+          return feedItems;
+        });
+
+        feedUpdatedAtRef.current = Date.now();
       }
     } catch (err) {
       console.log("Error fetching feed", err);
     } finally {
+      inFlightFeedRef.current = false;
       setLoading(false);
       setRefreshing(false);
+      setBackgroundRefreshing(false);
     }
   };
 
   useEffect(() => {
-    const safetyTimeout = setTimeout(() => {
-      setLoading(false);
-    }, 800);
-
-    fetchFeed().finally(() => clearTimeout(safetyTimeout));
+    fetchFeed();
     fetchStories();
+
     const unsubscribe = navigation.addListener("focus", () => {
       fetchFeed();
       fetchStories();
     });
     return () => {
-      clearTimeout(safetyTimeout);
       unsubscribe();
     };
   }, [navigation]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchFeed();
-    fetchStories();
+    fetchFeed(true);
+    fetchStories(true);
   };
 
-  const handleToggleLike = async (postId: string) => {
-    // 낙관적 UI 업데이트
+  const handleToggleLike = useCallback(async (postId: string) => {
     setPosts((prevPosts) =>
       prevPosts.map((p) => {
         if (p.id === postId) {
@@ -158,11 +447,11 @@ export const FeedScreen = ({ navigation }: any) => {
       }
     } catch (err) {
       console.log("Error toggling like", err);
-      fetchFeed();
+      fetchFeed(true);
     }
-  };
+  }, []);
 
-  const handleToggleBookmark = async (postId: string) => {
+  const handleToggleBookmark = useCallback(async (postId: string) => {
     setPosts((prevPosts) =>
       prevPosts.map((p) =>
         p.id === postId ? { ...p, is_bookmarked: !p.is_bookmarked } : p
@@ -179,15 +468,15 @@ export const FeedScreen = ({ navigation }: any) => {
       }
     } catch (err) {
       console.log("Error toggling bookmark", err);
-      fetchFeed();
+      fetchFeed(true);
     }
-  };
-  const handleToggleRepost = async (postId: string) => {
-    let nextIsReposted = false;
+  }, []);
+
+  const handleToggleRepost = useCallback(async (postId: string) => {
     setPosts((prevPosts) =>
       prevPosts.map((p) => {
         if (p.id === postId) {
-          nextIsReposted = !p.is_reposted;
+          const nextIsReposted = !p.is_reposted;
           const nextCount = nextIsReposted
             ? (p.reposts_count || 0) + 1
             : Math.max(0, (p.reposts_count || 0) - 1);
@@ -208,84 +497,11 @@ export const FeedScreen = ({ navigation }: any) => {
       }
     } catch (err) {
       console.log("Error toggling repost", err);
-      fetchFeed();
+      fetchFeed(true);
     }
-  };
+  }, []);
 
-  const handleOpenDm = (postItem: any) => {
-    setDmPost(postItem);
-    setDmModalVisible(true);
-  };
-
-  const handleOpenComments = (postId: string) => {
-    setDetailPostId(postId);
-    setDetailModalVisible(true);
-  };
-
-  const handleCommentAdded = async (postId: string) => {
-    try {
-      const res = await api.get(`/posts/${postId}/comments`);
-      if (res.data && res.data.data) {
-        const flattenedList: any[] = [];
-        res.data.data.forEach((c: any) => {
-          flattenedList.push(c);
-          if (c.replies && c.replies.length > 0) {
-            c.replies.forEach((r: any) => flattenedList.push(r));
-          }
-        });
-        setPosts((prevPosts) =>
-          prevPosts.map((p) =>
-            p.id === postId
-              ? {
-                  ...p,
-                  comments_count: (p.comments_count || 0) + 1,
-                  preview_comments: flattenedList.slice(0, 3),
-                }
-              : p
-          )
-        );
-      }
-    } catch (e) {
-      console.log("Error refreshing preview comments on comment add", e);
-      setPosts((prevPosts) =>
-        prevPosts.map((p) =>
-          p.id === postId ? { ...p, comments_count: (p.comments_count || 0) + 1 } : p
-        )
-      );
-    }
-  };
-
-  const handleCommentDeleted = async (postId: string) => {
-    try {
-      const res = await api.get(`/posts/${postId}/comments`);
-      if (res.data && res.data.data) {
-        const flattenedList: any[] = [];
-        res.data.data.forEach((c: any) => {
-          flattenedList.push(c);
-          if (c.replies && c.replies.length > 0) {
-            c.replies.forEach((r: any) => flattenedList.push(r));
-          }
-        });
-        setPosts((prevPosts) =>
-          prevPosts.map((p) =>
-            p.id === postId
-              ? {
-                  ...p,
-                  comments_count: Math.max(0, (p.comments_count || 0) - 1),
-                  preview_comments: flattenedList.slice(0, 3),
-                }
-              : p
-          )
-        );
-      }
-    } catch (e) {
-      console.log("Error refreshing preview comments on comment delete", e);
-    }
-  };
-
-  const { user: currentUser } = useAuth();
-
-  const handleToggleFollowUser = async (username: string, currentIsFollowing: boolean) => {
+  const handleToggleFollowUser = useCallback(async (username: string, currentIsFollowing: boolean) => {
     setPosts((prevPosts) =>
       prevPosts.map((p) => {
         if (p.user?.username === username) {
@@ -321,285 +537,73 @@ export const FeedScreen = ({ navigation }: any) => {
       );
     } catch (err) {
       console.log("Error toggling follow from feed options", err);
-      fetchFeed();
+      fetchFeed(true);
     }
-  };
+  }, []);
 
-  const handleMoreOptions = (item: any) => {
+  const handleOpenDm = useCallback((postItem: FeedPostItem) => {
+    setDmPost(postItem);
+    setDmModalVisible(true);
+  }, []);
+
+  const handleOpenComments = useCallback((postId: string) => {
+    setDetailPostId(postId);
+    setDetailModalVisible(true);
+  }, []);
+
+  const handleMoreOptions = useCallback((item: FeedPostItem) => {
     setOptionsPost(item);
-    return;
-    const authorUsername = item.user?.username;
-    if (!authorUsername) return;
+  }, []);
 
-    const isMe = item.is_mine || (currentUser && currentUser.username === authorUsername);
+  const handleDetailPress = useCallback((id: string) => {
+    setDetailPostId(id);
+    setDetailModalVisible(true);
+  }, []);
 
-    if (isMe) {
-      Alert.alert(
-        "내 게시물",
-        "원하시는 작업을 선택하세요.",
-        [
-          {
-            text: "수정하기",
-            onPress: () => navigation.navigate("CreatePost", { editPost: item }),
-          },
-          {
-            text: item.visibility === "private" ? "전체 공개로 변경" : "비공개로 변경",
-            onPress: async () => {
-              try {
-                const nextVisibility =
-                  item.visibility === "private" ? "public" : "private";
-                await api.patch(`/posts/${item.id}`, {
-                  visibility: nextVisibility,
-                });
-                setPosts((prev: any[]) =>
-                  prev.map((p) =>
-                    p.id === item.id
-                      ? { ...p, visibility: nextVisibility }
-                      : p
-                  )
-                );
-                Alert.alert(
-                  "완료",
-                  nextVisibility === "public"
-                    ? "게시물이 전체 공개로 변경되었습니다."
-                    : "게시물이 비공개로 변경되었습니다."
-                );
-              } catch (e) {
-                Alert.alert("오류", "공개 여부 변경에 실패했습니다.");
-              }
-            },
-          },
-          {
-            text: "삭제하기",
-            style: "destructive",
-            onPress: () => {
-              Alert.alert("게시물 삭제", "정말 삭제하시겠습니까?", [
-                { text: "취소", style: "cancel" },
-                {
-                  text: "삭제",
-                  style: "destructive",
-                  onPress: async () => {
-                    try {
-                      await api.delete(`/posts/${item.id}`);
-                      setPosts((prev: any[]) => prev.filter((p) => p.id !== item.id));
-                    } catch (e) {
-                      Alert.alert("오류", "삭제에 실패했습니다.");
-                    }
-                  },
-                },
-              ]);
-            },
-          },
-          { text: "취소", style: "cancel" },
-        ],
-        { cancelable: true }
-      );
-      return;
+  const handleDeletePost = useCallback(async (postId: string) => {
+    try {
+      await api.delete(`/posts/${postId}`);
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+    } catch (e) {
+      Alert.alert("오류", "삭제에 실패했습니다.");
     }
+  }, []);
 
-    const isFollowing = item.user?.is_following || false;
-
-    Alert.alert(
-      `@${authorUsername}`,
-      "원하시는 작업을 선택하세요.",
-      [
-        {
-          text: isFollowing ? "언팔로우 (팔로잉 취소)" : "팔로우 하기",
-          style: isFollowing ? "destructive" : "default",
-          onPress: () => handleToggleFollowUser(authorUsername, isFollowing),
-        },
-        {
-          text: "프로필 보기",
-          onPress: () => openUserProfile(navigation, item.user),
-        },
-        {
-          text: "🚨 게시물 신고하기",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await api.post(`/posts/${item.id}/report`, { reason: "부적절한 내용" });
-              Alert.alert("신고 완료", "게시물이 성공적으로 신고 접수되었습니다.");
-            } catch (e) {
-              console.error(e);
-            }
-          },
-        },
-        {
-          text: "취소",
-          style: "cancel",
-        },
-      ],
-      { cancelable: true }
-    );
-  };
-
-  const renderPostItem = ({ item }: { item: any }) => {
-    const mainMedia = item.media && item.media.length > 0 ? item.media[0].media_url : null;
-    const commentsCount = item.comments_count || 0;
-    const isMe = currentUser && currentUser.username === item.user?.username;
-    const isFollowing = item.user?.is_following || false;
-
-    return (
-      <LinearGradient
-        colors={["rgba(139, 92, 246, 0.50)", "rgba(236, 72, 153, 0.50)", "rgba(6, 182, 212, 0.50)"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.postCardGradientBorder}
-      >
-        <View style={[styles.postCardInner, { backgroundColor: colors.bgCard || "#161622" }]}>
-          {/* Post Header */}
-        <View style={styles.postHeader}>
-          <TouchableOpacity
-            style={styles.userInfo}
-            onPress={() => openUserProfile(navigation, item.user)}
-          >
-            <AdminAvatar user={item.user} style={styles.avatar} />
-            <View style={styles.authorText}>
-              <View style={styles.authorLine}>
-                <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(item.user)}</Text>
-                {item.user?.is_admin && <AdminBadge />}
-                {!isMe && (
-                  <TouchableOpacity
-                    style={[styles.headerFollowBtn, { backgroundColor: colors.bgInput, borderColor: colors.borderColor }]}
-                    onPress={() => handleToggleFollowUser(item.user?.username, isFollowing)}
-                  >
-                    <Text style={[styles.headerFollowBtnText, { color: colors.textPrimary }]}>
-                      {isFollowing ? "팔로잉" : "팔로우"}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              {item.location ? <Text style={[styles.location, { color: colors.textSecondary }]}>{item.location}</Text> : null}
-            </View>
-          </TouchableOpacity>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            {isMe && (
-              <>
-                <TouchableOpacity
-                  style={{ padding: 4 }}
-                  onPress={() => navigation.navigate("CreatePost", { editPost: item })}
-                >
-                  <Ionicons name="create-outline" size={20} color={colors.accentPurple || "#a855f7"} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{ padding: 4 }}
-                  onPress={() => {
-                    Alert.alert("게시물 삭제", "정말 삭제하시겠습니까?", [
-                      { text: "취소", style: "cancel" },
-                      {
-                        text: "삭제",
-                        style: "destructive",
-                        onPress: async () => {
-                          try {
-                            await api.delete(`/posts/${item.id}`);
-                            setPosts((prev: any[]) => prev.filter((p) => p.id !== item.id));
-                          } catch (e) {
-                            Alert.alert("오류", "삭제에 실패했습니다.");
-                          }
-                        },
-                      },
-                    ]);
-                  }}
-                >
-                  <Ionicons name="trash-outline" size={20} color="#ef4444" />
-                </TouchableOpacity>
-              </>
-            )}
-            <TouchableOpacity style={{ padding: 4 }} onPress={() => handleMoreOptions(item)}>
-              <Ionicons name="ellipsis-horizontal" size={20} color={colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Post Image Media Carousel */}
-        {item.media && item.media.length > 0 ? (
-          <PostCarousel media={item.media} onPress={() => { setDetailPostId(item.id); setDetailModalVisible(true); }} />
-        ) : !item.youtube_url ? (
-          <TouchableOpacity
-            style={[styles.postImage, styles.noMedia, { backgroundColor: colors.bgCard }]}
-            onPress={() => { setDetailPostId(item.id); setDetailModalVisible(true); }}
-          >
-            <Text style={{ color: colors.textMuted }}>이미지 없음</Text>
-          </TouchableOpacity>
-        ) : null}
-
-        {/* Action Row */}
-        <View style={styles.actionRow}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-            {/* Likes */}
-            <TouchableOpacity
-              style={styles.actionCountGroup}
-              onPress={() => handleToggleLike(item.id)}
-            >
-              <Ionicons
-                name={item.is_liked ? "heart" : "heart-outline"}
-                size={24}
-                color={item.is_liked ? "#ed4956" : colors.textPrimary}
-              />
-              <Text style={[styles.actionCountText, { color: colors.textPrimary }]}>{item.likes_count || 0}</Text>
-            </TouchableOpacity>
-
-            {/* Comments */}
-            <TouchableOpacity
-              style={styles.actionCountGroup}
-              onPress={() => handleOpenComments(item.id)}
-            >
-              <Ionicons name="chatbubble-outline" size={22} color={colors.textPrimary} />
-              <Text style={[styles.actionCountText, { color: colors.textPrimary }]}>{commentsCount}</Text>
-            </TouchableOpacity>
-
-            {/* Repost */}
-            <TouchableOpacity style={styles.actionCountGroup} onPress={() => handleToggleRepost(item.id)}>
-              <Ionicons
-                name="repeat-outline"
-                size={23}
-                color={item.is_reposted ? "#10b981" : colors.textPrimary}
-              />
-              <Text style={[styles.actionCountText, { color: item.is_reposted ? "#10b981" : colors.textPrimary }]}>
-                {item.reposts_count || 0}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Send by DM */}
-            <TouchableOpacity style={styles.actionCountGroup} onPress={() => handleOpenDm(item)}>
-              <Ionicons name="paper-plane-outline" size={22} color={colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Bookmark Button */}
-          <TouchableOpacity onPress={() => handleToggleBookmark(item.id)}>
-            <Ionicons
-              name={item.is_bookmarked ? "bookmark" : "bookmark-outline"}
-              size={23}
-              color={colors.textPrimary}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Caption & Details Section */}
-        <View style={styles.postDetails}>
-          {/* Caption Section (Aligned with photo left edge) */}
-          {item.caption ? (
-            <View style={[styles.captionBlock, { paddingVertical: 6, paddingHorizontal: 0 }]}>
-              <HashtagText text={item.caption} style={{ fontSize: 14, lineHeight: 20 }} />
-            </View>
-          ) : null}
-
-          <VerifiedYouTubeCard
-            url={item.youtube_url}
-            title={item.youtube_title}
-            thumbnailUrl={item.youtube_thumbnail_url}
-          />
-
-          {/* Created Date */}
-          <Text style={[styles.timeText, { color: colors.textMuted, marginTop: 4 }]}>
-            {new Date(item.created_at).toLocaleDateString("ko-KR")}
-          </Text>
-        </View>
-      </View>
-    </LinearGradient>
+  const renderPostItem = useCallback(
+    ({ item }: { item: FeedPostItem }) => (
+      <FeedPostCard
+        item={item}
+        colors={colors}
+        currentUser={user}
+        navigation={navigation}
+        onToggleLike={handleToggleLike}
+        onOpenComments={handleOpenComments}
+        onToggleRepost={handleToggleRepost}
+        onOpenDm={handleOpenDm}
+        onToggleBookmark={handleToggleBookmark}
+        onToggleFollowUser={handleToggleFollowUser}
+        onMoreOptions={handleMoreOptions}
+        onDetailPress={handleDetailPress}
+        onDeletePost={handleDeletePost}
+      />
+    ),
+    [
+      colors,
+      user,
+      navigation,
+      handleToggleLike,
+      handleOpenComments,
+      handleToggleRepost,
+      handleOpenDm,
+      handleToggleBookmark,
+      handleToggleFollowUser,
+      handleMoreOptions,
+      handleDetailPress,
+      handleDeletePost,
+    ]
   );
-  };
+
+  const keyExtractor = useCallback((item: FeedPostItem) => item.id, []);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
@@ -634,6 +638,7 @@ export const FeedScreen = ({ navigation }: any) => {
         </View>
       </View>
 
+      {/* Section Tabs */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -655,6 +660,11 @@ export const FeedScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </ScrollView>
 
+      {/* Subtle Background Refresh Indicator Bar */}
+      {backgroundRefreshing && (
+        <View style={{ height: 2, backgroundColor: colors.accentPurple || "#a855f7", width: "100%" }} />
+      )}
+
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.accentBlue} />
@@ -662,7 +672,7 @@ export const FeedScreen = ({ navigation }: any) => {
       ) : (
         <FlatList
           data={posts}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
           renderItem={renderPostItem}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.textPrimary} />
@@ -697,136 +707,102 @@ export const FeedScreen = ({ navigation }: any) => {
       <PostOptionsSheet
         visible={!!optionsPost}
         post={optionsPost}
-        isMine={!!optionsPost && (optionsPost.is_mine || currentUser?.username === optionsPost.user?.username)}
+        isMine={!!optionsPost && (optionsPost.is_mine || user?.username === optionsPost.user?.username)}
         onClose={() => setOptionsPost(null)}
-        onEdit={() => navigation.navigate("CreatePost", { editPost: optionsPost })}
-        onVisibility={async (visibility) => {
-          if (!optionsPost) return;
-          await api.patch(`/posts/${optionsPost.id}`, { visibility });
-          setPosts((prev) => prev.map((item) => item.id === optionsPost.id ? { ...item, visibility } : item));
+        onEdit={() => {
+          const target = optionsPost;
+          setOptionsPost(null);
+          if (target) navigation.navigate("CreatePost", { editPost: target });
         }}
-        onProfile={() => openUserProfile(navigation, optionsPost?.user)}
-        onFollow={() => optionsPost?.user?.username && handleToggleFollowUser(optionsPost.user.username, !!optionsPost.user.is_following)}
-        onHide={async () => {
-          if (!optionsPost) return;
-          await api.post("/hidden-content", { target_type: "post", target_id: optionsPost.id });
-          setPosts((prev) => prev.filter((item) => item.id !== optionsPost.id));
+        onDelete={() => {
+          const target = optionsPost;
+          setOptionsPost(null);
+          if (target?.id) handleDeletePost(target.id);
         }}
-        onBlock={async () => {
-          if (!optionsPost?.user?.username) return;
-          await api.post(`/users/${optionsPost.user.username}/block`);
-          setPosts((prev) => prev.filter((item) => item.user?.username !== optionsPost.user.username));
+        onReport={() => {
+          const target = optionsPost;
+          setOptionsPost(null);
+          setReportPost(target);
         }}
-        onReport={() => setReportPost(optionsPost)}
-        onDelete={async () => {
-          if (!optionsPost) return;
-          await api.delete(`/posts/${optionsPost.id}`);
-          setPosts((prev) => prev.filter((item) => item.id !== optionsPost.id));
+        onFollow={() => {
+          const target = optionsPost;
+          setOptionsPost(null);
+          if (target?.user?.username) {
+            handleToggleFollowUser(target.user.username, target.user.is_following || false);
+          }
+        }}
+        onProfile={() => {
+          const targetUser = optionsPost?.user;
+          setOptionsPost(null);
+          if (targetUser) openUserProfile(navigation, targetUser);
         }}
       />
+
       <ReportSheet
         visible={!!reportPost}
         targetType="post"
-        targetId={reportPost?.id || null}
-        targetUsername={reportPost?.user?.username}
+        targetId={reportPost?.id || ""}
         onClose={() => setReportPost(null)}
-        onHidden={() => {
-          if (reportPost) setPosts((prev) => prev.filter((item) => item.id !== reportPost.id));
-        }}
       />
 
-      {/* Comments Modal */}
-      <CommentsModal
-        visible={commentsModalVisible}
-        postId={activeCommentPostId}
-        onClose={() => setCommentsModalVisible(false)}
-        onCommentAdded={() => {
-          if (activeCommentPostId) handleCommentAdded(activeCommentPostId);
-        }}
-        onCommentDeleted={() => {
-          if (activeCommentPostId) handleCommentDeleted(activeCommentPostId);
-        }}
-      />
-
-      {/* Post Detail Modal */}
-      <PostDetailModal
-        visible={detailModalVisible}
-        postId={detailPostId}
-        onClose={() => setDetailModalVisible(false)}
-        onPostUpdated={fetchFeed}
-      />
-
-      {/* Story Viewer Modal — 타 유저 스토리만 (내 스토리 제외) */}
-      {(() => {
-        const otherGroups = storyGroups.filter((g) => !g.is_self);
-        // selectedStoryGroupIndex는 storyGroups 기준이므로 otherGroups 기준으로 재계산
-        const selectedGroup = storyGroups[selectedStoryGroupIndex];
-        const adjustedIndex = selectedGroup
-          ? otherGroups.findIndex((g) => g.user?.id === selectedGroup.user?.id)
-          : 0;
-        return (
-          <StoryViewerModal
-            visible={storyViewerVisible}
-            storyGroups={otherGroups}
-            initialGroupIndex={Math.max(0, adjustedIndex)}
-            onClose={() => setStoryViewerVisible(false)}
-            onStoryViewed={(storyId) => {
-              setStoryGroups((prev) =>
-                prev.map((group) => {
-                  const updatedStories = group.stories.map((s: any) =>
-                    s.id === storyId ? { ...s, has_viewed: true } : s
-                  );
-                  const hasUnviewed = updatedStories.some((s: any) => !s.has_viewed);
-                  return { ...group, stories: updatedStories, has_unviewed: hasUnviewed };
-                })
-              );
-            }}
-            onStoryDeleted={() => {
-              fetchStories();
-            }}
-          />
-        );
-      })()}
-
-      {/* Create Story Modal */}
-      <CreateStoryModal
-        visible={createStoryVisible}
-        onClose={() => setCreateStoryVisible(false)}
-        onStoryCreated={() => {
-          fetchStories();
-        }}
-      />
-
-      {/* My Stories Grid Modal */}
-      <MyStoriesGridModal
-        visible={myStoriesGridVisible}
-        stories={selfStories}
-        onClose={() => setMyStoriesGridVisible(false)}
-        onPressCreateStory={() => setCreateStoryVisible(true)}
-        onDeleteStory={handleDeleteStory}
-      />
-
-      {/* Notifications Modal */}
       <NotificationsModal
         visible={notificationsModalVisible}
         onClose={() => setNotificationsModalVisible(false)}
-        onNavigateProfile={(username) => {
-          navigation.navigate("UserProfile", { username });
-        }}
       />
 
-      {/* Send Post by DM Modal */}
-      <SendPostDmModal
-        visible={dmModalVisible}
-        post={dmPost}
-        onClose={() => {
-          setDmModalVisible(false);
-          setDmPost(null);
-        }}
-      />
+      {detailPostId && (
+        <PostDetailModal
+          visible={detailModalVisible}
+          postId={detailPostId}
+          onClose={() => {
+            setDetailModalVisible(false);
+            setDetailPostId(null);
+          }}
+        />
+      )}
+
+      {dmPost && (
+        <SendPostDmModal
+          visible={dmModalVisible}
+          post={dmPost}
+          onClose={() => {
+            setDmModalVisible(false);
+            setDmPost(null);
+          }}
+        />
+      )}
+
       <NoticeListModal
         visible={noticeModalVisible}
         onClose={() => setNoticeModalVisible(false)}
+      />
+
+      {/* Story Viewers & Creators */}
+      {storyGroups.length > 0 && (
+        <StoryViewerModal
+          visible={storyViewerVisible}
+          storyGroups={storyGroups}
+          initialGroupIndex={selectedStoryGroupIndex}
+          onClose={() => setStoryViewerVisible(false)}
+          onStoryDeleted={() => fetchStories(true)}
+        />
+      )}
+
+      <CreateStoryModal
+        visible={createStoryVisible}
+        onClose={() => setCreateStoryVisible(false)}
+        onStoryCreated={() => fetchStories(true)}
+      />
+
+      <MyStoriesGridModal
+        visible={myStoriesGridVisible}
+        stories={storyGroups.find((g) => g.is_self)?.stories || []}
+        onClose={() => setMyStoriesGridVisible(false)}
+        onPressCreateStory={() => {
+          setMyStoriesGridVisible(false);
+          setCreateStoryVisible(true);
+        }}
+        onDeleteStory={() => fetchStories(true)}
       />
     </SafeAreaView>
   );
@@ -835,20 +811,23 @@ export const FeedScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
   },
   header: {
-    height: 60,
+    height: 56,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
   },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
   headerIconButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -857,73 +836,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 18,
+    paddingVertical: 5,
+    borderRadius: 16,
     borderWidth: 1,
   },
   noticeIconText: {
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
   },
   sectionTabs: {
-    maxHeight: 48,
+    maxHeight: 44,
     borderBottomWidth: 1,
   },
   sectionTabsContent: {
-    minHeight: 48,
+    flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    gap: 6,
+    paddingHorizontal: 16,
   },
   sectionTab: {
-    minWidth: 88,
-    height: 48,
-    paddingHorizontal: 12,
-    alignItems: "center",
-    justifyContent: "center",
+    paddingVertical: 10,
+    marginRight: 20,
     position: "relative",
   },
-  sectionTabText: { fontSize: 14, fontWeight: "800" },
+  sectionTabText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
   sectionIndicator: {
     position: "absolute",
     bottom: 0,
-    width: 32,
+    left: 0,
+    right: 0,
     height: 3,
-    borderRadius: 3,
-  },
-  headerBadgeTouchable: {
-    padding: 2,
-  },
-  headerBadgeGradient: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    padding: 2,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerBadgeInner: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 18,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerBadgeText: {
-    color: "#ffffff",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-    color: "#fff",
-  },
-  createBtn: {
-    color: "#0095f6",
-    fontSize: 15,
-    fontWeight: "bold",
+    borderRadius: 1.5,
   },
   center: {
     flex: 1,
@@ -931,82 +876,62 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   postCardGradientBorder: {
-    borderRadius: 24,
+    borderRadius: 16,
     padding: 1.5,
-    marginHorizontal: 12,
-    marginVertical: 10,
-    shadowColor: "#7652df",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.45,
-    shadowRadius: 16,
-    elevation: 8,
+    marginHorizontal: 16,
+    marginBottom: 16,
   },
   postCardInner: {
-    borderRadius: 22.5,
-    padding: 14,
+    borderRadius: 14.5,
     overflow: "hidden",
   },
   postHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 0,
-    paddingVertical: 8,
+    padding: 12,
   },
   userInfo: {
-    flex: 1,
-    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
-    marginRight: 8,
+    gap: 10,
+    flex: 1,
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   authorText: {
     flex: 1,
-    minWidth: 0,
   },
   authorLine: {
-    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
-    flexWrap: "wrap",
-  },
-  avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    marginRight: 10,
+    gap: 6,
   },
   username: {
-    color: "#fff",
-    fontWeight: "bold",
     fontSize: 14,
-    flexShrink: 1,
+    fontWeight: "700",
   },
   headerFollowBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
     borderWidth: 1,
-    marginLeft: 8,
+    marginLeft: 4,
   },
   headerFollowBtnText: {
-    fontSize: 12,
-    fontWeight: "bold",
+    fontSize: 11,
+    fontWeight: "700",
   },
   location: {
-    color: "#8e8e8e",
     fontSize: 12,
-    minWidth: 0,
-    flexShrink: 1,
-    flexWrap: "wrap",
+    marginTop: 1,
   },
   postImage: {
-    width: width - 52,
-    height: (width - 52) * 1.28,
-    borderRadius: 18,
-    alignSelf: "center",
-    marginVertical: 10,
-    backgroundColor: "#161622",
+    width: "100%",
+    height: 360,
   },
   noMedia: {
     justifyContent: "center",
@@ -1014,112 +939,41 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 0,
-    paddingVertical: 8,
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   actionCountGroup: {
     flexDirection: "row",
     alignItems: "center",
-    marginRight: 6,
-  },
-  actionIcon: {
-    fontSize: 20,
+    gap: 5,
   },
   actionCountText: {
-    fontSize: 14,
-    fontWeight: "bold",
-    marginLeft: 4,
-  },
-  postDetails: {
-    paddingHorizontal: 0,
-    minWidth: 0,
-  },
-  captionBlock: {
-    paddingVertical: 6,
-    paddingHorizontal: 0,
-    minWidth: 0,
-  },
-  commentsBlock: {
-    paddingTop: 6,
-    marginTop: 4,
-  },
-  likesText: {
-    color: "#fff",
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-  captionText: {
-    color: "#fff",
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  captionUsername: {
-    fontWeight: "bold",
-  },
-  commentPreviewText: {
-    color: "#fff",
-    fontSize: 14,
-    lineHeight: 18,
-    marginTop: 2,
-  },
-  commentsCountText: {
-    color: "#8e8e8e",
     fontSize: 13,
-  },
-  commentIconBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginTop: 4,
-  },
-  commentIconBtnText: {
-    fontSize: 12.5,
     fontWeight: "600",
   },
+  postDetails: {
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+  },
+  captionBlock: {
+    marginBottom: 6,
+  },
   timeText: {
-    color: "#8e8e8e",
     fontSize: 11,
-    marginTop: 4,
   },
   emptyContainer: {
-    padding: 40,
+    paddingVertical: 80,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 60,
   },
   emptyText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 8,
-    textAlign: "center",
-    paddingHorizontal: 16,
-    width: "100%",
-    lineHeight: 24,
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 4,
   },
   emptySubText: {
-    color: "#8e8e8e",
-    fontSize: 14,
-    marginBottom: 20,
-    textAlign: "center",
-    paddingHorizontal: 16,
-    width: "100%",
-    lineHeight: 20,
-  },
-  emptyBtn: {
-    backgroundColor: "#0095f6",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 6,
-  },
-  emptyBtnText: {
-    color: "#fff",
-    fontWeight: "bold",
+    fontSize: 13,
   },
 });
