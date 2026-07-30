@@ -781,7 +781,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary || "#09090b" }]}>
       {/* Top Header */}
-      <View style={[styles.header, { backgroundColor: colors.headerBg, borderBottomColor: colors.borderLight }]}>
+      <View style={[styles.header, { backgroundColor: colors.headerBg }]}>
         <AuraLogoText fontSize={26} />
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>커뮤니티</Text>
         <View style={styles.headerActions}>
@@ -988,7 +988,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    borderBottomWidth: 1,
   },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   headerIconButton: {
