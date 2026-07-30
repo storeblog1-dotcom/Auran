@@ -31,7 +31,7 @@ import {
   PostDetailModal,
   AdminPostAuditContext,
 } from "../components/PostDetailModal";
-import { AdminUserPostsModal } from "../components/AdminUserPostsModal";
+import { AdminUserActivityModal } from "../components/AdminUserActivityModal";
 import { AdminContentRevisionModal } from "../components/AdminContentRevisionModal";
 import { getDisplayName } from "../utils/displayName";
 import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
@@ -1094,11 +1094,12 @@ export const AdminScreen = ({ navigation }: any) => {
         </ScrollView>
       )}
 
-      {/* 회원별 작성 게시물 팝업 모달 */}
-      <AdminUserPostsModal
+      {/* 회원 360° 통합 활동 모달 (제시안 1 구현) */}
+      <AdminUserActivityModal
         visible={userPostsModalVisible}
         user={selectedUserForModal}
         onClose={() => setUserPostsModalVisible(false)}
+        onUserUpdated={() => loadUsers(searchQuery, userPage)}
       />
 
       {/* 게시물 상세 팝업 모달 */}
