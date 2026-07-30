@@ -32,10 +32,10 @@ async def lifespan(app: FastAPI):
             await conn.execute(text("UPDATE community_notices SET is_global = FALSE WHERE board_id IS NOT NULL;"))
             await conn.execute(text("""
                 UPDATE community_notices 
-                SET is_global = TRUE 
-                WHERE id IN (
+                SET is_global = FALSE 
+                WHERE is_global = TRUE AND id NOT IN (
                     SELECT id FROM community_notices 
-                    WHERE board_id IS NULL AND is_active = TRUE 
+                    WHERE is_active = TRUE AND is_global = TRUE
                     ORDER BY created_at DESC 
                     LIMIT 1
                 );

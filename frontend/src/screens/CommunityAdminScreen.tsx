@@ -84,7 +84,7 @@ export const CommunityAdminScreen = ({ navigation, route }: any) => {
   };
   const postNotice = async () => {
     if (!noticeTitle.trim() || !noticeContent.trim()) return Alert.alert("알림", "공지 제목과 내용을 입력해 주세요.");
-    try { await api.post("/community/admin/notices", { title: noticeTitle.trim(), content: noticeContent.trim() }); setNoticeTitle(""); setNoticeContent(""); Alert.alert("완료", "전체 공지가 모든 게시판 상단에 표시됩니다."); }
+    try { await api.post("/community/admin/notices", { title: noticeTitle.trim(), content: noticeContent.trim(), is_global: true }); setNoticeTitle(""); setNoticeContent(""); Alert.alert("완료", "전체 공지가 모든 게시판 상단에 표시됩니다."); }
     catch { Alert.alert("오류", "공지 등록에 실패했습니다."); }
   };
   const topLevelBoards = sortSiblingBoards(
