@@ -639,26 +639,28 @@ export const FeedScreen = ({ navigation }: any) => {
       </View>
 
       {/* Section Tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={[styles.sectionTabs, { borderBottomColor: colors.borderLight }]}
-        contentContainerStyle={styles.sectionTabsContent}
-      >
-        <TouchableOpacity style={styles.sectionTab}>
-          <Text style={[styles.sectionTabText, { color: colors.textPrimary }]}>피드</Text>
-          <LinearGradient colors={colors.auraGradient} style={styles.sectionIndicator} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("Community", { section: "anonymous" })}>
-          <Text style={[styles.sectionTabText, { color: colors.textSecondary }]}>익명게시판</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("Community", { section: "info" })}>
-          <Text style={[styles.sectionTabText, { color: colors.textSecondary }]}>정보게시판</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("Community", { section: "partner" })}>
-          <Text style={[styles.sectionTabText, { color: colors.textSecondary }]}>제휴업소</Text>
-        </TouchableOpacity>
-      </ScrollView>
+      <View style={[styles.sectionTabsWrapper, { borderBottomColor: colors.borderLight }]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.sectionTabs}
+          contentContainerStyle={styles.sectionTabsContent}
+        >
+          <TouchableOpacity style={styles.sectionTab}>
+            <Text style={[styles.sectionTabText, { color: colors.textPrimary }]}>피드</Text>
+            <LinearGradient colors={colors.auraGradient} style={styles.sectionIndicator} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("Community", { section: "anonymous" })}>
+            <Text style={[styles.sectionTabText, { color: colors.textSecondary }]}>익명게시판</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("Community", { section: "info" })}>
+            <Text style={[styles.sectionTabText, { color: colors.textSecondary }]}>정보게시판</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.sectionTab} onPress={() => navigation.navigate("Community", { section: "partner" })}>
+            <Text style={[styles.sectionTabText, { color: colors.textSecondary }]}>제휴업소</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
 
       {/* Subtle Background Refresh Indicator Bar */}
       {backgroundRefreshing && (
@@ -844,9 +846,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
-  sectionTabs: {
-    maxHeight: 44,
+  sectionTabsWrapper: {
     borderBottomWidth: 1,
+  },
+  sectionTabs: {
+    maxHeight: 46,
   },
   sectionTabsContent: {
     flexDirection: "row",
@@ -854,7 +858,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   sectionTab: {
-    paddingVertical: 10,
+    paddingVertical: 12,
     marginRight: 20,
     position: "relative",
   },
