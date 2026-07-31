@@ -8,6 +8,11 @@ interface DirectMessageItemProps {
   isMe: boolean;
 }
 
+function stripTrailingPunctuation(text?: string): string {
+  if (!text) return "";
+  return text.replace(/[.!?,\u2026:;~^]+$/, "").trim();
+}
+
 export const DirectMessageItem: React.FC<DirectMessageItemProps> = ({ item, isMe }) => {
   const { colors } = useTheme();
 
@@ -21,10 +26,12 @@ export const DirectMessageItem: React.FC<DirectMessageItemProps> = ({ item, isMe
     }
   };
 
+  const displayContent = stripTrailingPunctuation(item.content);
+
   return (
     <View style={[styles.container, isMe ? styles.rightContainer : styles.leftContainer]}>
       <Text style={[styles.messageText, { color: colors.textPrimary }, isMe ? styles.textRight : styles.textLeft]}>
-        {item.content}
+        {displayContent}
       </Text>
       <Text style={[styles.timeText, { color: colors.textMuted }, isMe ? styles.textRight : styles.textLeft]}>
         {formatTime(item.created_at)} {item.isOptimistic ? "• 전송 중..." : ""}
