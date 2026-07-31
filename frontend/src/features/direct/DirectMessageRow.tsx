@@ -84,7 +84,7 @@ export const DirectMessageRow = ({
       {!isMine && (
         <AdminAvatar user={message.sender} style={styles.avatar} />
       )}
-      <View style={[styles.column, { width: maxContentWidth }]}>
+      <View style={[styles.column, { maxWidth: maxContentWidth }]}>
         <View
           style={[
             styles.metadata,
@@ -275,12 +275,12 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   surface: {
-    width: "100%",
+    alignSelf: "flex-start",
     minWidth: 72,
     flexShrink: 1,
     borderRadius: 17,
     paddingLeft: 14,
-    paddingRight: 18,
+    paddingRight: 16,
     paddingVertical: 11,
     overflow: "visible",
   },
