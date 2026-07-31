@@ -259,9 +259,11 @@ const styles = StyleSheet.create({
   },
   myRow: {
     justifyContent: "flex-end",
+    alignItems: "flex-end",
   },
   otherRow: {
     justifyContent: "flex-start",
+    alignItems: "flex-start",
   },
   avatar: {
     width: 32,
@@ -270,10 +272,7 @@ const styles = StyleSheet.create({
     marginRight: 9,
     marginTop: 20,
   },
-  column: {
-    minWidth: 0,
-    flexShrink: 1,
-  },
+  column: {},
   metadata: {
     minHeight: 18,
     flexDirection: "row",
@@ -296,12 +295,8 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   surface: {
-    alignSelf: "flex-start",
-    minWidth: 72,
-    flexShrink: 1,
     borderRadius: 17,
-    paddingLeft: 14,
-    paddingRight: 14,
+    paddingHorizontal: 14,
     paddingVertical: 11,
     overflow: "visible",
   },
