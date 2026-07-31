@@ -819,12 +819,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 15,
     lineHeight: 22,
-    minWidth: 0,
-    flexShrink: 1,
-    flexWrap: "wrap",
-    maxWidth: "100%",
     includeFontPadding: false,
-    paddingRight: 6,
   },
   myMessageText: {
     color: "#fff",

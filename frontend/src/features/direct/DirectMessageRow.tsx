@@ -288,13 +288,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   messageText: {
-    minWidth: 0,
-    maxWidth: "100%",
-    flexShrink: 1,
     fontSize: 15.5,
     lineHeight: 23,
     includeFontPadding: false,
-    paddingRight: 6,
   },
   image: {
     height: 230,
