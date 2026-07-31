@@ -33,6 +33,7 @@ import api from "../../services/api";
 import { setActiveDirectRoomId } from "../../services/pushNotifications";
 import { CompositionSafeComposer } from "./CompositionSafeComposer";
 import { DirectMessageRow } from "./DirectMessageRow";
+import { DirectConversationListV2 } from "./components/DirectConversationListV2";
 import { formatDateDivider, getPresenceLabel } from "./formatters";
 import { buildDirectTimeline } from "./messageReducer";
 import { DirectMessage, DirectTimelineItem, DirectUser } from "./types";
@@ -125,6 +126,7 @@ export const DirectChatV2Screen = ({ route, navigation }: any) => {
     targetUser,
     isActive: isFocused && appIsForeground,
   });
+  const [useV2Renderer] = useState(true);
   const timeline = useMemo(() => buildDirectTimeline(messages), [messages]);
 
   const canCompose =
@@ -504,6 +506,100 @@ export const DirectChatV2Screen = ({ route, navigation }: any) => {
                 대화를 안전하게 불러오는 중…
               </Text>
             </View>
+          ) : useV2Renderer ? (
+            <DirectConversationListV2
+              timeline={timeline}
+              currentUserId={user?.id}
+              renderDateDivider={(date) => (
+                <View style={styles.dateRow}>
+                  <View
+                    style={[
+                      styles.dateLine,
+                      { backgroundColor: colors.borderLight },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.dateText,
+                      {
+                        color: colors.textSecondary,
+                        backgroundColor: colors.bgPrimary,
+                      },
+                    ]}
+                  >
+                    {formatDateDivider(date)}
+                  </Text>
+                  <View
+                    style={[
+                      styles.dateLine,
+                      { backgroundColor: colors.borderLight },
+                    ]}
+                  />
+                </View>
+              )}
+              onOpenPost={(postId) => {
+                setSelectedPostId(postId);
+                setPostModalVisible(true);
+              }}
+              onRetryMessage={(msg) => {
+                shouldAutoScrollRef.current = true;
+                void retryMessage(msg).catch(() => undefined);
+              }}
+              flatListRef={listRef as any}
+              flatListProps={{
+                contentContainerStyle: [
+                  styles.timeline,
+                  timeline.length === 0 && styles.emptyTimeline,
+                ],
+                keyboardShouldPersistTaps: "handled",
+                keyboardDismissMode: "interactive",
+                removeClippedSubviews: false,
+                maintainVisibleContentPosition: { minIndexForVisible: 1 },
+                onScroll: handleScroll,
+                scrollEventThrottle: 80,
+                onContentSizeChange: () => {
+                  if (shouldAutoScrollRef.current) {
+                    listRef.current?.scrollToEnd({ animated: false });
+                  }
+                },
+                ListHeaderComponent: hasOlderMessages ? (
+                  <TouchableOpacity
+                    disabled={loadingOlderMessages}
+                    onPress={() => void loadOlderMessages()}
+                    style={[
+                      styles.olderButton,
+                      {
+                        backgroundColor: colors.bgInput,
+                        borderColor: colors.borderLight,
+                      },
+                    ]}
+                  >
+                    {loadingOlderMessages ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={colors.accentPurple}
+                      />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name="time-outline"
+                          size={16}
+                          color={colors.textSecondary}
+                        />
+                        <Text
+                          style={[
+                            styles.olderButtonText,
+                            { color: colors.textSecondary },
+                          ]}
+                        >
+                          이전 메시기 더 보기
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                ) : null,
+              }}
+            />
           ) : (
             <FlatList
               ref={listRef}
