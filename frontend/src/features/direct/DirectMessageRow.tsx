@@ -145,6 +145,19 @@ export const DirectMessageRow = ({
                 isMine ? styles.myTextAlignment : styles.otherTextAlignment,
                 { color: colors.textPrimary },
               ]}
+              onTextLayout={(event) => {
+                console.log("[DM_PAIRWISE_LAYOUT]", {
+                  content: message.content,
+                  isMine,
+                  linesCount: event.nativeEvent.lines.length,
+                  lines: event.nativeEvent.lines.map((line, index) => ({
+                    index,
+                    text: JSON.stringify(line.text),
+                    width: line.width,
+                    height: line.height,
+                  })),
+                });
+              }}
             >
               {message.content || ""}
             </Text>
