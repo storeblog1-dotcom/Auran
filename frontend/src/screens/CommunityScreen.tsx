@@ -851,7 +851,10 @@ export const CommunityScreen = ({ navigation, route }: any) => {
               <Text style={[styles.emptyText, { color: colors.textPrimary }]}>
                 등록된 게시글이 없습니다.
               </Text>
-              <Text style={[styles.emptySubText, { color: colors.textSecondary }]}>
+              <Text
+                numberOfLines={0}
+                style={[styles.emptySubText, { color: colors.textSecondary }]}
+              >
                 {selectedBoard?.is_anonymous
                   ? "익명으로 자유롭게 이야기 나누어보세요!"
                   : "유용한 정보와 궁금한 점을 물어보세요."}
@@ -1075,20 +1078,24 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     paddingVertical: 60,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
+    width: "100%",
     alignItems: "center",
     justifyContent: "center",
   },
   emptyText: {
+    width: "100%",
     fontSize: 16,
     fontWeight: "700",
     marginBottom: 6,
     textAlign: "center",
   },
   emptySubText: {
+    width: "100%",
     fontSize: 13.5,
     lineHeight: 20,
     textAlign: "center",
+    flexWrap: "wrap",
   },
   noticeList: {
     marginBottom: 14,

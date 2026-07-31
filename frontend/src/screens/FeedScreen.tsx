@@ -649,7 +649,7 @@ export const FeedScreen = ({ navigation }: any) => {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={[styles.emptyText, { color: colors.textPrimary }]}>아직 피드 게시물이 없습니다.</Text>
-              <Text style={[styles.emptySubText, { color: colors.textSecondary }]}>첫 번째 게시물을 작성해보세요!</Text>
+              <Text numberOfLines={0} style={[styles.emptySubText, { color: colors.textSecondary }]}>첫 번째 게시물을 작성해보세요!</Text>
             </View>
           }
         />
@@ -923,19 +923,23 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     paddingVertical: 80,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
+    width: "100%",
     alignItems: "center",
     justifyContent: "center",
   },
   emptyText: {
+    width: "100%",
     fontSize: 16,
     fontWeight: "700",
     marginBottom: 6,
     textAlign: "center",
   },
   emptySubText: {
+    width: "100%",
     fontSize: 13.5,
     lineHeight: 20,
     textAlign: "center",
+    flexWrap: "wrap",
   },
 });
