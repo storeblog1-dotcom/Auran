@@ -136,6 +136,22 @@ export const DirectMessageRow = ({
                 isMine ? styles.myTextAlignment : styles.otherTextAlignment,
                 { color: colors.textPrimary },
               ]}
+              onTextLayout={(event) => {
+                console.log("[DM_TRACE] RENDER_MESSAGE", {
+                  at: Date.now(),
+                  phase: message.local_status === "pending" ? "optimistic" : "confirmed",
+                  id: message.id,
+                  clientId: message.client_message_id,
+                  content: message.content,
+                  status: message.local_status,
+                  linesCount: event.nativeEvent.lines.length,
+                  lines: event.nativeEvent.lines.map((line, index) => ({
+                    index,
+                    text: line.text,
+                    width: line.width,
+                  })),
+                });
+              }}
             >
               {message.content || ""}
             </Text>
@@ -267,9 +283,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
     paddingVertical: 2,
   },
-  myTextAlignment: {
-    textAlign: "right",
-  },
+  myTextAlignment: {},
   otherTextAlignment: {
     textAlign: "left",
   },
