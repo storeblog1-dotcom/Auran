@@ -23,7 +23,16 @@ export const DirectMessageItem: React.FC<DirectMessageItemProps> = ({ item, isMe
 
   return (
     <View style={[styles.row, isMe ? styles.alignRight : styles.alignLeft]}>
-      <View style={[styles.content, isMe ? styles.alignSelfRight : styles.alignSelfLeft]}>
+      <View
+        style={[styles.content, isMe ? styles.alignSelfRight : styles.alignSelfLeft]}
+        onLayout={(event) => {
+          console.log("[DM_CONTENT_LAYOUT]", {
+            id: item.id,
+            content: item.content,
+            layout: event.nativeEvent.layout,
+          });
+        }}
+      >
         <Text style={[styles.messageText, { color: colors.textPrimary }]}>
           {item.content}
         </Text>
@@ -55,8 +64,6 @@ const styles = StyleSheet.create({
   },
   content: {
     maxWidth: "85%",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "transparent",
   },
   alignSelfLeft: {
     alignSelf: "flex-start",
