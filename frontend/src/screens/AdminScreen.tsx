@@ -40,6 +40,7 @@ import { AdminStatsSection } from "../components/admin/AdminStatsSection";
 import { AdminReportDetailModal } from "../components/admin/AdminReportDetailModal";
 import { AdminPostSection } from "../components/admin/AdminPostSection";
 import { AdminUserSection } from "../components/admin/AdminUserSection";
+import { AdminReportSection } from "../components/admin/AdminReportSection";
 
 type AdminTab = "stats" | "users" | "posts" | "activity" | "reports" | "community";
 
@@ -794,72 +795,28 @@ export const AdminScreen = ({ navigation }: any) => {
       )}
 
       {activeTab === "reports" && (
-        <View style={{ flex: 1, padding: 16 }}>
-          <View style={styles.subnavRow}>
-            <TouchableOpacity onPress={() => { setContentScope("feed"); setActiveTab("posts"); }} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>피드</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => { setContentScope("community"); setActiveTab("posts"); }} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>게시판</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => setActiveTab("reports")} style={[styles.subnavButton, { borderColor: primaryAccent, backgroundColor: `${primaryAccent}18` }]}><Text style={{ color: primaryAccent, fontWeight: "700" }}>신고됨</Text></TouchableOpacity>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
-            {[
-              ["", "전체"],
-              ["received", "접수"],
-              ["reviewing", "검토 중"],
-              ["resolved", "조치 완료"],
-              ["rejected", "기각"],
-            ].map(([value, label]) => (
-              <TouchableOpacity
-                key={value}
-                onPress={() => {
-                  setReportStatus(value);
-                  setTimeout(() => adminService.getReports(value || undefined).then((result) => setReports(result.items)), 0);
-                }}
-                style={{
-                  paddingHorizontal: 14,
-                  paddingVertical: 9,
-                  borderRadius: 18,
-                  backgroundColor: reportStatus === value ? primaryAccent : colors.bgCard,
-                  borderWidth: 1,
-                  borderColor: reportStatus === value ? primaryAccent : colors.borderColor,
-                }}
-              >
-                <Text style={{ color: reportStatus === value ? "#fff" : colors.textPrimary, fontWeight: "700" }}>{label}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-          {loading ? (
-            <ActivityIndicator style={{ marginTop: 24 }} color={primaryAccent} />
-          ) : (
-            <FlatList
-              data={reports}
-              keyExtractor={(item) => `${item.target_type}:${item.target_id}`}
-              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={primaryAccent} />}
-              ListEmptyComponent={<Text style={{ color: colors.textMuted, textAlign: "center", marginTop: 28 }}>접수된 신고가 없습니다.</Text>}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  onPress={() => openReport(item)}
-                  style={[styles.userCard, { backgroundColor: colors.bgCard, borderColor: item.priority ? "#ef4444" : colors.borderColor }]}
-                >
-                  <View style={[styles.statIconBadge, { marginBottom: 0, backgroundColor: item.priority ? "rgba(239,68,68,0.12)" : "rgba(124,58,237,0.12)" }]}>
-                    <Ionicons name={item.target_type === "profile" ? "person-outline" : item.target_type === "comment" ? "chatbubble-outline" : "document-text-outline"} size={21} color={item.priority ? "#ef4444" : primaryAccent} />
-                  </View>
-                  <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={{ color: colors.textPrimary, fontWeight: "800" }}>
-                      {item.target_type === "post" ? "게시물" : item.target_type === "comment" ? "댓글·대댓글" : "프로필"} · 신고 {item.report_count}건
-                    </Text>
-                    <Text numberOfLines={2} style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>
-                      {item.snapshot.title || item.snapshot.comment_content || item.snapshot.caption || item.snapshot.bio || "(내용 없음)"}
-                    </Text>
-                    <Text style={{ color: primaryAccent, fontSize: 11, marginTop: 5 }}>
-                      {item.status} · {new Date(item.latest_at).toLocaleString("ko-KR")}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-                </TouchableOpacity>
-              )}
-            />
-          )}
-        </View>
+        <AdminReportSection
+          reports={reports}
+          reportStatus={reportStatus}
+          loading={loading}
+          refreshing={refreshing}
+          colors={colors}
+          primaryAccent={primaryAccent}
+          onChangeReportStatus={(value) => {
+            setReportStatus(value);
+            setTimeout(() => adminService.getReports(value || undefined).then((result) => setReports(result.items)), 0);
+          }}
+          onSelectFeedScope={() => {
+            setContentScope("feed");
+            setActiveTab("posts");
+          }}
+          onSelectCommunityScope={() => {
+            setContentScope("community");
+            setActiveTab("posts");
+          }}
+          onRefresh={handleRefresh}
+          onSelectReport={openReport}
+        />
       )}
 
       {activeTab === "activity" && (
