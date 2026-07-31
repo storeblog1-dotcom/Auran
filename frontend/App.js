@@ -7,7 +7,6 @@ import { AuthProvider } from "./src/context/AuthContext";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import { PushNotificationManager } from "./src/components/PushNotificationManager";
-import { DirectPresenceProvider } from "./src/features/direct/DirectPresenceContext";
 
 function AppInner() {
   const { colors } = useTheme();
@@ -45,14 +44,12 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-      <ThemeProvider>
-        <AuthProvider>
-          <DirectPresenceProvider>
+        <ThemeProvider>
+          <AuthProvider>
             <PushNotificationManager />
             <AppInner />
-          </DirectPresenceProvider>
-        </AuthProvider>
-      </ThemeProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
