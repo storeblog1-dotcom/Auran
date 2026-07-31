@@ -1,15 +1,10 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   StyleSheet,
   Text,
   View,
   TouchableOpacity,
-  FlatList,
-  TextInput,
-  ActivityIndicator,
   Alert,
-  RefreshControl,
-  Image,
   ScrollView,
   Modal,
 } from "react-native";
@@ -26,15 +21,12 @@ import {
   AdminReportGroup,
   AdminReportDetail,
 } from "../services/adminService";
-import { getFullImageUrl } from "../config";
 import {
   PostDetailModal,
   AdminPostAuditContext,
 } from "../components/PostDetailModal";
 import { AdminUserActivityModal } from "../components/AdminUserActivityModal";
 import { AdminContentRevisionModal } from "../components/AdminContentRevisionModal";
-import { getDisplayName } from "../utils/displayName";
-import { AdminAvatar, AdminBadge } from "../components/AdminIdentity";
 import { AdminCommunitySection } from "../components/admin/AdminCommunitySection";
 import { AdminStatsSection } from "../components/admin/AdminStatsSection";
 import { AdminReportDetailModal } from "../components/admin/AdminReportDetailModal";
@@ -44,11 +36,6 @@ import { AdminReportSection } from "../components/admin/AdminReportSection";
 import { AdminActivitySection } from "../components/admin/AdminActivitySection";
 
 type AdminTab = "stats" | "users" | "posts" | "activity" | "reports" | "community";
-
-const getReportedPostImages = (snapshot: Record<string, any> | null | undefined) => {
-  const media = Array.isArray(snapshot?.media) ? snapshot.media : [];
-  return media.map((item: any) => ({ url: item?.url || item?.media_url || item?.image_url || null, type: String(item?.type || item?.media_type || "image").toLowerCase() })).filter((item: { url: string | null; type: string }) => item.url && item.type === "image");
-};
 
 export const AdminScreen = ({ navigation }: any) => {
   const { colors, isDark } = useTheme();
@@ -429,7 +416,6 @@ export const AdminScreen = ({ navigation }: any) => {
   };
 
   const primaryAccent = isDark ? "#a855f7" : "#7c3aed";
-  const cyanBorder = isDark ? "#06b6d4" : "#0284c7";
 
 
 
@@ -789,144 +775,6 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 13,
-  },
-  subnavRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
-  subnavButton: { flex: 1, minHeight: 38, borderWidth: 1, borderRadius: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 16,
-  },
-  statIconBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: "rgba(168, 85, 247, 0.15)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    height: 42,
-    marginBottom: 10,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    height: 40,
-    paddingVertical: 0,
-    textAlignVertical: "center",
-  },
-  activitySearchRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  activitySearchContainer: { flex: 1, marginBottom: 0 },
-  activitySearchButton: { height: 42, paddingHorizontal: 14, borderRadius: 10, justifyContent: "center", alignItems: "center" },
-  activityLogCard: { padding: 12, borderRadius: 14, borderWidth: 1, marginBottom: 10 },
-  activityUserHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-  detailLabel: { flexDirection: "row", alignItems: "center", gap: 2, marginLeft: 8 },
-  activityDetail: { marginTop: 10, paddingTop: 10, borderTopWidth: 1 },
-  activityContentRow: {
-    marginTop: 10,
-    padding: 11,
-    borderWidth: 1,
-    borderRadius: 10,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  historyButton: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 8, alignSelf: "flex-start", minHeight: 28 },
-  historyPanel: { marginTop: 6, marginLeft: 10, padding: 9, borderWidth: 1, borderRadius: 10 },
-  historyRow: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth },
-  accountEvents: { padding: 10, borderWidth: 1, borderRadius: 10, marginBottom: 4 },
-  accountEventRow: { marginTop: 7, gap: 2 },
-  loadMoreButton: { height: 38, marginTop: 14, borderWidth: 1, borderRadius: 9, alignItems: "center", justifyContent: "center" },
-  countText: {
-    fontSize: 12,
-    marginBottom: 10,
-  },
-  userCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginBottom: 10,
-  },
-  userAvatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: "#ccc",
-  },
-  usernameText: {
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  adminBadge: {
-    backgroundColor: "#a855f7",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  adminBadgeText: {
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "bold",
-  },
-  fullNameText: {
-    fontSize: 12,
-  },
-  emailText: {
-    fontSize: 11,
-    marginTop: 2,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  toggleBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  postCard: {
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginBottom: 10,
-  },
-  postAuthor: {
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  postCaption: {
-    fontSize: 13,
-    marginTop: 6,
-    lineHeight: 18,
-  },
-  deletePostBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.4)",
-  },
-  hiddenBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#fef3c7",
   },
   managementMenuOverlay: {
     flex: 1,
