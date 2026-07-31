@@ -8,11 +8,6 @@ interface DirectMessageItemProps {
   isMe: boolean;
 }
 
-function stripTrailingPunctuation(text?: string): string {
-  if (!text) return "";
-  return text.replace(/[.!?,\u2026:;~^]+$/, "").trim();
-}
-
 export const DirectMessageItem: React.FC<DirectMessageItemProps> = ({ item, isMe }) => {
   const { colors } = useTheme();
 
@@ -26,31 +21,40 @@ export const DirectMessageItem: React.FC<DirectMessageItemProps> = ({ item, isMe
     }
   };
 
-  const displayContent = stripTrailingPunctuation(item.content);
-
   return (
-    <View style={[styles.container, isMe ? styles.rightContainer : styles.leftContainer]}>
-      <Text style={[styles.messageText, { color: colors.textPrimary }, isMe ? styles.textRight : styles.textLeft]}>
-        {displayContent}
-      </Text>
-      <Text style={[styles.timeText, { color: colors.textMuted }, isMe ? styles.textRight : styles.textLeft]}>
-        {formatTime(item.created_at)} {item.isOptimistic ? "• 전송 중..." : ""}
-      </Text>
+    <View style={[styles.row, isMe ? styles.alignRight : styles.alignLeft]}>
+      <View style={styles.content}>
+        <Text style={[styles.messageText, { color: colors.textPrimary }]}>
+          {item.content}
+        </Text>
+        <Text
+          style={[
+            styles.timeText,
+            { color: colors.textMuted },
+            isMe ? styles.textRight : styles.textLeft,
+          ]}
+        >
+          {formatTime(item.created_at)} {item.isOptimistic ? "• 전송 중..." : ""}
+        </Text>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    marginVertical: 6,
+  row: {
+    width: "100%",
     paddingHorizontal: 16,
+    marginVertical: 6,
+  },
+  alignLeft: {
+    alignItems: "flex-start",
+  },
+  alignRight: {
+    alignItems: "flex-end",
+  },
+  content: {
     maxWidth: "85%",
-  },
-  leftContainer: {
-    alignSelf: "flex-start",
-  },
-  rightContainer: {
-    alignSelf: "flex-end",
   },
   messageText: {
     fontSize: 15,
