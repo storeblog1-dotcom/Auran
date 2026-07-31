@@ -132,6 +132,8 @@ export interface MessageContentItem {
   type: "message";
   id: string;
   message: DirectMessage;
+  isFirstInGroup?: boolean;
+  isLastInGroup?: boolean;
 }
 
 export type DirectTimelineItem = MessageDateItem | MessageContentItem;

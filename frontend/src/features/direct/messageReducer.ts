@@ -249,12 +249,14 @@ export const buildDirectTimeline = (
   const items: DirectTimelineItem[] = [];
   let lastDateKey = "";
 
-  messages.forEach((message) => {
+  messages.forEach((message, index) => {
     const date = new Date(message.created_at);
     const dateKey = Number.isNaN(date.getTime())
       ? "unknown"
       : localDateKey(date);
-    if (dateKey !== lastDateKey) {
+    const isNewDate = dateKey !== lastDateKey;
+
+    if (isNewDate) {
       items.push({
         type: "date",
         id: `date-${dateKey}`,
@@ -262,10 +264,34 @@ export const buildDirectTimeline = (
       });
       lastDateKey = dateKey;
     }
+
+    const prevMessage = index > 0 ? messages[index - 1] : null;
+    const nextMessage = index < messages.length - 1 ? messages[index + 1] : null;
+
+    const prevDate = prevMessage ? new Date(prevMessage.created_at) : null;
+    const prevDateKey =
+      prevDate && !Number.isNaN(prevDate.getTime()) ? localDateKey(prevDate) : "";
+
+    const nextDate = nextMessage ? new Date(nextMessage.created_at) : null;
+    const nextDateKey =
+      nextDate && !Number.isNaN(nextDate.getTime()) ? localDateKey(nextDate) : "";
+
+    const isFirstInGroup =
+      !prevMessage ||
+      prevMessage.sender.id !== message.sender.id ||
+      dateKey !== prevDateKey;
+
+    const isLastInGroup =
+      !nextMessage ||
+      nextMessage.sender.id !== message.sender.id ||
+      dateKey !== nextDateKey;
+
     items.push({
       type: "message",
       id: `message-${message.id}`,
       message,
+      isFirstInGroup,
+      isLastInGroup,
     });
   });
 
