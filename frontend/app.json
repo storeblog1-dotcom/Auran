@@ -16,7 +16,6 @@
       "supportsTablet": true
     },
     "android": {
-      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -35,7 +34,8 @@
           "color": "#7C3AED",
           "defaultChannel": "direct-messages"
         }
-      ]
+      ],
+      "expo-font"
     ]
   }
 }
