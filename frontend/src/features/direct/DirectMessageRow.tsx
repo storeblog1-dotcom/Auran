@@ -69,7 +69,7 @@ export const DirectMessageRow = ({
   const { colors } = useTheme();
   const maxContentWidth = Math.max(
     180,
-    Math.min(availableWidth - 54, availableWidth * 0.82)
+    Math.min(availableWidth - 36, availableWidth * 0.86)
   );
   const nickname = getDisplayName(message.sender, isMine ? "나" : "사용자");
   const deliveryLabel = getDeliveryLabel(message);
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     borderRadius: 17,
     paddingLeft: 14,
-    paddingRight: 16,
+    paddingRight: 14,
     paddingVertical: 11,
     overflow: "visible",
   },
