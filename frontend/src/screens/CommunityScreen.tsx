@@ -109,35 +109,6 @@ export const clearCommunityCache = () => {
   Object.keys(cachedPostsMap).forEach((key) => delete cachedPostsMap[key]);
 };
 
-// ─── Skeleton Component ──────────────
-const CommunitySkeleton = React.memo(({ colors }: { colors: any }) => (
-  <View style={{ padding: 16, gap: 16 }}>
-    {[1, 2, 3, 4].map((i) => (
-      <View
-        key={i}
-        style={[
-          styles.postCard,
-          {
-            backgroundColor: colors.bgCard || "#18181b",
-            borderColor: colors.borderColor || "#27272a",
-            opacity: 0.6,
-            minHeight: 110,
-            padding: 16,
-            justifyContent: "space-between",
-          },
-        ]}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.borderLight || "#27272a" }} />
-          <View style={{ width: 80, height: 12, borderRadius: 6, backgroundColor: colors.borderLight || "#27272a" }} />
-        </View>
-        <View style={{ width: "85%", height: 14, borderRadius: 7, backgroundColor: colors.borderLight || "#27272a" }} />
-        <View style={{ width: "55%", height: 12, borderRadius: 6, backgroundColor: colors.borderLight || "#27272a" }} />
-      </View>
-    ))}
-  </View>
-));
-
 // ─── Memoized Post Card Component ──────────────
 const CommunityPostCard = React.memo(
   ({
@@ -856,9 +827,11 @@ export const CommunityScreen = ({ navigation, route }: any) => {
         <View style={{ height: 2, backgroundColor: colors.accentPurple || "#a855f7", width: "100%" }} />
       )}
 
-      {/* Post List & Skeleton UI */}
+      {/* Post List & Loading UI */}
       {loading ? (
-        <CommunitySkeleton colors={colors} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color={colors.accentPurple || "#a855f7"} />
+        </View>
       ) : fetchError && posts.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="alert-circle-outline" size={48} color="#ef4444" style={{ marginBottom: 12 }} />
@@ -1147,6 +1120,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  loadingContainer: {
+    paddingVertical: 60,
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyContainer: {
     paddingVertical: 60,
