@@ -79,6 +79,16 @@ export const CompositionSafeComposer = ({
       const exactText = text;
       if (!exactText.trim()) return;
 
+      console.log("[DM_INSPECT] sendCommittedText", {
+        raw: exactText,
+        json: JSON.stringify(exactText),
+        length: exactText.length,
+        codePoints: Array.from(exactText).map((char) => ({
+          char,
+          hex: `U+${char.codePointAt(0)?.toString(16).toUpperCase()}`,
+        })),
+      });
+
       // onSend dispatches the optimistic message synchronously. Only after
       // that exact native string is captured do we clear the uncontrolled
       // input, so an Android IME composition cannot be overwritten by React.

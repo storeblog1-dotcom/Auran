@@ -164,19 +164,39 @@ export const DirectMessageRow = ({
               />
             </TouchableOpacity>
           ) : (
-            <Text
-              selectable
-              textBreakStrategy="simple"
-              android_hyphenationFrequency="none"
-              style={[
-                styles.messageText,
-                { color: isMine ? "#ffffff" : colors.textPrimary },
-              ]}
-            >
-              {message.content || ""}
-            </Text>
+            <>
+              <Text
+                selectable
+                textBreakStrategy="simple"
+                android_hyphenationFrequency="none"
+                style={[
+                  styles.messageText,
+                  { color: isMine ? "#ffffff" : colors.textPrimary },
+                ]}
+                onTextLayout={(event) => {
+                  console.log("[DM_TEXT_LAYOUT]", {
+                    content: message.content,
+                    json: JSON.stringify(message.content),
+                    lines: event.nativeEvent.lines.map((line, index) => ({
+                      index,
+                      text: line.text,
+                      jsonText: JSON.stringify(line.text),
+                      width: line.width,
+                      height: line.height,
+                      x: line.x,
+                      y: line.y,
+                    })),
+                  });
+                }}
+              >
+                {message.content || ""}
+              </Text>
+            </>
           )}
         </MessageSurface>
+        <Text style={{ fontSize: 13, color: colors.textMuted, marginTop: 2 }}>
+          [DIAG_RAW]: {message.content}
+        </Text>
 
         {isMine && (
           <TouchableOpacity
