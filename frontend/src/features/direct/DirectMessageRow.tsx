@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   Image,
   StyleSheet,
@@ -34,6 +34,32 @@ export const DirectMessageRow = ({
   const { colors } = useTheme();
   const nickname = getDisplayName(message.sender, isMine ? "나" : "사용자");
   const deliveryLabel = getDeliveryLabel(message);
+  const stableKey = message.client_message_id || message.id;
+
+  useEffect(() => {
+    console.log("[DM_ITEM_MOUNT]", {
+      id: message.id,
+      clientId: message.client_message_id,
+      status: message.local_status,
+      content: message.content,
+    });
+    return () => {
+      console.log("[DM_ITEM_UNMOUNT]", {
+        id: message.id,
+        clientId: message.client_message_id,
+      });
+    };
+  }, [stableKey]);
+
+  console.log("[DM_RENDER_IDENTITY]", {
+    id: message.id,
+    clientId: message.client_message_id,
+    status: message.local_status,
+    contentJson: JSON.stringify(message.content),
+    isMine,
+    isFirstInGroup,
+    isLastInGroup,
+  });
 
   return (
     <View style={styles.container}>
@@ -62,7 +88,7 @@ export const DirectMessageRow = ({
           )
         )}
 
-        <View style={styles.column}>
+        <View style={[styles.column, isMine ? styles.myColumn : styles.otherColumn]}>
           {!isMine && isFirstInGroup && (
             <View style={styles.metadata}>
               <Text
@@ -127,34 +153,40 @@ export const DirectMessageRow = ({
               />
             </TouchableOpacity>
           ) : (
-            <Text
-              selectable
-              textBreakStrategy="simple"
-              android_hyphenationFrequency="none"
+            <View
               style={[
-                styles.plainMessageText,
-                isMine ? styles.myTextAlignment : styles.otherTextAlignment,
-                { color: colors.textPrimary },
+                styles.messageContentWrapper,
+                isMine ? styles.myContentWrapper : styles.otherContentWrapper,
               ]}
-              onTextLayout={(event) => {
-                console.log("[DM_TRACE] RENDER_MESSAGE", {
-                  at: Date.now(),
-                  phase: message.local_status === "pending" ? "optimistic" : "confirmed",
-                  id: message.id,
-                  clientId: message.client_message_id,
-                  content: message.content,
-                  status: message.local_status,
-                  linesCount: event.nativeEvent.lines.length,
-                  lines: event.nativeEvent.lines.map((line, index) => ({
-                    index,
-                    text: line.text,
-                    width: line.width,
-                  })),
-                });
-              }}
             >
-              {message.content || ""}
-            </Text>
+              <Text
+                selectable
+                textBreakStrategy="simple"
+                android_hyphenationFrequency="none"
+                style={[styles.plainMessageText, { color: colors.textPrimary }]}
+                onTextLayout={(event) => {
+                  console.log("[DM_TRACE] RENDER_MESSAGE", {
+                    at: Date.now(),
+                    phase:
+                      message.local_status === "pending"
+                        ? "optimistic"
+                        : "confirmed",
+                    id: message.id,
+                    clientId: message.client_message_id,
+                    content: message.content,
+                    status: message.local_status,
+                    linesCount: event.nativeEvent.lines.length,
+                    lines: event.nativeEvent.lines.map((line, index) => ({
+                      index,
+                      text: line.text,
+                      width: line.width,
+                    })),
+                  });
+                }}
+              >
+                {message.content || ""}
+              </Text>
+            </View>
           )}
 
           {/* Group Last Message Metadata (Time & Read Status) */}
@@ -260,6 +292,12 @@ const styles = StyleSheet.create({
   column: {
     maxWidth: "86%",
   },
+  myColumn: {
+    alignItems: "flex-end",
+  },
+  otherColumn: {
+    alignItems: "flex-start",
+  },
   metadata: {
     flexDirection: "row",
     alignItems: "center",
@@ -277,15 +315,20 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     marginLeft: 2,
   },
+  messageContentWrapper: {
+    maxWidth: "100%",
+  },
+  myContentWrapper: {
+    alignItems: "flex-end",
+  },
+  otherContentWrapper: {
+    alignItems: "flex-start",
+  },
   plainMessageText: {
     fontSize: 15.5,
     lineHeight: 24,
     includeFontPadding: false,
     paddingVertical: 2,
-  },
-  myTextAlignment: {},
-  otherTextAlignment: {
-    textAlign: "left",
   },
   image: {
     width: 240,

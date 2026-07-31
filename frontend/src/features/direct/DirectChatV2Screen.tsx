@@ -508,7 +508,11 @@ export const DirectChatV2Screen = ({ route, navigation }: any) => {
             <FlatList
               ref={listRef}
               data={timeline}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) =>
+                item.type === "message"
+                  ? `msg-${item.message.client_message_id || item.message.id}`
+                  : item.id
+              }
               renderItem={renderTimelineItem}
               contentContainerStyle={[
                 styles.timeline,
