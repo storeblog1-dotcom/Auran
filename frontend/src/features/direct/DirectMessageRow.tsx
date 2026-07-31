@@ -194,9 +194,6 @@ export const DirectMessageRow = ({
             </>
           )}
         </MessageSurface>
-        <Text style={{ fontSize: 13, color: colors.textMuted, marginTop: 2 }}>
-          [DIAG_RAW]: {message.content}
-        </Text>
 
         {isMine && (
           <TouchableOpacity
@@ -295,17 +292,18 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   surface: {
-    borderRadius: 17,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    borderRadius: 16,
+    paddingLeft: 13,
+    paddingRight: 10,
+    paddingVertical: 9,
     overflow: "visible",
   },
   otherSurface: {
     borderWidth: 1,
   },
   messageText: {
-    fontSize: 15.5,
-    lineHeight: 23,
+    fontSize: 15,
+    lineHeight: 21,
     includeFontPadding: false,
   },
   image: {

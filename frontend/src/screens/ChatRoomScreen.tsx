@@ -801,8 +801,9 @@ const styles = StyleSheet.create({
   bubble: {
     maxWidth: "76%",
     overflow: "visible",
-    borderRadius: 18,
-    paddingHorizontal: 14,
+    borderRadius: 16,
+    paddingLeft: 13,
+    paddingRight: 10,
     paddingVertical: 9,
     justifyContent: "center",
   },
