@@ -5,6 +5,7 @@ import React, {
   useEffect,
   useCallback,
   useRef,
+  useMemo,
 } from "react";
 import { AppState, AppStateStatus } from "react-native";
 import { useAuth } from "./AuthContext";
@@ -98,7 +99,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
-  const markAsRead = async (id: string) => {
+  const markAsRead = useCallback(async (id: string) => {
     try {
       await notificationService.markAsRead(id);
       setNotifications((prev) =>
@@ -108,9 +109,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (err) {
       console.error("Failed to mark notification as read", err);
     }
-  };
+  }, []);
 
-  const markAllAsRead = async () => {
+  const markAllAsRead = useCallback(async () => {
     try {
       await notificationService.markAllAsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
@@ -118,7 +119,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (err) {
       console.error("Failed to mark all as read", err);
     }
-  };
+  }, []);
 
   // 1. Real-time WebSocket Connection with Status Tracking
   useEffect(() => {
@@ -259,19 +260,31 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
     prevUnreadCountRef.current = unreadCount;
   }, [unreadCount]);
 
+  const value = useMemo(
+    () => ({
+      notifications,
+      unreadCount,
+      toastNotification,
+      loading,
+      refreshNotifications,
+      markAsRead,
+      markAllAsRead,
+      clearToast,
+    }),
+    [
+      notifications,
+      unreadCount,
+      toastNotification,
+      loading,
+      refreshNotifications,
+      markAsRead,
+      markAllAsRead,
+      clearToast,
+    ]
+  );
+
   return (
-    <NotificationContext.Provider
-      value={{
-        notifications,
-        unreadCount,
-        toastNotification,
-        loading,
-        refreshNotifications,
-        markAsRead,
-        markAllAsRead,
-        clearToast,
-      }}
-    >
+    <NotificationContext.Provider value={value}>
       {children}
     </NotificationContext.Provider>
   );

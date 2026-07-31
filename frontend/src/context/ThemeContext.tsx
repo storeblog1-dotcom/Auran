@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ThemeColors, darkTheme, lightTheme } from "../theme/colors";
 
@@ -33,25 +40,36 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     loadStoredTheme();
   }, []);
 
-  const setThemeMode = async (mode: ThemeMode) => {
+  const setThemeMode = useCallback(async (mode: ThemeMode) => {
     setThemeState(mode);
     try {
       await AsyncStorage.setItem(THEME_STORAGE_KEY, mode);
     } catch (e) {
       console.log("Failed to save theme preference", e);
     }
-  };
+  }, []);
 
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
     const nextMode = theme === "dark" ? "light" : "dark";
-    setThemeMode(nextMode);
-  };
+    void setThemeMode(nextMode);
+  }, [theme, setThemeMode]);
 
   const colors = theme === "dark" ? darkTheme : lightTheme;
   const isDark = theme === "dark";
 
+  const value = useMemo(
+    () => ({
+      theme,
+      colors,
+      isDark,
+      toggleTheme,
+      setThemeMode,
+    }),
+    [theme, colors, isDark, toggleTheme, setThemeMode]
+  );
+
   return (
-    <ThemeContext.Provider value={{ theme, colors, isDark, toggleTheme, setThemeMode }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

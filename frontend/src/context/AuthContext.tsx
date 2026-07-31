@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../services/api";
 import { deactivateCurrentInstallationPushToken } from "../services/pushNotifications";
@@ -43,7 +51,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [withdrawalPending, setWithdrawalPending] = useState<{ deadline: string } | null>(null);
   const mountedRef = useRef(true);
 
-  const fetchCurrentUser = async (): Promise<boolean> => {
+  const fetchCurrentUser = useCallback(async (): Promise<boolean> => {
     try {
       const response = await api.get("/users/me");
       if (response.data && response.data.data) {
@@ -55,7 +63,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log("Failed to fetch user me:", error);
       return false;
     }
-  };
+  }, []);
+
+  const refreshProfile = useCallback(async () => {
+    await fetchCurrentUser();
+  }, [fetchCurrentUser]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -132,7 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const login = async (loginData: any) => {
+  const login = useCallback(async (loginData: any) => {
     const res = await api.post("/auth/login", loginData);
     const tokenData = res.data.data;
     const accessToken = tokenData.access_token;
@@ -156,15 +168,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(accessToken);
     setWithdrawalPending(null);
     await fetchCurrentUser();
-  };
+  }, [fetchCurrentUser]);
 
-  const register = async (regData: any) => {
+  const register = useCallback(async (regData: any) => {
     await api.post("/auth/register", regData);
     // Automatic login after register
     await login({ identifier: regData.email, password: regData.password });
-  };
+  }, [login]);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await deactivateCurrentInstallationPushToken();
     } catch {
@@ -179,15 +191,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(null);
     setUser(null);
     setWithdrawalPending(null);
-  };
+  }, []);
 
-  const leaveWithdrawalScreen = async () => {
+  const leaveWithdrawalScreen = useCallback(async () => {
     await AsyncStorage.removeItem("withdrawal_token");
     await AsyncStorage.removeItem("withdrawal_deadline");
     setWithdrawalPending(null);
-  };
+  }, []);
 
-  const cancelWithdrawal = async () => {
+  const cancelWithdrawal = useCallback(async () => {
     const withdrawalToken = await AsyncStorage.getItem("withdrawal_token");
     if (!withdrawalToken) throw new Error("탈퇴 취소 인증이 만료되었습니다.");
     const response = await api.post(
@@ -203,25 +215,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setWithdrawalPending(null);
     setToken(tokenData.access_token);
     await fetchCurrentUser();
-  };
+  }, [fetchCurrentUser]);
+
+  const value = useMemo(
+    () => ({
+      user,
+      token,
+      isLoading,
+      withdrawalPending,
+      login,
+      register,
+      logout,
+      refreshProfile,
+      cancelWithdrawal,
+      leaveWithdrawalScreen,
+    }),
+    [
+      user,
+      token,
+      isLoading,
+      withdrawalPending,
+      login,
+      register,
+      logout,
+      refreshProfile,
+      cancelWithdrawal,
+      leaveWithdrawalScreen,
+    ]
+  );
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        token,
-        isLoading,
-        withdrawalPending,
-        login,
-        register,
-        logout,
-        cancelWithdrawal,
-        leaveWithdrawalScreen,
-        refreshProfile: async () => {
-          await fetchCurrentUser();
-        },
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
