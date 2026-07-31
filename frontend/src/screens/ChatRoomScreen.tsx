@@ -523,6 +523,7 @@ const LegacyChatRoomScreen = ({ route, navigation }: any) => {
                 { color: isMine ? "#ffffff" : colors.textPrimary },
               ]}
               textBreakStrategy="simple"
+              android_hyphenationFrequency="none"
             >
               {item.content}
             </Text>
@@ -820,7 +821,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     includeFontPadding: false,
-    paddingRight: 4,
   },
   myMessageText: {
     color: "#fff",

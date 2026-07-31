@@ -167,6 +167,7 @@ export const DirectMessageRow = ({
             <Text
               selectable
               textBreakStrategy="simple"
+              android_hyphenationFrequency="none"
               style={[
                 styles.messageText,
                 { color: isMine ? "#ffffff" : colors.textPrimary },
@@ -291,7 +292,6 @@ const styles = StyleSheet.create({
     fontSize: 15.5,
     lineHeight: 23,
     includeFontPadding: false,
-    paddingRight: 4,
   },
   image: {
     height: 230,
