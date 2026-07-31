@@ -6,6 +6,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
+import { AppState, AppStateStatus } from "react-native";
 import { useAuth } from "./AuthContext";
 import {
   notificationService,
@@ -38,19 +39,64 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
     null
   );
   const [loading, setLoading] = useState<boolean>(false);
+  const [isWsConnected, setIsWsConnected] = useState<boolean>(false);
 
   const prevUnreadCountRef = useRef<number>(0);
+  const recentToastIdsRef = useRef<string[]>([]);
+  const isPollingRef = useRef<boolean>(false);
+  const currentUserIdRef = useRef<string | undefined>(user?.id);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const pollingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    currentUserIdRef.current = user?.id;
+  }, [user?.id]);
+
+  const clearToast = () => {
+    setToastNotification(null);
+  };
+
+  const triggerToast = useCallback((item: NotificationItem) => {
+    if (!item?.id) return;
+
+    // Deduplicate Toast: skip if this notification ID was recently toasted
+    if (recentToastIdsRef.current.includes(item.id)) {
+      return;
+    }
+
+    // Record toasted ID (keep max 20 items in memory)
+    recentToastIdsRef.current = [item.id, ...recentToastIdsRef.current.slice(0, 19)];
+
+    setToastNotification({
+      id: item.id,
+      sender: {
+        id: item.sender.id,
+        username: item.sender.username,
+        nickname: item.sender.nickname,
+        full_name: item.sender.full_name,
+        profile_image_url: item.sender.profile_image_url,
+        is_admin: item.sender.is_admin,
+      },
+      type: item.type,
+      message: item.message,
+      post_id: item.post_id,
+      comment_id: item.comment_id,
+    });
+  }, []);
 
   const refreshNotifications = useCallback(async () => {
-    if (!user?.id) return;
+    const userId = currentUserIdRef.current;
+    if (!userId) return;
     try {
       const data = await notificationService.getNotifications(30, 0);
+      if (currentUserIdRef.current !== userId) return;
       setNotifications(data.items);
       setUnreadCount(data.unread_count);
+      prevUnreadCountRef.current = data.unread_count;
     } catch (err) {
       console.log("Error refreshing notifications", err);
     }
-  }, [user?.id]);
+  }, []);
 
   const markAsRead = async (id: string) => {
     try {
@@ -74,78 +120,140 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const clearToast = () => {
-    setToastNotification(null);
-  };
-
-  const triggerToast = (item: NotificationItem) => {
-    setToastNotification({
-      id: item.id,
-      sender: {
-        id: item.sender.id,
-        username: item.sender.username,
-        nickname: item.sender.nickname,
-        full_name: item.sender.full_name,
-        profile_image_url: item.sender.profile_image_url,
-        is_admin: item.sender.is_admin,
-      },
-      type: item.type,
-      message: item.message,
-      post_id: item.post_id,
-      comment_id: item.comment_id,
-    });
-  };
-
-  // 1. Initial Load & Periodic Smart Polling (Every 5 seconds)
+  // 1. Real-time WebSocket Connection with Status Tracking
   useEffect(() => {
-    if (!user?.id) {
+    const userId = user?.id;
+    if (!userId) {
+      setIsWsConnected(false);
+      return;
+    }
+
+    const unsubscribe = notificationService.subscribeWebSocket(
+      (payload) => {
+        if (currentUserIdRef.current !== userId) return;
+        if (payload?.event === "NEW_NOTIFICATION" && payload?.notification) {
+          const newNotif: NotificationItem = payload.notification;
+          setNotifications((prev) => {
+            if (prev.some((n) => n.id === newNotif.id)) return prev;
+            return [newNotif, ...prev];
+          });
+          setUnreadCount((prev) => prev + 1);
+          triggerToast(newNotif);
+        }
+      },
+      (status) => {
+        if (currentUserIdRef.current !== userId) return;
+        setIsWsConnected(status === "connected");
+      }
+    );
+
+    return () => {
+      setIsWsConnected(false);
+      unsubscribe();
+    };
+  }, [user?.id, triggerToast]);
+
+  // 2. Polling Logic (In-flight guard, Smart interval & AppState awareness)
+  const stopPollingTimer = useCallback(() => {
+    if (pollingTimerRef.current) {
+      clearInterval(pollingTimerRef.current);
+      pollingTimerRef.current = null;
+    }
+  }, []);
+
+  const runPollingCheck = useCallback(async () => {
+    const userId = currentUserIdRef.current;
+    if (!userId || isPollingRef.current) return;
+
+    isPollingRef.current = true;
+    try {
+      const count = await notificationService.getUnreadCount();
+      if (currentUserIdRef.current !== userId) return;
+
+      if (count > prevUnreadCountRef.current) {
+        // New notification detected via polling!
+        const data = await notificationService.getNotifications(30, 0);
+        if (currentUserIdRef.current !== userId) return;
+
+        setNotifications(data.items);
+        setUnreadCount(data.unread_count);
+
+        if (data.items.length > 0) {
+          triggerToast(data.items[0]);
+        }
+      } else {
+        setUnreadCount(count);
+      }
+      prevUnreadCountRef.current = count;
+    } catch (e) {
+      // quiet error handling during polling
+    } finally {
+      isPollingRef.current = false;
+    }
+  }, [triggerToast]);
+
+  // Handle Initial Load, Polling Schedule & AppState Changes
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId) {
       setNotifications([]);
       setUnreadCount(0);
+      setToastNotification(null);
+      recentToastIdsRef.current = [];
+      stopPollingTimer();
       return;
     }
 
     setLoading(true);
-    refreshNotifications().finally(() => setLoading(false));
-
-    const interval = setInterval(async () => {
-      try {
-        const count = await notificationService.getUnreadCount();
-        if (count > prevUnreadCountRef.current) {
-          // New notification detected via polling!
-          const data = await notificationService.getNotifications(30, 0);
-          setNotifications(data.items);
-          setUnreadCount(data.unread_count);
-
-          if (data.items.length > 0) {
-            triggerToast(data.items[0]);
-          }
-        } else {
-          setUnreadCount(count);
-        }
-        prevUnreadCountRef.current = count;
-      } catch (e) {
-        // quiet error handling during polling
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [user?.id, refreshNotifications]);
-
-  // 2. Real-time WebSocket Connection
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const unsubscribe = notificationService.subscribeWebSocket((payload) => {
-      if (payload?.event === "NEW_NOTIFICATION" && payload?.notification) {
-        const newNotif: NotificationItem = payload.notification;
-        setNotifications((prev) => [newNotif, ...prev]);
-        setUnreadCount((prev) => prev + 1);
-        triggerToast(newNotif);
+    refreshNotifications().finally(() => {
+      if (currentUserIdRef.current === userId) {
+        setLoading(false);
       }
     });
 
-    return unsubscribe;
-  }, [user?.id]);
+    const startPolling = () => {
+      stopPollingTimer();
+      // Smart Interval: 60s when WebSocket connected, 10s fallback when disconnected
+      const intervalMs = isWsConnected ? 60000 : 10000;
+      pollingTimerRef.current = setInterval(() => {
+        if (appStateRef.current === "active") {
+          runPollingCheck();
+        }
+      }, intervalMs);
+    };
+
+    startPolling();
+
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === "active"
+      ) {
+        // Immediate sync upon returning to foreground
+        runPollingCheck();
+        startPolling();
+      } else if (nextAppState.match(/inactive|background/)) {
+        stopPollingTimer();
+      }
+      appStateRef.current = nextAppState;
+    };
+
+    const appStateSubscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange
+    );
+
+    return () => {
+      stopPollingTimer();
+      appStateSubscription.remove();
+    };
+  }, [
+    user?.id,
+    isWsConnected,
+    refreshNotifications,
+    runPollingCheck,
+    stopPollingTimer,
+  ]);
 
   useEffect(() => {
     prevUnreadCountRef.current = unreadCount;

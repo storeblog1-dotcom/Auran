@@ -52,7 +52,10 @@ export const notificationService = {
     return res.data;
   },
 
-  subscribeWebSocket(onMessage: (data: any) => void): () => void {
+  subscribeWebSocket(
+    onMessage: (data: any) => void,
+    onStatusChange?: (status: "connected" | "disconnected" | "error") => void
+  ): () => void {
     let cancelled = false;
     let ws: WebSocket | null = null;
     let pingInterval: ReturnType<typeof setInterval> | null = null;
@@ -66,7 +69,10 @@ export const notificationService = {
 
     void AsyncStorage.getItem("access_token")
       .then((token) => {
-        if (cancelled || !token) return;
+        if (cancelled || !token) {
+          onStatusChange?.("disconnected");
+          return;
+        }
 
         const wsUrl =
           `${WS_BASE_URL}/notifications/ws?token=${encodeURIComponent(token)}`;
@@ -76,6 +82,11 @@ export const notificationService = {
           return;
         }
         ws = socket;
+
+        socket.onopen = () => {
+          if (cancelled) return;
+          onStatusChange?.("connected");
+        };
 
         socket.onmessage = (event) => {
           if (cancelled) return;
@@ -87,23 +98,36 @@ export const notificationService = {
           }
         };
 
+        socket.onerror = () => {
+          if (cancelled) return;
+          onStatusChange?.("error");
+        };
+
         pingInterval = setInterval(() => {
           if (socket.readyState === WebSocket.OPEN) {
             socket.send("ping");
           }
         }, 25000);
 
-        socket.onclose = clearPing;
+        socket.onclose = () => {
+          clearPing();
+          if (cancelled) return;
+          onStatusChange?.("disconnected");
+        };
       })
       .catch(() => {
-        // REST polling remains the quiet fallback when secure storage fails.
+        if (!cancelled) {
+          onStatusChange?.("error");
+        }
       });
 
     return () => {
       cancelled = true;
       clearPing();
       if (ws) {
+        ws.onopen = null;
         ws.onmessage = null;
+        ws.onerror = null;
         ws.onclose = null;
         try {
           ws.close();
@@ -112,6 +136,7 @@ export const notificationService = {
         }
         ws = null;
       }
+      onStatusChange?.("disconnected");
     };
   },
 };
