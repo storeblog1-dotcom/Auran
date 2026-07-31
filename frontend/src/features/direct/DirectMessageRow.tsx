@@ -234,6 +234,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     marginVertical: 7,
+    paddingHorizontal: 12,
   },
   myRow: {
     justifyContent: "flex-end",
@@ -278,7 +279,8 @@ const styles = StyleSheet.create({
     minWidth: 72,
     flexShrink: 1,
     borderRadius: 17,
-    paddingHorizontal: 13,
+    paddingLeft: 14,
+    paddingRight: 18,
     paddingVertical: 11,
     overflow: "visible",
   },
@@ -291,8 +293,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: 15.5,
     lineHeight: 23,
-    includeFontPadding: true,
-    paddingRight: 8,
+    includeFontPadding: false,
+    paddingRight: 6,
   },
   image: {
     height: 230,

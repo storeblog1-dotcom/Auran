@@ -9,9 +9,10 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import api from "../services/api";
 import { useTheme } from "../context/ThemeContext";
 import { HashtagText } from "./HashtagText";
+
+import { communityService } from "../services/communityService";
 
 interface NoticeListModalProps {
   visible: boolean;
@@ -28,8 +29,7 @@ export const NoticeListModal: React.FC<NoticeListModalProps> = ({ visible, onClo
   const fetchNotices = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get("/community/notices?notice_type=all");
-      const list = res.data?.data || [];
+      const list = await communityService.getAllNotices();
       setNotices(list);
       // Auto-expand global notice or first notice
       if (list.length > 0 && expandedNoticeIds.length === 0) {

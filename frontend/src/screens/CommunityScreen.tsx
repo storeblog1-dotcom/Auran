@@ -47,46 +47,14 @@ const ANONYMOUS_CATEGORY_ORDER = [
 const FRESH_TTL = 30_000;       // 30 seconds: Fresh cache (no background fetch needed)
 const STALE_TTL = 300_000;      // 5 minutes: Stale cache (show cache + background refresh)
 
-export interface CommunityPost {
-  id: string;
-  user_id: string;
-  board_id?: string | null;
-  board_type?: string | null;
-  board_name?: string | null;
-  title?: string | null;
-  caption?: string | null;
-  likes_count?: number;
-  comments_count?: number;
-  reposts_count?: number;
-  is_liked?: boolean;
-  is_bookmarked?: boolean;
-  is_reposted?: boolean;
-  is_mine?: boolean;
-  user?: any;
-  media?: any[];
-  youtube_url?: string | null;
-  youtube_title?: string | null;
-  youtube_thumbnail_url?: string | null;
-  created_at: string;
-  updated_at: string;
-}
+import {
+  communityService,
+  CommunityBoard,
+  CommunityNotice,
+  CommunityPost,
+} from "../services/communityService";
 
-export interface CommunityNotice {
-  id: string;
-  title: string;
-  content: string;
-  created_at: string;
-}
-
-export interface CommunityBoard {
-  id: string;
-  name: string;
-  slug?: string;
-  parent_id?: string | null;
-  is_anonymous?: boolean;
-  is_default?: boolean;
-  sort_order?: number;
-}
+export type { CommunityBoard, CommunityNotice, CommunityPost };
 
 export interface BoardCacheEntry {
   data: CommunityPost[];
@@ -401,8 +369,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
 
   const fetchBoards = async () => {
     try {
-      const res = await api.get("/community/boards");
-      const list = res.data?.data || [];
+      const list = await communityService.getBoards();
       cachedBoardsList = list;
       if (isMountedRef.current) setBoards(list);
     } catch (err) {
@@ -429,28 +396,19 @@ export const CommunityScreen = ({ navigation, route }: any) => {
     inFlightPrefetchMapRef.current[cacheKey] = true;
     try {
       const isAllChildren = targetBoardId === ALL_CHILD_BOARDS_ID;
-      const [postRes, noticeRes] = await Promise.all([
-        api.get(
-          isAllChildren
-            ? `/posts/community?parent_board_id=${selectedParentId}`
-            : `/posts/community?board_id=${targetBoardId}`
-        ),
-        api.get("/community/notices?notice_type=global"),
+      const [postsResult, noticeList] = await Promise.all([
+        communityService.getPosts(targetBoardId, selectedParentId, isAllChildren),
+        communityService.getGlobalNotices(),
       ]);
 
-      if (postRes.data && postRes.data.data) {
-        const list = postRes.data.data || [];
-        const noticeList = noticeRes.data?.data || [];
-        const meta = postRes.data.meta || {};
-
+      if (postsResult.data) {
         cachedPostsMap[cacheKey] = {
-          data: list,
+          data: postsResult.data,
           notices: noticeList,
           timestamp: Date.now(),
-          hasMore: meta.has_more || false,
+          hasMore: postsResult.meta.has_more || false,
           page: 1,
         };
-        // Prefetch ONLY writes to cachedPostsMap! NEVER touches active screen state!
       }
     } catch (e) {
       // Silently catch prefetch failures
@@ -492,7 +450,6 @@ export const CommunityScreen = ({ navigation, route }: any) => {
       return;
     }
 
-    // Cancel previous active request immediately upon board switch
     if (activeAbortControllerRef.current) {
       activeAbortControllerRef.current.abort();
     }
@@ -516,14 +473,11 @@ export const CommunityScreen = ({ navigation, route }: any) => {
       }
 
       if (age < FRESH_TTL) {
-        // Very fresh cache (< 30s) -> Display cache immediately and skip network request
         triggerAdjacentPrefetch(boardId);
         return;
       }
-      // Stale cache (30s ~ 5min) -> Display cache immediately, background refresh
       if (isMountedRef.current) setBackgroundRefreshing(true);
     } else {
-      // Cache Miss or Expired -> Show Skeleton UI! Clear previous board posts immediately!
       if (isMountedRef.current) {
         setPosts([]);
         setNotices([]);
@@ -534,31 +488,24 @@ export const CommunityScreen = ({ navigation, route }: any) => {
 
     try {
       const isAllChildren = boardId === ALL_CHILD_BOARDS_ID;
-      const [postRes, noticeRes] = await Promise.all([
-        api.get(
-          isAllChildren ? `/posts/community?parent_board_id=${selectedParentId}` : `/posts/community?board_id=${boardId}`,
-          { signal: controller.signal }
-        ),
-        api.get("/community/notices?notice_type=global", { signal: controller.signal }),
+      const [postsResult, noticeList] = await Promise.all([
+        communityService.getPosts(boardId, selectedParentId, isAllChildren, controller.signal),
+        communityService.getGlobalNotices(controller.signal),
       ]);
 
       if (activeRequestKeyRef.current !== cacheKey) return;
 
-      if (postRes.data && postRes.data.data) {
-        const list = postRes.data.data || [];
-        const noticeList = noticeRes.data?.data || [];
-        const meta = postRes.data.meta || {};
-
+      if (postsResult.data) {
         cachedPostsMap[cacheKey] = {
-          data: list,
+          data: postsResult.data,
           notices: noticeList,
           timestamp: Date.now(),
-          hasMore: meta.has_more || false,
+          hasMore: postsResult.meta.has_more || false,
           page: 1,
         };
 
         if (isMountedRef.current) {
-          setPosts(list);
+          setPosts(postsResult.data);
           setNotices(noticeList);
           setFetchError(false);
         }
@@ -907,7 +854,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
               <Text style={[styles.emptySubText, { color: colors.textSecondary }]}>
                 {selectedBoard?.is_anonymous
                   ? "익명으로 자유롭게 이야기 나누어보세요!"
-                  : "유용한 정보와 궁금한 점을 공유해보세요!"}
+                  : "유용한 정보와 궁금한 점을 물어보세요."}
               </Text>
             </View>
           }
@@ -1128,16 +1075,20 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     paddingVertical: 60,
+    paddingHorizontal: 24,
     alignItems: "center",
     justifyContent: "center",
   },
   emptyText: {
     fontSize: 16,
     fontWeight: "700",
-    marginBottom: 4,
+    marginBottom: 6,
+    textAlign: "center",
   },
   emptySubText: {
-    fontSize: 13,
+    fontSize: 13.5,
+    lineHeight: 20,
+    textAlign: "center",
   },
   noticeList: {
     marginBottom: 14,

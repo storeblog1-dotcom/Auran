@@ -41,60 +41,14 @@ import {
 } from "../components/AdminIdentity";
 
 const { width, height } = Dimensions.get("window");
-const FRESH_TTL = 30_000; // 30 seconds
+import {
+  feedService,
+  FeedPostItem,
+  StoryGroupItem,
+  areFeedPostsEqual,
+} from "../services/feedService";
 
-export interface FeedPostItem {
-  id: string;
-  display_number?: number;
-  user_id?: string;
-  title?: string | null;
-  caption?: string | null;
-  likes_count?: number;
-  comments_count?: number;
-  reposts_count?: number;
-  is_liked?: boolean;
-  is_bookmarked?: boolean;
-  is_reposted?: boolean;
-  is_mine?: boolean;
-  user?: any;
-  media?: any[];
-  youtube_url?: string | null;
-  youtube_title?: string | null;
-  youtube_thumbnail_url?: string | null;
-  visibility?: string;
-  location?: string | null;
-  created_at: string;
-  updated_at: string;
-  preview_comments?: any[];
-}
-
-export interface StoryGroupItem {
-  user_id: string;
-  username: string;
-  is_self?: boolean;
-  stories: any[];
-}
-
-const areFeedPostsEqual = (prev: FeedPostItem[], next: FeedPostItem[]): boolean => {
-  if (prev.length !== next.length) return false;
-  for (let i = 0; i < prev.length; i++) {
-    const a = prev[i];
-    const b = next[i];
-    if (
-      a.id !== b.id ||
-      a.likes_count !== b.likes_count ||
-      a.comments_count !== b.comments_count ||
-      a.reposts_count !== b.reposts_count ||
-      a.is_liked !== b.is_liked ||
-      a.is_bookmarked !== b.is_bookmarked ||
-      a.is_reposted !== b.is_reposted ||
-      a.user?.is_following !== b.user?.is_following
-    ) {
-      return false;
-    }
-  }
-  return true;
-};
+export type { FeedPostItem, StoryGroupItem };
 
 // ─── Standalone Feed Post Card ──────────────
 const FeedPostCard = React.memo(
@@ -333,6 +287,8 @@ export const FeedScreen = ({ navigation }: any) => {
     }
   }, [user?.id]);
 
+  const FRESH_TTL = 30_000;
+
   const fetchStories = async (force: boolean = false) => {
     const now = Date.now();
     if (!force && now - storiesUpdatedAtRef.current < FRESH_TTL && storyGroups.length > 0) {
@@ -342,9 +298,9 @@ export const FeedScreen = ({ navigation }: any) => {
     inFlightStoriesRef.current = true;
 
     try {
-      const response = await api.get("/stories/feed");
-      if (response.data && response.data.data) {
-        setStoryGroups(response.data.data);
+      const data = await feedService.getStoriesFeed();
+      if (data) {
+        setStoryGroups(data);
         storiesUpdatedAtRef.current = Date.now();
       }
     } catch (err) {
@@ -362,7 +318,6 @@ export const FeedScreen = ({ navigation }: any) => {
     console.log(`[FEED_PERF] focus fetchFeed - now=${now}, isFresh=${isFresh}, hasData=${hasData}`);
 
     if (!force && isFresh && hasData) {
-      // Very fresh (<30s) -> Skip API call completely!
       setLoading(false);
       setRefreshing(false);
       return;
@@ -378,22 +333,16 @@ export const FeedScreen = ({ navigation }: any) => {
     }
 
     try {
-      const response = await api.get("/posts/feed");
-      if (response.data) {
-        const feedItems: FeedPostItem[] = response.data.data || (Array.isArray(response.data) ? response.data : []);
-        
-        // Shallow reconciliation check before calling setPosts!
-        setPosts((prevPosts) => {
-          if (areFeedPostsEqual(prevPosts, feedItems)) {
-            console.log("[FEED_PERF] Posts identical, skipping setPosts state update!");
-            return prevPosts;
-          }
-          console.log("[FEED_PERF] Feed updated with new data, committing setPosts.");
-          return feedItems;
-        });
-
-        feedUpdatedAtRef.current = Date.now();
-      }
+      const feedItems = await feedService.getFeedPosts();
+      setPosts((prevPosts) => {
+        if (areFeedPostsEqual(prevPosts, feedItems)) {
+          console.log("[FEED_PERF] Posts identical, skipping setPosts state update!");
+          return prevPosts;
+        }
+        console.log("[FEED_PERF] Feed updated with new data, committing setPosts.");
+        return feedItems;
+      });
+      feedUpdatedAtRef.current = Date.now();
     } catch (err) {
       console.log("Error fetching feed", err);
     } finally {
@@ -438,7 +387,7 @@ export const FeedScreen = ({ navigation }: any) => {
     );
 
     try {
-      const res = await api.post(`/posts/${postId}/like`);
+      const res = await feedService.toggleLike(postId);
       if (res.data && res.data.data) {
         const { is_liked, likes_count } = res.data.data;
         setPosts((prevPosts) =>
@@ -562,7 +511,7 @@ export const FeedScreen = ({ navigation }: any) => {
 
   const handleDeletePost = useCallback(async (postId: string) => {
     try {
-      await api.delete(`/posts/${postId}`);
+      await feedService.deletePost(postId);
       setPosts((prev) => prev.filter((p) => p.id !== postId));
     } catch (e) {
       Alert.alert("오류", "삭제에 실패했습니다.");
@@ -974,15 +923,19 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     paddingVertical: 80,
+    paddingHorizontal: 24,
     alignItems: "center",
     justifyContent: "center",
   },
   emptyText: {
     fontSize: 16,
     fontWeight: "700",
-    marginBottom: 4,
+    marginBottom: 6,
+    textAlign: "center",
   },
   emptySubText: {
-    fontSize: 13,
+    fontSize: 13.5,
+    lineHeight: 20,
+    textAlign: "center",
   },
 });

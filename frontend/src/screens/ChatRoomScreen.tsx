@@ -782,6 +782,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginVertical: 4,
     alignItems: "flex-end",
+    paddingHorizontal: 12,
   },
   myMessageRow: {
     justifyContent: "flex-end",
@@ -797,17 +798,13 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   bubble: {
-    // Percentages are resolved against the actual FlatList content width,
-    // including its padding. This avoids using the device width, which can
-    // push right-aligned bubbles beyond the visible edge on Android.
-    maxWidth: "78%",
+    maxWidth: "76%",
     minWidth: 0,
     flexShrink: 1,
-    // Do not clip the final glyph. On Android, punctuation can extend a
-    // fraction beyond its measured text box and gets cut by overflow:hidden.
     overflow: "visible",
     borderRadius: 18,
-    paddingHorizontal: 14,
+    paddingLeft: 14,
+    paddingRight: 18,
     paddingVertical: 9,
     justifyContent: "center",
   },
@@ -825,9 +822,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     flexWrap: "wrap",
     maxWidth: "100%",
-    // Keep a small safety gutter after the final character (especially
-    // punctuation such as ?, !, and ,) without changing bubble alignment.
-    paddingRight: 5,
+    includeFontPadding: false,
+    paddingRight: 6,
   },
   myMessageText: {
     color: "#fff",
