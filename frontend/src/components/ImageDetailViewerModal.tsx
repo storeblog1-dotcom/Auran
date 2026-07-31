@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   zoomGestureSurface: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "center",
     alignItems: "center",
   },

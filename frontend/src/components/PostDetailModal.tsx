@@ -202,7 +202,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
     return;
     if (!post || !post.user?.username) return;
     const authorUsername = post.user.username;
-    const isMe = post.is_mine || (currentUser && currentUser.username === authorUsername);
+    const isMe = Boolean(post.is_mine || currentUser?.username === authorUsername);
 
     if (isMe) {
       Alert.alert(

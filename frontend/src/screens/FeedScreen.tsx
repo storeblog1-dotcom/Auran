@@ -108,7 +108,7 @@ const FeedPostCard = React.memo(
                     <>
                       <TouchableOpacity
                         style={[styles.headerFollowBtn, { backgroundColor: colors.bgInput, borderColor: colors.borderColor }]}
-                        onPress={() => onToggleFollowUser(item.user?.username, isFollowing)}
+                        onPress={() => item.user?.username && onToggleFollowUser(item.user.username, isFollowing)}
                       >
                         <Text style={[styles.headerFollowBtnText, { color: colors.textPrimary }]}>
                           {isFollowing ? "팔로잉" : "팔로우"}
@@ -237,9 +237,8 @@ const FeedPostCard = React.memo(
               thumbnailUrl={item.youtube_thumbnail_url}
             />
 
-            {/* Created Date */}
             <Text style={[styles.timeText, { color: colors.textMuted, marginTop: 4 }]}>
-              {new Date(item.created_at).toLocaleDateString("ko-KR")}
+              {item.created_at ? new Date(item.created_at).toLocaleDateString("ko-KR") : ""}
             </Text>
           </View>
         </View>
