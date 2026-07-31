@@ -99,13 +99,23 @@ export const getDeliveryLabel = (message: DirectMessage) => {
     case "pending":
       return "전송 중";
     case "failed":
-      return "전송 실패 · 눌러서 다시 보내기";
+      return "전송 실패";
+    case "sent":
+      return "전송됨";
+    case "delivered":
+      return "전송됨";
     case "read":
       return "읽음";
-    case "delivered":
-      return "전달됨";
-    case "sent":
     default:
       return "전송됨";
   }
+};
+
+/**
+ * Appends an invisible Word Joiner character (U+2060) after trailing punctuation
+ * (., !, ?, ,, …) to prevent Android text layout engine from prematurely breaking lines.
+ */
+export const fixPunctuationLineBreak = (text: string | null | undefined): string => {
+  if (!text) return "";
+  return text.replace(/([.!?,…]+)(\s*)$/g, "$1\u2060$2");
 };

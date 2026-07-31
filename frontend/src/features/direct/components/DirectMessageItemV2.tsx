@@ -5,7 +5,11 @@ import { useTheme } from "../../../context/ThemeContext";
 import { AdminAvatar, AdminBadge } from "../../../components/AdminIdentity";
 import { getFullImageUrl } from "../../../config";
 import { getDisplayName } from "../../../utils/displayName";
-import { formatMessageClock, getDeliveryLabel } from "../formatters";
+import {
+  fixPunctuationLineBreak,
+  formatMessageClock,
+  getDeliveryLabel,
+} from "../formatters";
 import { DirectMessage } from "../types";
 
 export interface DirectMessageItemV2Props {
@@ -162,7 +166,7 @@ export const DirectMessageItemV2 = ({
                 });
               }}
             >
-              {message.content || ""}
+              {fixPunctuationLineBreak(message.content)}
             </Text>
           )}
 
