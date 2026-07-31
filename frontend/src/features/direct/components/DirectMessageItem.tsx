@@ -22,73 +22,22 @@ export const DirectMessageItem: React.FC<DirectMessageItemProps> = ({ item, isMe
   };
 
   return (
-    <View
-      style={[styles.row, isMe ? styles.alignRight : styles.alignLeft]}
-      onLayout={(event) => {
-        console.log("[DM_ROW_BOX]", {
-          content: item.content,
-          layout: event.nativeEvent.layout,
-        });
-      }}
-    >
-      <View
-        style={[
-          styles.content,
-          {
-            borderWidth: 1,
-            borderColor: "red",
-          },
-        ]}
-        onLayout={(event) => {
-          console.log("[DM_CONTENT_BOX]", {
-            content: item.content,
-            layout: event.nativeEvent.layout,
-          });
-        }}
-      >
-        <Text
-          style={[
-            styles.messageText,
-            { color: colors.textPrimary, borderWidth: 1, borderColor: "blue" },
-          ]}
-          onLayout={(event) => {
-            console.log("[DM_TEXT_BOX]", {
-              content: item.content,
-              layout: event.nativeEvent.layout,
-            });
-          }}
-          onTextLayout={(event) => {
-            console.log("[DM_TEXT_LINES]", {
-              content: item.content,
-              lines: event.nativeEvent.lines.map((line) => ({
-                text: line.text,
-                width: line.width,
-                height: line.height,
-                x: line.x,
-                y: line.y,
-              })),
-            });
-          }}
-        >
-          {item.content}
-        </Text>
-
-        {/* 고정 폭 비교용 120px 임시 박스 */}
-        <View style={{ width: 120, borderWidth: 1, borderColor: "green", marginTop: 4 }}>
-          <Text style={{ fontSize: 15, lineHeight: 22, color: colors.textPrimary }}>
-            {item.content} (120px Test)
+    <View style={[styles.row, isMe ? styles.alignRight : styles.alignLeft]}>
+      <View style={styles.widthConstraint}>
+        <View style={[styles.content, isMe ? styles.alignSelfRight : styles.alignSelfLeft]}>
+          <Text style={[styles.messageText, { color: colors.textPrimary }]}>
+            {item.content}
+          </Text>
+          <Text
+            style={[
+              styles.timeText,
+              { color: colors.textMuted },
+              isMe ? styles.textRight : styles.textLeft,
+            ]}
+          >
+            {formatTime(item.created_at)} {item.isOptimistic ? "• 전송 중..." : ""}
           </Text>
         </View>
-
-        <Text
-          style={[
-            styles.timeText,
-            { color: colors.textMuted },
-            isMe ? styles.textRight : styles.textLeft,
-          ]}
-        >
-          {formatTime(item.created_at)} {item.isOptimistic ? "• 전송 중..." : ""}
-        </Text>
       </View>
     </View>
   );
@@ -106,8 +55,17 @@ const styles = StyleSheet.create({
   alignRight: {
     alignItems: "flex-end",
   },
+  widthConstraint: {
+    width: "85%",
+  },
   content: {
-    maxWidth: "85%",
+    // Natural width content with explicit alignSelf layout boundary
+  },
+  alignSelfLeft: {
+    alignSelf: "flex-start",
+  },
+  alignSelfRight: {
+    alignSelf: "flex-end",
   },
   messageText: {
     fontSize: 15,
