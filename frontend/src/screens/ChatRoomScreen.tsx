@@ -820,6 +820,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     includeFontPadding: false,
+    paddingRight: 4,
   },
   myMessageText: {
     color: "#fff",

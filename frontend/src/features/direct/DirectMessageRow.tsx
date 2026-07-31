@@ -291,6 +291,7 @@ const styles = StyleSheet.create({
     fontSize: 15.5,
     lineHeight: 23,
     includeFontPadding: false,
+    paddingRight: 4,
   },
   image: {
     height: 230,
