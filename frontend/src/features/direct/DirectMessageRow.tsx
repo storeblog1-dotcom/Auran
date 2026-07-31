@@ -17,7 +17,6 @@ import { DirectMessage } from "./types";
 interface DirectMessageRowProps {
   message: DirectMessage;
   isMine: boolean;
-  availableWidth: number;
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
   onOpenPost: (postId: string) => void;
@@ -27,17 +26,12 @@ interface DirectMessageRowProps {
 export const DirectMessageRow = ({
   message,
   isMine,
-  availableWidth,
   isFirstInGroup = true,
   isLastInGroup = true,
   onOpenPost,
   onRetry,
 }: DirectMessageRowProps) => {
   const { colors } = useTheme();
-  const maxContentWidth = Math.max(
-    180,
-    Math.min(availableWidth - 20, availableWidth * 0.86)
-  );
   const nickname = getDisplayName(message.sender, isMine ? "나" : "사용자");
   const deliveryLabel = getDeliveryLabel(message);
 
@@ -57,7 +51,7 @@ export const DirectMessageRow = ({
         style={[
           styles.row,
           isMine ? styles.myRow : styles.otherRow,
-          { marginTop: isFirstInGroup ? 6 : 2 },
+          { marginTop: isFirstInGroup ? 4 : 1 },
         ]}
       >
         {!isMine && (
@@ -68,7 +62,7 @@ export const DirectMessageRow = ({
           )
         )}
 
-        <View style={[styles.column, { maxWidth: maxContentWidth }]}>
+        <View style={styles.column}>
           {!isMine && isFirstInGroup && (
             <View style={styles.metadata}>
               <Text
@@ -88,10 +82,7 @@ export const DirectMessageRow = ({
             <Image
               source={{ uri: getFullImageUrl(message.media_url) }}
               resizeMode="cover"
-              style={[
-                styles.image,
-                { width: Math.min(248, maxContentWidth) },
-              ]}
+              style={styles.image}
             />
           ) : message.message_type === "POST" && message.shared_post_id ? (
             <TouchableOpacity
@@ -145,19 +136,6 @@ export const DirectMessageRow = ({
                 isMine ? styles.myTextAlignment : styles.otherTextAlignment,
                 { color: colors.textPrimary },
               ]}
-              onTextLayout={(event) => {
-                console.log("[DM_PAIRWISE_LAYOUT]", {
-                  content: message.content,
-                  isMine,
-                  linesCount: event.nativeEvent.lines.length,
-                  lines: event.nativeEvent.lines.map((line, index) => ({
-                    index,
-                    text: JSON.stringify(line.text),
-                    width: line.width,
-                    height: line.height,
-                  })),
-                });
-              }}
             >
               {message.content || ""}
             </Text>
@@ -208,7 +186,7 @@ export const DirectMessageRow = ({
               </Text>
             </View>
           ) : (
-            /* Subtle secondary divider line between consecutive messages of same sender */
+            /* Faint secondary divider between consecutive messages */
             <View
               style={[
                 styles.subtleMessageDivider,
@@ -229,14 +207,14 @@ const styles = StyleSheet.create({
   groupDivider: {
     width: "100%",
     borderTopWidth: 0.8,
-    marginTop: 22,
-    marginBottom: 10,
-    opacity: 0.45,
+    marginTop: 20,
+    marginBottom: 8,
+    opacity: 0.4,
   },
   subtleMessageDivider: {
     height: StyleSheet.hairlineWidth,
-    opacity: 0.25,
-    marginTop: 8,
+    opacity: 0.2,
+    marginTop: 6,
     marginBottom: 4,
   },
   row: {
@@ -263,7 +241,9 @@ const styles = StyleSheet.create({
     width: 32,
     marginRight: 9,
   },
-  column: {},
+  column: {
+    maxWidth: "86%",
+  },
   metadata: {
     flexDirection: "row",
     alignItems: "center",
@@ -294,6 +274,8 @@ const styles = StyleSheet.create({
     textAlign: "left",
   },
   image: {
+    width: 240,
+    maxWidth: "100%",
     height: 230,
     borderRadius: 12,
     backgroundColor: "#27272a",

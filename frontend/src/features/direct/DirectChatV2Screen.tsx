@@ -323,7 +323,6 @@ export const DirectChatV2Screen = ({ route, navigation }: any) => {
         <DirectMessageRow
           message={item.message}
           isMine={item.message.sender.id === user?.id}
-          availableWidth={messageAreaWidth - 28}
           isFirstInGroup={item.isFirstInGroup}
           isLastInGroup={item.isLastInGroup}
           onOpenPost={(postId) => {
