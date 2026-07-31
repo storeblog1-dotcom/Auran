@@ -23,21 +23,19 @@ export const DirectMessageItem: React.FC<DirectMessageItemProps> = ({ item, isMe
 
   return (
     <View style={[styles.row, isMe ? styles.alignRight : styles.alignLeft]}>
-      <View style={styles.widthConstraint}>
-        <View style={[styles.content, isMe ? styles.alignSelfRight : styles.alignSelfLeft]}>
-          <Text style={[styles.messageText, { color: colors.textPrimary }]}>
-            {item.content}
-          </Text>
-          <Text
-            style={[
-              styles.timeText,
-              { color: colors.textMuted },
-              isMe ? styles.textRight : styles.textLeft,
-            ]}
-          >
-            {formatTime(item.created_at)} {item.isOptimistic ? "• 전송 중..." : ""}
-          </Text>
-        </View>
+      <View style={[styles.content, isMe ? styles.alignSelfRight : styles.alignSelfLeft]}>
+        <Text style={[styles.messageText, { color: colors.textPrimary }]}>
+          {item.content}
+        </Text>
+        <Text
+          style={[
+            styles.timeText,
+            { color: colors.textMuted },
+            isMe ? styles.textRight : styles.textLeft,
+          ]}
+        >
+          {formatTime(item.created_at)} {item.isOptimistic ? "• 전송 중..." : ""}
+        </Text>
       </View>
     </View>
   );
@@ -55,11 +53,10 @@ const styles = StyleSheet.create({
   alignRight: {
     alignItems: "flex-end",
   },
-  widthConstraint: {
-    width: "85%",
-  },
   content: {
-    // Natural width content with explicit alignSelf layout boundary
+    maxWidth: "85%",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "transparent",
   },
   alignSelfLeft: {
     alignSelf: "flex-start",
