@@ -41,6 +41,7 @@ import { AdminReportDetailModal } from "../components/admin/AdminReportDetailMod
 import { AdminPostSection } from "../components/admin/AdminPostSection";
 import { AdminUserSection } from "../components/admin/AdminUserSection";
 import { AdminReportSection } from "../components/admin/AdminReportSection";
+import { AdminActivitySection } from "../components/admin/AdminActivitySection";
 
 type AdminTab = "stats" | "users" | "posts" | "activity" | "reports" | "community";
 
@@ -430,249 +431,7 @@ export const AdminScreen = ({ navigation }: any) => {
   const primaryAccent = isDark ? "#a855f7" : "#7c3aed";
   const cyanBorder = isDark ? "#06b6d4" : "#0284c7";
 
-  const renderContentHistory = (historyKey: string) => {
-    if (expandedHistoryKey !== historyKey) return null;
-    return (
-      <View style={[styles.historyPanel, { borderColor: colors.borderColor }]}>
-        {activityHistoryLoading ? (
-          <ActivityIndicator style={{ marginVertical: 8 }} color={primaryAccent} />
-        ) : activityHistory.length === 0 ? (
-          <Text style={{ color: colors.textMuted, fontSize: 12 }}>보존된 변경 이력이 없습니다.</Text>
-        ) : activityHistory.map((history) => (
-          <TouchableOpacity
-            key={history.revision_id}
-            activeOpacity={0.75}
-            onPress={(event) => {
-              event.stopPropagation();
-              setSelectedRevisionId(history.revision_id);
-              setRevisionModalVisible(true);
-            }}
-            style={[styles.historyRow, { borderBottomColor: colors.borderColor }]}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: primaryAccent, fontWeight: "700", fontSize: 12 }}>
-                버전 {history.version} · {history.lifecycle_event}
-              </Text>
-              <Text numberOfLines={2} style={{ color: colors.textPrimary, marginTop: 3, fontSize: 12 }}>
-                {history.display_text || "(내용 없음)"}
-              </Text>
-              <Text style={{ color: colors.textMuted, marginTop: 3, fontSize: 11 }}>
-                {new Date(history.event_at).toLocaleString()} · IP {history.event_ip || "기록 없음"}
-              </Text>
-            </View>
-            <Text style={{ color: primaryAccent, fontSize: 11, fontWeight: "700" }}>상세 보기</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  };
 
-  const renderActivityContentRow = (
-    content: any,
-    contentType: "post" | "comment",
-  ) => {
-    const historyKey = `${contentType}:${content.id}`;
-    const mediaUrl =
-      content.media?.[0]?.media_url ||
-      content.media?.[0]?.url ||
-      content.media_manifest?.[0]?.media_url ||
-      content.image_url ||
-      content.url ||
-      null;
-    const dateText = content.latest_event_at || content.created_at;
-    const formattedDate = dateText
-      ? new Date(dateText).toLocaleString("ko-KR", {
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      : "시간 기록 없음";
-
-    return (
-      <View key={historyKey}>
-        <TouchableOpacity
-          activeOpacity={0.75}
-          onPress={(event) => {
-            event.stopPropagation();
-            openActivityContent(content, contentType);
-          }}
-          style={[styles.activityContentRow, { borderColor: colors.borderColor }]}
-        >
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              <Text style={{ color: primaryAccent, fontWeight: "700", fontSize: 12 }}>
-                [{content.content_type || (contentType === "post" ? "게시물" : "댓글")}] [{content.board_label || "피드"}] {content.content_number || ""}
-              </Text>
-            </View>
-
-            <View style={{ flexDirection: "row", gap: 10, marginTop: 4 }}>
-              <View style={{ flex: 1 }}>
-                {contentType === "post" && !!content.title && (
-                  <Text style={{ color: colors.textPrimary, fontWeight: "bold", fontSize: 13, marginBottom: 2 }} numberOfLines={1}>
-                    {content.title}
-                  </Text>
-                )}
-                <Text
-                  numberOfLines={3}
-                  style={{ color: colors.textPrimary, fontSize: 12, lineHeight: 17 }}
-                >
-                  {content.content || content.display_text || content.caption || "(내용 없음)"}
-                </Text>
-              </View>
-
-              {!!mediaUrl && (
-                <Image
-                  source={{ uri: getFullImageUrl(mediaUrl) }}
-                  style={{ width: 56, height: 56, borderRadius: 8 }}
-                  resizeMode="cover"
-                />
-              )}
-            </View>
-
-            <Text style={{ color: colors.textMuted, marginTop: 6, fontSize: 11 }}>
-              최근 행위: {content.latest_event_type || "기록 없음"} · IP {content.latest_event_ip || "기록 없음"} · {formattedDate}
-            </Text>
-
-            <TouchableOpacity
-              onPress={(event) => {
-                event.stopPropagation();
-                toggleContentHistory(contentType, content.id);
-              }}
-              style={styles.historyButton}
-            >
-              <Ionicons name="time-outline" size={14} color={primaryAccent} />
-              <Text style={{ color: primaryAccent, fontSize: 12, fontWeight: "700" }}>
-                변경 이력 {content.revision_count || 0}건
-              </Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.detailLabel}>
-            <Text style={{ color: primaryAccent, fontSize: 11, fontWeight: "700" }}>상세 보기</Text>
-            <Ionicons name="chevron-forward" size={15} color={primaryAccent} />
-          </View>
-        </TouchableOpacity>
-        {renderContentHistory(historyKey)}
-      </View>
-    );
-  };
-
-  const renderActivityUser = ({ item }: { item: AdminActivityUser }) => {
-    const isExpanded = expandedActivityUserId === item.user_id;
-    const hasMore = activityContent?.pagination?.posts_has_more || activityContent?.pagination?.comments_has_more;
-    const withdrawalLabel =
-      item.withdrawal_status === "pending"
-        ? "탈퇴 대기"
-        : item.withdrawal_status === "finalized"
-        ? "최종 탈퇴"
-        : item.withdrawal_status === "purged"
-        ? "개인정보 파기"
-        : "가입 회원";
-    return (
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={() => toggleActivityUser(item)}
-        style={[styles.activityLogCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
-      >
-        <View style={styles.activityUserHeader}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.usernameText, { color: colors.textPrimary }]}>
-              {item.username} {item.nickname ? `(${item.nickname})` : ""}
-            </Text>
-            <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 3 }}>
-              최근 활동 {new Date(item.latest_activity_at).toLocaleString()} · 총 {item.activity_count}건
-            </Text>
-            <Text style={{ color: item.withdrawal_status ? "#ef4444" : "#16a34a", fontSize: 11, marginTop: 3 }}>
-                {withdrawalLabel}
-            </Text>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation();
-                setSelectedUserForModal({
-                  id: item.user_id,
-                  username: item.username,
-                  nickname: item.nickname,
-                  full_name: item.nickname || item.username,
-                  email: "",
-                  is_active: true,
-                  is_admin: false,
-                });
-                setUserPostsModalVisible(true);
-              }}
-              style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: `${primaryAccent}18` }}
-            >
-              <Text style={{ color: primaryAccent, fontSize: 11, fontWeight: "bold" }}>360° 모달</Text>
-            </TouchableOpacity>
-
-            <View style={styles.detailLabel}>
-              <Text style={{ color: primaryAccent, fontSize: 11, fontWeight: "700" }}>
-                {isExpanded ? "접기" : "콘텐츠 보기"}
-              </Text>
-              <Ionicons
-                name={isExpanded ? "chevron-up" : "chevron-down"}
-                size={16}
-                color={primaryAccent}
-              />
-            </View>
-          </View>
-        </View>
-        {isExpanded && (
-          <View style={[styles.activityDetail, { borderTopColor: colors.borderColor }]}>
-            {activityContentLoading && !activityContent && (
-              <ActivityIndicator style={{ marginVertical: 14 }} color={primaryAccent} />
-            )}
-            {!!activityContent?.account_events?.length && (
-              <View style={[styles.accountEvents, { borderColor: colors.borderColor }]}>
-                <Text style={{ color: colors.textPrimary, fontWeight: "800", fontSize: 12 }}>
-                  가입·탈퇴 기록
-                </Text>
-                {activityContent.account_events.map((event: any) => (
-                  <View key={event.id} style={styles.accountEventRow}>
-                    <Text style={{ color: primaryAccent, fontWeight: "700", fontSize: 12 }}>
-                      {event.event_type}
-                    </Text>
-                    <Text style={{ color: colors.textMuted, fontSize: 11 }}>
-                      {new Date(event.created_at).toLocaleString()} · IP {event.ip_address || "기록 없음"}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-            {activityContent?.posts?.map((post: any) =>
-              renderActivityContentRow(post, "post")
-            )}
-            {activityContent?.comments?.map((comment: any) =>
-              renderActivityContentRow(comment, "comment")
-            )}
-            {activityContent &&
-              !activityContent.posts?.length &&
-              !activityContent.comments?.length && (
-                <Text style={{ color: colors.textMuted, textAlign: "center", marginVertical: 14 }}>
-                  작성한 콘텐츠가 없습니다.
-                </Text>
-              )}
-            {activityContent && hasMore && (
-              <TouchableOpacity
-                disabled={activityContentLoading}
-                onPress={(event) => {
-                  event.stopPropagation();
-                  loadMoreActivityContent(item.user_id);
-                }}
-                style={[styles.loadMoreButton, { borderColor: primaryAccent }]}
-              >
-                {activityContentLoading
-                  ? <ActivityIndicator size="small" color={primaryAccent} />
-                  : <Text style={{ color: primaryAccent, fontWeight: "700" }}>더 보기</Text>}
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
@@ -820,39 +579,49 @@ export const AdminScreen = ({ navigation }: any) => {
       )}
 
       {activeTab === "activity" && (
-        <View style={{ flex: 1, padding: 16 }}>
-          <View style={styles.subnavRow}>
-            <TouchableOpacity onPress={() => setActiveTab("users")} style={[styles.subnavButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textSecondary, fontWeight: "700" }}>회원 목록</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => setActiveTab("activity")} style={[styles.subnavButton, { borderColor: primaryAccent, backgroundColor: `${primaryAccent}18` }]}><Text style={{ color: primaryAccent, fontWeight: "700" }}>활동·보존 이력</Text></TouchableOpacity>
-          </View>
-          <View style={styles.activitySearchRow}>
-            <View style={[styles.searchContainer, styles.activitySearchContainer, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
-              <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
-              <TextInput value={activityQuery} onChangeText={setActivityQuery} placeholder="아이디 또는 닉네임 검색" placeholderTextColor={colors.textMuted} style={[styles.searchInput, { color: colors.textPrimary }]} />
-            </View>
-            <TouchableOpacity onPress={() => loadActivity(activityQuery)} style={[styles.activitySearchButton, { backgroundColor: primaryAccent }]}>
-              <Text style={{ color: "white", fontWeight: "bold" }}>검색</Text>
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={activityUsers}
-            keyExtractor={(item) => item.user_id}
-            contentContainerStyle={{ paddingTop: 12 }}
-            ListEmptyComponent={<Text style={{ color: colors.textMuted, textAlign: "center", marginTop: 24 }}>표시할 사용자 활동 기록이 없습니다.</Text>}
-            ListFooterComponent={
-              activityLoadingMore
-                ? <ActivityIndicator style={{ marginVertical: 14 }} color={primaryAccent} />
-                : null
+        <AdminActivitySection
+          activityUsers={activityUsers}
+          activityQuery={activityQuery}
+          totalActivityUsers={totalActivityUsers}
+          loading={loading}
+          activityLoadingMore={activityLoadingMore}
+          expandedActivityUserId={expandedActivityUserId}
+          activityContent={activityContent}
+          activityContentLoading={activityContentLoading}
+          expandedHistoryKey={expandedHistoryKey}
+          activityHistory={activityHistory}
+          activityHistoryLoading={activityHistoryLoading}
+          colors={colors}
+          primaryAccent={primaryAccent}
+          onChangeActivityQuery={setActivityQuery}
+          onSubmitSearch={() => loadActivity(activityQuery, 1, false)}
+          onSelectUsersTab={() => setActiveTab("users")}
+          onLoadMoreUsers={() => {
+            if (!activityLoadingMore && activityUsers.length < totalActivityUsers) {
+              loadActivity(activityQuery, activityPage + 1, true);
             }
-            onEndReachedThreshold={0.35}
-            onEndReached={() => {
-              if (!activityLoadingMore && activityUsers.length < totalActivityUsers) {
-                loadActivity(activityQuery, activityPage + 1, true);
-              }
-            }}
-            renderItem={renderActivityUser}
-          />
-        </View>
+          }}
+          onToggleActivityUser={toggleActivityUser}
+          onOpenUser360Modal={(item) => {
+            setSelectedUserForModal({
+              id: item.user_id,
+              username: item.username,
+              nickname: item.nickname,
+              full_name: item.nickname || item.username,
+              email: "",
+              is_active: true,
+              is_admin: false,
+            });
+            setUserPostsModalVisible(true);
+          }}
+          onOpenActivityContent={openActivityContent}
+          onToggleContentHistory={toggleContentHistory}
+          onLoadMoreActivityContent={loadMoreActivityContent}
+          onOpenRevisionModal={(revisionId) => {
+            setSelectedRevisionId(revisionId);
+            setRevisionModalVisible(true);
+          }}
+        />
       )}
 
 
