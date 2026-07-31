@@ -311,8 +311,8 @@ export const CommunityScreen = ({ navigation, route }: any) => {
     || (selectedBoard && !selectedBoard.parent_id ? selectedBoard : undefined);
   const isPartnerBoard = Boolean(
     selectedBoard &&
-      (String(selectedBoard.slug || "").toLowerCase().includes("partner") ||
-        String(selectedBoard.name || "").includes("제휴업소"))
+    (String(selectedBoard.slug || "").toLowerCase().includes("partner") ||
+      String(selectedBoard.name || "").includes("제휴업소"))
   );
   const selectedIsPartnerBoard = Boolean(selectedBoard && isPartnerBoardRecord(selectedBoard));
   const canComposeInSelectedBoard = !selectedIsPartnerBoard || Boolean(currentUser?.is_admin);
