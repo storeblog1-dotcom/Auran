@@ -235,13 +235,14 @@ export async function registerCurrentInstallationForPush():
     return { state: "unsupported", reason: "web" };
   }
 
-  await ensureAndroidDirectMessageChannel();
-
-  // Remote push was removed from Expo Go on Android in SDK 53. Avoid calling
-  // getExpoPushTokenAsync there, which otherwise produces a development error.
+  // Remote push was removed from Expo Go on Android in SDK 53. This guard must
+  // run before any Android notification-channel or remote-token API is called;
+  // otherwise Expo Go still reports its unsupported-push console error.
   if (isAndroidExpoGo()) {
     return { state: "unsupported", reason: "android-expo-go" };
   }
+
+  await ensureAndroidDirectMessageChannel();
 
   const existingPermission = await Notifications.getPermissionsAsync();
   let permission = existingPermission.status;
@@ -296,7 +297,9 @@ export async function deactivateCurrentInstallationPushToken(): Promise<void> {
 export function startPushNotificationListeners(
   onTokenRolled: () => void,
 ): () => void {
-  if (Platform.OS === "web") return () => undefined;
+  // Expo Go can show local notifications, but it cannot receive remote push
+  // notifications on Android. Do not attach remote-push listeners there.
+  if (Platform.OS === "web" || isAndroidExpoGo()) return () => undefined;
 
   const responseSubscription =
     Notifications.addNotificationResponseReceivedListener(
