@@ -796,7 +796,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
           data={posts}
           keyExtractor={keyExtractor}
           renderItem={renderPostItem}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 0 }}
           ListHeaderComponent={
             <>
               {notices.length ? (
@@ -857,7 +857,7 @@ export const CommunityScreen = ({ navigation, route }: any) => {
               >
                 {selectedBoard?.is_anonymous
                   ? "익명으로 자유롭게 이야기 나누어보세요!"
-                  : "유용한 정보와 궁금한 점을 물어보세요."}
+                  : "유용한 정보와 궁금한 점을 공유해보세요."}
               </Text>
             </View>
           }
