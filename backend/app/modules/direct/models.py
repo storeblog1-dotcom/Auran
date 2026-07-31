@@ -189,3 +189,72 @@ class DirectUserPresence(Base):
         nullable=False,
         index=True,
     )
+
+
+class DirectConversation(Base):
+    """1:1 대화방 ORM 모델 (작업 10-1 기반 구축)"""
+
+    __tablename__ = "direct_conversations"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    members: Mapped[List["DirectConversationMember"]] = relationship(
+        "DirectConversationMember",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class DirectConversationMember(Base):
+    """1:1 대화방 참여자 ORM 모델 (작업 10-1 기반 구축)"""
+
+    __tablename__ = "direct_conversation_members"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "user_id", name="uq_direct_conversation_member"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        index=True,
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("direct_conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    conversation: Mapped["DirectConversation"] = relationship(
+        "DirectConversation", back_populates="members"
+    )
+    user: Mapped["User"] = relationship("User", lazy="selectin")

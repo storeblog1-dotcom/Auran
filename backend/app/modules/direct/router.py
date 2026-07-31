@@ -36,6 +36,8 @@ from app.modules.direct.models import (
     ChatRoom,
     ChatRoomMember,
     DirectUserPresence,
+    DirectConversation,
+    DirectConversationMember,
 )
 from app.modules.direct.realtime import (
     create_realtime_access_token,
@@ -53,6 +55,8 @@ from app.modules.direct.schemas import (
     MessageCheckpointUpdate,
     RealtimeConfigResponse,
     SenderResponse,
+    DirectConversationCreate,
+    DirectConversationResponse,
 )
 from app.modules.direct.websocket_manager import manager
 from app.modules.users.models import Follow, UserBlock
@@ -1624,3 +1628,154 @@ async def _format_room_response(db: AsyncSession, room_id: uuid.UUID, current_us
         message_permission_reason=message_permission_reason,
         updated_at=room.updated_at,
     )
+
+
+# ─── Task 10-1: Direct Conversations (Minimal 1:1 Setup) ───
+
+@router.post(
+    "/conversations",
+    summary="1:1 대화방 생성 또는 기존 대화방 반환",
+    response_model=dict,
+)
+async def create_or_get_direct_conversation(
+    payload: DirectConversationCreate,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    target_id = payload.get_target_id
+    if not target_id:
+        raise BadRequestException("target_user_id 가 필요합니다.")
+
+    if target_id == current_user.id:
+        raise BadRequestException("자기 자신과는 대화할 수 없습니다.")
+
+    target_user = await get_user_by_id(db, target_id)
+    if not target_user:
+        raise NotFoundException("상대방 사용자를 찾을 수 없습니다.")
+
+    # 1. 이미 존재하는 1:1 대화방 검색 (중복 생성 방지)
+    subq1 = (
+        select(DirectConversationMember.conversation_id)
+        .where(DirectConversationMember.user_id == current_user.id)
+    )
+    subq2 = (
+        select(DirectConversationMember.conversation_id)
+        .where(DirectConversationMember.user_id == target_id)
+    )
+    stmt = (
+        select(DirectConversation)
+        .where(
+            DirectConversation.id.in_(subq1),
+            DirectConversation.id.in_(subq2),
+        )
+    )
+    res = await db.execute(stmt)
+    conv = res.scalars().first()
+
+    if not conv:
+        # 2. 신규 대화방 생성
+        conv = DirectConversation()
+        db.add(conv)
+        await db.flush()
+
+        m1 = DirectConversationMember(conversation_id=conv.id, user_id=current_user.id)
+        m2 = DirectConversationMember(conversation_id=conv.id, user_id=target_id)
+        db.add_all([m1, m2])
+        await db.commit()
+        await db.refresh(conv)
+
+    target_user_resp = SenderResponse.model_validate(target_user)
+
+    return {
+        "status": "success",
+        "data": {
+            "id": str(conv.id),
+            "target_user": target_user_resp.model_dump(),
+            "created_at": conv.created_at.isoformat() if conv.created_at else None,
+            "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+        },
+    }
+
+
+@router.get(
+    "/conversations",
+    summary="참여 중인 1:1 대화방 목록 조회",
+    response_model=dict,
+)
+async def get_direct_conversations(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = (
+        select(DirectConversation)
+        .join(DirectConversationMember)
+        .where(DirectConversationMember.user_id == current_user.id)
+        .order_by(DirectConversation.updated_at.desc())
+    )
+    res = await db.execute(stmt)
+    conversations = res.scalars().unique().all()
+
+    result = []
+    for conv in conversations:
+        other_member = next(
+            (m for m in conv.members if m.user_id != current_user.id), None
+        )
+        target_user_data = (
+            SenderResponse.model_validate(other_member.user).model_dump()
+            if other_member and other_member.user
+            else None
+        )
+        result.append(
+            {
+                "id": str(conv.id),
+                "target_user": target_user_data,
+                "created_at": conv.created_at.isoformat() if conv.created_at else None,
+                "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+            }
+        )
+
+    return {
+        "status": "success",
+        "data": result,
+    }
+
+
+@router.get(
+    "/conversations/{conversation_id}",
+    summary="단일 1:1 대화방 상세 조회",
+    response_model=dict,
+)
+async def get_direct_conversation_detail(
+    conversation_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(DirectConversation).where(DirectConversation.id == conversation_id)
+    res = await db.execute(stmt)
+    conv = res.scalars().first()
+
+    if not conv:
+        raise NotFoundException("대화방을 찾을 수 없습니다.")
+
+    is_member = any(m.user_id == current_user.id for m in conv.members)
+    if not is_member:
+        raise ForbiddenException("해당 대화방에 접근할 권한이 없습니다.")
+
+    other_member = next(
+        (m for m in conv.members if m.user_id != current_user.id), None
+    )
+    target_user_data = (
+        SenderResponse.model_validate(other_member.user).model_dump()
+        if other_member and other_member.user
+        else None
+    )
+
+    return {
+        "status": "success",
+        "data": {
+            "id": str(conv.id),
+            "target_user": target_user_data,
+            "created_at": conv.created_at.isoformat() if conv.created_at else None,
+            "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+        },
+    }

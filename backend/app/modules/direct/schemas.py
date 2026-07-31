@@ -104,3 +104,21 @@ class RealtimeConfigResponse(BaseModel):
     peer_presence_topics: list[str] = Field(default_factory=list)
     user_id: UUID
     last_seen_at: datetime
+
+
+class DirectConversationCreate(BaseModel):
+    target_user_id: UUID | None = None
+    user_id: UUID | None = None
+
+    @property
+    def get_target_id(self) -> UUID | None:
+        return self.target_user_id or self.user_id
+
+
+class DirectConversationResponse(BaseModel):
+    id: UUID
+    target_user: SenderResponse | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

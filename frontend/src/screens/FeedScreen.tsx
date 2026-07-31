@@ -32,6 +32,7 @@ import { AuraLogoText } from "../components/AuraLogoText";
 import { PostOptionsSheet } from "../components/PostOptionsSheet";
 import { ReportSheet } from "../components/ReportSheet";
 import { useNotification } from "../context/NotificationContext";
+import { directService } from "../features/direct/services/directService";
 import { Ionicons } from "@expo/vector-icons";
 import {
   AdminAvatar,
@@ -64,6 +65,7 @@ const FeedPostCard = React.memo(
     onMoreOptions,
     onDetailPress,
     onDeletePost,
+    onStartConversation,
   }: {
     item: FeedPostItem;
     colors: any;
@@ -77,6 +79,7 @@ const FeedPostCard = React.memo(
     onMoreOptions: (item: FeedPostItem) => void;
     onDetailPress: (id: string) => void;
     onDeletePost: (id: string) => void;
+    onStartConversation?: (targetUser: any) => void;
   }) => {
     const commentsCount = item.comments_count || 0;
     const isMe = currentUser && currentUser.username === item.user?.username;
@@ -102,14 +105,27 @@ const FeedPostCard = React.memo(
                   <Text style={[styles.username, { color: colors.textPrimary }]}>{getDisplayName(item.user)}</Text>
                   {item.user?.is_admin && <AdminBadge />}
                   {!isMe && (
-                    <TouchableOpacity
-                      style={[styles.headerFollowBtn, { backgroundColor: colors.bgInput, borderColor: colors.borderColor }]}
-                      onPress={() => onToggleFollowUser(item.user?.username, isFollowing)}
-                    >
-                      <Text style={[styles.headerFollowBtnText, { color: colors.textPrimary }]}>
-                        {isFollowing ? "팔로잉" : "팔로우"}
-                      </Text>
-                    </TouchableOpacity>
+                    <>
+                      <TouchableOpacity
+                        style={[styles.headerFollowBtn, { backgroundColor: colors.bgInput, borderColor: colors.borderColor }]}
+                        onPress={() => onToggleFollowUser(item.user?.username, isFollowing)}
+                      >
+                        <Text style={[styles.headerFollowBtnText, { color: colors.textPrimary }]}>
+                          {isFollowing ? "팔로잉" : "팔로우"}
+                        </Text>
+                      </TouchableOpacity>
+                      {onStartConversation && (
+                        <TouchableOpacity
+                          style={[styles.headerFollowBtn, { backgroundColor: colors.bgInput, borderColor: colors.borderColor, marginLeft: 6, flexDirection: "row", alignItems: "center" }]}
+                          onPress={() => onStartConversation(item.user)}
+                        >
+                          <Ionicons name="chatbubbles-outline" size={13} color={colors.accentPurple || "#a855f7"} style={{ marginRight: 3 }} />
+                          <Text style={[styles.headerFollowBtnText, { color: colors.accentPurple || "#a855f7" }]}>
+                            대화
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </>
                   )}
                 </View>
                 {item.location ? <Text style={[styles.location, { color: colors.textSecondary }]}>{item.location}</Text> : null}
@@ -505,6 +521,20 @@ export const FeedScreen = ({ navigation }: any) => {
     }
   }, []);
 
+  const handleStartConversation = useCallback(async (targetUser: any) => {
+    if (!targetUser?.id) return;
+    try {
+      const conv = await directService.createOrGetConversation(targetUser.id);
+      navigation.navigate("DirectChat", {
+        conversationId: conv.id,
+        targetUser: conv.target_user || targetUser,
+      });
+    } catch (err) {
+      console.log("Error starting conversation from feed", err);
+      Alert.alert("알림", "대화를 시작할 수 없습니다.");
+    }
+  }, [navigation]);
+
   const renderPostItem = useCallback(
     ({ item }: { item: FeedPostItem }) => (
       <FeedPostCard
@@ -520,6 +550,7 @@ export const FeedScreen = ({ navigation }: any) => {
         onMoreOptions={handleMoreOptions}
         onDetailPress={handleDetailPress}
         onDeletePost={handleDeletePost}
+        onStartConversation={handleStartConversation}
       />
     ),
     [
@@ -534,6 +565,7 @@ export const FeedScreen = ({ navigation }: any) => {
       handleMoreOptions,
       handleDetailPress,
       handleDeletePost,
+      handleStartConversation,
     ]
   );
 

@@ -28,6 +28,8 @@ import { CommunityScreen } from "../screens/CommunityScreen";
 import { AdminScreen } from "../screens/AdminScreen";
 import { CommunityAdminScreen } from "../screens/CommunityAdminScreen";
 import { CommunityAdminNoticeScreen } from "../screens/CommunityAdminNoticeScreen";
+import { DirectInboxScreen } from "../features/direct/screens/DirectInboxScreen";
+import { DirectChatScreen } from "../features/direct/screens/DirectChatScreen";
 
 import { Ionicons } from "@expo/vector-icons";
 
@@ -132,6 +134,20 @@ const MainTabs = () => {
         }}
       />
       <Tab.Screen
+        name="DirectInbox"
+        component={DirectInboxScreen}
+        options={{
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{ alignItems: "center", justifyContent: "center", width: 64, height: 52, borderRadius: 18, paddingTop: 4, backgroundColor: focused ? colors.accentPurple + "12" : "transparent" }}>
+              <Ionicons name={focused ? "chatbubbles" : "chatbubbles-outline"} size={22} color={color} />
+              <Text numberOfLines={1} style={{ fontSize: 10, lineHeight: 14, color, marginTop: 2, fontWeight: focused ? "700" : "500", textAlign: "center" }}>
+                대화
+              </Text>
+            </View>
+          ),
+        }}
+      />
+      <Tab.Screen
         name="Profile"
         component={ProfileScreen}
         options={{
@@ -198,6 +214,7 @@ const AppContent = () => {
                 <Stack.Screen name="Admin" component={AdminScreen} />
                 <Stack.Screen name="CommunityAdmin" component={CommunityAdminScreen} />
                 <Stack.Screen name="CommunityAdminNotice" component={CommunityAdminNoticeScreen} />
+                <Stack.Screen name="DirectChat" component={DirectChatScreen} />
               </>
             ) : (
               <>
