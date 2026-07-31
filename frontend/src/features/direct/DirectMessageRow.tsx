@@ -164,7 +164,7 @@ export const DirectMessageRow = ({
           )}
 
           {/* Group Last Message Metadata (Time & Read Status) */}
-          {isLastInGroup && (
+          {isLastInGroup ? (
             <View
               style={[
                 styles.deliveryRow,
@@ -207,6 +207,14 @@ export const DirectMessageRow = ({
                   : formatMessageClock(message.created_at)}
               </Text>
             </View>
+          ) : (
+            /* Subtle secondary divider line between consecutive messages of same sender */
+            <View
+              style={[
+                styles.subtleMessageDivider,
+                { backgroundColor: colors.borderLight },
+              ]}
+            />
           )}
         </View>
       </View>
@@ -220,10 +228,16 @@ const styles = StyleSheet.create({
   },
   groupDivider: {
     width: "100%",
-    borderTopWidth: 0.5,
-    marginTop: 18,
-    marginBottom: 6,
-    opacity: 0.4,
+    borderTopWidth: 0.8,
+    marginTop: 22,
+    marginBottom: 10,
+    opacity: 0.45,
+  },
+  subtleMessageDivider: {
+    height: StyleSheet.hairlineWidth,
+    opacity: 0.25,
+    marginTop: 8,
+    marginBottom: 4,
   },
   row: {
     width: "100%",
@@ -269,7 +283,7 @@ const styles = StyleSheet.create({
   },
   plainMessageText: {
     fontSize: 15.5,
-    lineHeight: 22,
+    lineHeight: 24,
     includeFontPadding: false,
     paddingVertical: 2,
   },
