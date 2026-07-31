@@ -12,7 +12,7 @@ from app.modules.posts.models import Post, Comment, PostLike, PostMedia, PostBoo
 from app.modules.stories.models import Story  # noqa: F401
 from app.modules.users.models import Follow  # noqa: F401
 from app.modules.notifications.models import Notification  # noqa: F401
-from app.modules.direct.models import ChatRoom, ChatRoomMember, ChatMessage, DirectConversation, DirectConversationMember  # noqa: F401
+from app.modules.direct.models import ChatRoom, ChatRoomMember, ChatMessage, DirectConversation, DirectConversationMember, DirectMessage  # noqa: F401
 from app.modules.community.models import CommunityBoard, CommunityNotice  # noqa: F401
 from app.modules.hashtags.models import Hashtag, PostHashtag  # noqa: F401
 from app.modules.reports.models import HiddenContent, Report  # noqa: F401

@@ -38,6 +38,7 @@ from app.modules.direct.models import (
     DirectUserPresence,
     DirectConversation,
     DirectConversationMember,
+    DirectMessage,
 )
 from app.modules.direct.realtime import (
     create_realtime_access_token,
@@ -57,6 +58,8 @@ from app.modules.direct.schemas import (
     SenderResponse,
     DirectConversationCreate,
     DirectConversationResponse,
+    DirectMessageCreateSchema,
+    DirectMessageResponseSchema,
 )
 from app.modules.direct.websocket_manager import manager
 from app.modules.users.models import Follow, UserBlock
@@ -1779,3 +1782,176 @@ async def get_direct_conversation_detail(
             "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
         },
     }
+
+
+# ─── Task 10-2: Direct Messages (Text Messaging & WebSocket) ───
+
+class DirectConversationWSManager:
+    def __init__(self):
+        self.active_connections: dict[str, set[WebSocket]] = {}
+
+    async def connect(self, conversation_id: str, websocket: WebSocket):
+        await websocket.accept()
+        if conversation_id not in self.active_connections:
+            self.active_connections[conversation_id] = set()
+        self.active_connections[conversation_id].add(websocket)
+
+    def disconnect(self, conversation_id: str, websocket: WebSocket):
+        if conversation_id in self.active_connections:
+            self.active_connections[conversation_id].discard(websocket)
+            if not self.active_connections[conversation_id]:
+                del self.active_connections[conversation_id]
+
+    async def broadcast(self, conversation_id: str, message_data: dict):
+        if conversation_id in self.active_connections:
+            dead_sockets = set()
+            for ws in list(self.active_connections[conversation_id]):
+                try:
+                    await ws.send_json(message_data)
+                except Exception:
+                    dead_sockets.add(ws)
+            for ws in dead_sockets:
+                self.active_connections[conversation_id].discard(ws)
+
+
+direct_ws_manager = DirectConversationWSManager()
+
+
+@router.get(
+    "/conversations/{conversation_id}/messages",
+    summary="1:1 대화방 메시지 목록 조회",
+    response_model=dict,
+)
+async def get_direct_messages(
+    conversation_id: uuid.UUID,
+    limit: int = Query(default=30, ge=1, le=100),
+    before: uuid.UUID | None = Query(default=None),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt_conv = select(DirectConversation).where(DirectConversation.id == conversation_id)
+    res_conv = await db.execute(stmt_conv)
+    conv = res_conv.scalars().first()
+
+    if not conv:
+        raise NotFoundException("대화방을 찾을 수 없습니다.")
+
+    is_member = any(m.user_id == current_user.id for m in conv.members)
+    if not is_member:
+        raise ForbiddenException("해당 대화방에 접근할 권한이 없습니다.")
+
+    stmt_msg = select(DirectMessage).where(DirectMessage.conversation_id == conversation_id)
+
+    if before:
+        subq_before = select(DirectMessage.created_at).where(DirectMessage.id == before)
+        res_before = await db.execute(subq_before)
+        before_time = res_before.scalar()
+        if before_time:
+            stmt_msg = stmt_msg.where(DirectMessage.created_at < before_time)
+
+    stmt_msg = stmt_msg.order_by(DirectMessage.created_at.desc()).limit(limit)
+    res_msg = await db.execute(stmt_msg)
+    messages = list(res_msg.scalars().all())
+
+    messages.reverse()
+
+    result = []
+    for msg in messages:
+        sender_resp = (
+            SenderResponse.model_validate(msg.sender).model_dump()
+            if msg.sender
+            else None
+        )
+        result.append(
+            {
+                "id": str(msg.id),
+                "conversation_id": str(msg.conversation_id),
+                "sender_id": str(msg.sender_id),
+                "sender": sender_resp,
+                "content": msg.content,
+                "created_at": msg.created_at.isoformat() if msg.created_at else None,
+                "updated_at": msg.updated_at.isoformat() if msg.updated_at else None,
+            }
+        )
+
+    return {
+        "status": "success",
+        "data": result,
+    }
+
+
+@router.post(
+    "/conversations/{conversation_id}/messages",
+    summary="1:1 대화방 텍스트 메시지 전송",
+    response_model=dict,
+)
+async def send_direct_message(
+    conversation_id: uuid.UUID,
+    payload: DirectMessageCreateSchema,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt_conv = select(DirectConversation).where(DirectConversation.id == conversation_id)
+    res_conv = await db.execute(stmt_conv)
+    conv = res_conv.scalars().first()
+
+    if not conv:
+        raise NotFoundException("대화방을 찾을 수 없습니다.")
+
+    is_member = any(m.user_id == current_user.id for m in conv.members)
+    if not is_member:
+        raise ForbiddenException("해당 대화방에 접근할 권한이 없습니다.")
+
+    content = payload.content.strip()
+    if not content:
+        raise BadRequestException("메시지 내용을 입력해주세요.")
+
+    msg = DirectMessage(
+        conversation_id=conversation_id,
+        sender_id=current_user.id,
+        content=content,
+    )
+    db.add(msg)
+    conv.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(msg)
+
+    sender_resp = SenderResponse.model_validate(current_user).model_dump()
+    msg_data = {
+        "id": str(msg.id),
+        "conversation_id": str(msg.conversation_id),
+        "sender_id": str(msg.sender_id),
+        "sender": sender_resp,
+        "content": msg.content,
+        "created_at": msg.created_at.isoformat() if msg.created_at else None,
+        "updated_at": msg.updated_at.isoformat() if msg.updated_at else None,
+    }
+
+    await direct_ws_manager.broadcast(
+        str(conversation_id),
+        {
+            "event": "DIRECT_MESSAGE_CREATED",
+            "data": msg_data,
+        },
+    )
+
+    return {
+        "status": "success",
+        "data": msg_data,
+    }
+
+
+@router.websocket("/conversations/{conversation_id}/ws")
+async def direct_conversation_ws(
+    websocket: WebSocket,
+    conversation_id: uuid.UUID,
+):
+    conv_id_str = str(conversation_id)
+    await direct_ws_manager.connect(conv_id_str, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        direct_ws_manager.disconnect(conv_id_str, websocket)
+    except Exception:
+        direct_ws_manager.disconnect(conv_id_str, websocket)

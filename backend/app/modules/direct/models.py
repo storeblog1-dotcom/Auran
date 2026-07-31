@@ -258,3 +258,44 @@ class DirectConversationMember(Base):
         "DirectConversation", back_populates="members"
     )
     user: Mapped["User"] = relationship("User", lazy="selectin")
+
+
+class DirectMessage(Base):
+    """1:1 대화방 텍스트 메시지 ORM 모델 (작업 10-2)"""
+
+    __tablename__ = "direct_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        index=True,
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("direct_conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    sender_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    conversation: Mapped["DirectConversation"] = relationship("DirectConversation")
+    sender: Mapped["User"] = relationship("User", lazy="selectin")

@@ -4,28 +4,43 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useTheme } from "../../../context/ThemeContext";
+import { useAuth } from "../../../context/AuthContext";
 import { getDisplayName } from "../../../utils/displayName";
 import { AdminAvatar } from "../../../components/AdminIdentity";
+
 import { directService } from "../services/directService";
+import { useDirectChat } from "../hooks/useDirectChat";
+import { DirectMessageList } from "../components/DirectMessageList";
+import { DirectComposer } from "../components/DirectComposer";
 import { DirectUser } from "../types/direct";
 
 export const DirectChatScreen: React.FC = () => {
   const { colors } = useTheme();
+  const { user: currentUser } = useAuth();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
 
   const { conversationId, targetUser: initialTargetUser } = route.params || {};
 
   const [targetUser, setTargetUser] = useState<DirectUser | null>(initialTargetUser || null);
-  const [loading, setLoading] = useState<boolean>(!initialTargetUser && !!conversationId);
+  const [loadingUser, setLoadingUser] = useState<boolean>(!initialTargetUser && !!conversationId);
+
+  const {
+    messages,
+    loading: loadingMessages,
+    loadingMore,
+    sendMessage,
+    loadMoreMessages,
+  } = useDirectChat(conversationId || "");
 
   useEffect(() => {
     if (!targetUser && conversationId) {
@@ -37,10 +52,10 @@ export const DirectChatScreen: React.FC = () => {
           }
         })
         .catch((err) => {
-          console.log("Error loading conversation detail", err);
+          console.log("Error loading conversation detail in DirectChatScreen", err);
         })
         .finally(() => {
-          setLoading(false);
+          setLoadingUser(false);
         });
     }
   }, [conversationId, targetUser]);
@@ -59,7 +74,7 @@ export const DirectChatScreen: React.FC = () => {
           <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
 
-        {loading ? (
+        {loadingUser ? (
           <ActivityIndicator size="small" color={colors.accentPurple} />
         ) : (
           <View style={styles.headerTitleContainer}>
@@ -71,26 +86,27 @@ export const DirectChatScreen: React.FC = () => {
         )}
       </View>
 
-      {/* Main Body */}
-      <View style={styles.body}>
-        <Ionicons name="chatbubbles-outline" size={64} color={colors.textMuted} />
-        <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>
-          아직 대화를 시작하지 않았습니다.
-        </Text>
-      </View>
+      {/* Main Body with Keyboard Avoidance */}
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        {loadingMessages ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={colors.accentPurple} />
+          </View>
+        ) : (
+          <DirectMessageList
+            messages={messages}
+            currentUserId={currentUser?.id}
+            loadingMore={loadingMore}
+            onLoadMore={loadMoreMessages}
+          />
+        )}
 
-      {/* Disabled Input Bar (Phase 2 Preview) */}
-      <View style={[styles.inputContainer, { backgroundColor: colors.bgInput, borderTopColor: colors.borderLight }]}>
-        <TextInput
-          style={[styles.input, { color: colors.textMuted }]}
-          placeholder="2단계 구현 예정"
-          placeholderTextColor={colors.textMuted}
-          editable={false}
-        />
-        <TouchableOpacity style={styles.sendButton} disabled activeOpacity={0.5}>
-          <Text style={[styles.sendButtonText, { color: colors.textMuted }]}>전송</Text>
-        </TouchableOpacity>
-      </View>
+        {/* Message Input Bar */}
+        <DirectComposer onSend={sendMessage} />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -116,48 +132,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     marginRight: 10,
   },
   headerTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "600",
   },
-  body: {
+  keyboardView: {
+    flex: 1,
+  },
+  center: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-  placeholderText: {
-    fontSize: 16,
-    marginTop: 16,
-    fontWeight: "500",
-    textAlign: "center",
-  },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-  },
-  input: {
-    flex: 1,
-    height: 40,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    fontSize: 14,
-  },
-  sendButton: {
-    marginLeft: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  sendButtonText: {
-    fontSize: 15,
-    fontWeight: "600",
   },
 });

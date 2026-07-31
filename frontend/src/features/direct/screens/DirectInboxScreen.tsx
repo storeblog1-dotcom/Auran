@@ -85,7 +85,7 @@ export const DirectInboxScreen: React.FC = () => {
               {name}
             </Text>
             <Text style={[styles.dateText, { color: colors.textMuted }]}>
-              {formatDate(item.created_at)}
+              {formatDate(item.updated_at || item.created_at)}
             </Text>
           </View>
           <Text style={[styles.subText, { color: colors.textMuted }]}>

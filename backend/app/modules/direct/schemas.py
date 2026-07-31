@@ -122,3 +122,19 @@ class DirectConversationResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DirectMessageCreateSchema(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000)
+
+
+class DirectMessageResponseSchema(BaseModel):
+    id: UUID
+    conversation_id: UUID
+    sender_id: UUID
+    sender: SenderResponse | None = None
+    content: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
