@@ -22,7 +22,6 @@ import { StoryBar } from "../components/StoryBar";
 import { StoryViewerModal } from "../components/StoryViewerModal";
 import { CreateStoryModal } from "../components/CreateStoryModal";
 import { NotificationsModal } from "../components/NotificationsModal";
-import { SendPostDmModal } from "../components/SendPostDmModal";
 import { MyStoriesGridModal } from "../components/MyStoriesGridModal";
 import { PostCarousel } from "../components/PostCarousel";
 import { VerifiedYouTubeCard } from "../components/VerifiedYouTubeCard";
@@ -60,7 +59,6 @@ const FeedPostCard = React.memo(
     onToggleLike,
     onOpenComments,
     onToggleRepost,
-    onOpenDm,
     onToggleBookmark,
     onToggleFollowUser,
     onMoreOptions,
@@ -74,7 +72,6 @@ const FeedPostCard = React.memo(
     onToggleLike: (id: string) => void;
     onOpenComments: (id: string) => void;
     onToggleRepost: (id: string) => void;
-    onOpenDm: (item: FeedPostItem) => void;
     onToggleBookmark: (id: string) => void;
     onToggleFollowUser: (username: string, isFollowing: boolean) => void;
     onMoreOptions: (item: FeedPostItem) => void;
@@ -198,11 +195,6 @@ const FeedPostCard = React.memo(
                   {item.reposts_count || 0}
                 </Text>
               </TouchableOpacity>
-
-              {/* Send by DM */}
-              <TouchableOpacity style={styles.actionCountGroup} onPress={() => onOpenDm(item)}>
-                <Ionicons name="paper-plane-outline" size={22} color={colors.textPrimary} />
-              </TouchableOpacity>
             </View>
 
             {/* Bookmark Button */}
@@ -253,8 +245,6 @@ export const FeedScreen = ({ navigation }: any) => {
 
   // Modal States
   const [notificationsModalVisible, setNotificationsModalVisible] = useState<boolean>(false);
-  const [dmPost, setDmPost] = useState<FeedPostItem | null>(null);
-  const [dmModalVisible, setDmModalVisible] = useState<boolean>(false);
   const [detailPostId, setDetailPostId] = useState<string | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState<boolean>(false);
   const [noticeModalVisible, setNoticeModalVisible] = useState<boolean>(false);
@@ -490,10 +480,7 @@ export const FeedScreen = ({ navigation }: any) => {
     }
   }, []);
 
-  const handleOpenDm = useCallback((postItem: FeedPostItem) => {
-    setDmPost(postItem);
-    setDmModalVisible(true);
-  }, []);
+
 
   const handleOpenComments = useCallback((postId: string) => {
     setDetailPostId(postId);
@@ -528,7 +515,6 @@ export const FeedScreen = ({ navigation }: any) => {
         onToggleLike={handleToggleLike}
         onOpenComments={handleOpenComments}
         onToggleRepost={handleToggleRepost}
-        onOpenDm={handleOpenDm}
         onToggleBookmark={handleToggleBookmark}
         onToggleFollowUser={handleToggleFollowUser}
         onMoreOptions={handleMoreOptions}
@@ -543,7 +529,6 @@ export const FeedScreen = ({ navigation }: any) => {
       handleToggleLike,
       handleOpenComments,
       handleToggleRepost,
-      handleOpenDm,
       handleToggleBookmark,
       handleToggleFollowUser,
       handleMoreOptions,
@@ -712,16 +697,7 @@ export const FeedScreen = ({ navigation }: any) => {
         />
       )}
 
-      {dmPost && (
-        <SendPostDmModal
-          visible={dmModalVisible}
-          post={dmPost}
-          onClose={() => {
-            setDmModalVisible(false);
-            setDmPost(null);
-          }}
-        />
-      )}
+
 
       <NoticeListModal
         visible={noticeModalVisible}

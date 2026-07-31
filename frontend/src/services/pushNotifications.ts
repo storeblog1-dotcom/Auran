@@ -1,27 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
-import { AppState, AppStateStatus, Platform } from "react-native";
+import { Platform } from "react-native";
 
 import api from "./api";
 
 const INSTALLATION_ID_KEY = "auran_push_installation_id";
 const EXPO_PUSH_TOKEN_KEY = "auran_expo_push_token";
-export const DIRECT_MESSAGE_CHANNEL_ID = "direct-messages";
-
-export interface DirectMessagePushData {
-  version: 1;
-  type: "DIRECT_MESSAGE";
-  room_id: string;
-  message_id: string;
-  sender_id: string;
-  sender_username: string;
-  sender_nickname?: string;
-  sender_full_name: string;
-  sender_profile_image_url?: string;
-  sender_is_admin: boolean;
-  url: string;
-}
 
 export type PushRegistrationState =
   | "registered"
@@ -34,135 +19,14 @@ export interface PushRegistrationResult {
   reason?: string;
 }
 
-type NavigationListener = (data: DirectMessagePushData) => boolean;
-
-let activeDirectRoomId: string | null = null;
-let pendingNavigation: DirectMessagePushData | null = null;
-let lastHandledResponseId: string | null = null;
-const navigationListeners = new Set<NavigationListener>();
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function booleanValue(value: unknown): boolean {
-  return value === true || value === "true";
-}
-
-export function parseDirectMessagePushData(
-  rawData: Record<string, unknown> | null | undefined,
-): DirectMessagePushData | null {
-  if (!rawData || rawData.type !== "DIRECT_MESSAGE") return null;
-
-  const roomId = stringValue(rawData.room_id);
-  const messageId = stringValue(rawData.message_id);
-  const senderId = stringValue(rawData.sender_id);
-  const senderUsername = stringValue(rawData.sender_username);
-  if (!roomId || !messageId || !senderId || !senderUsername) return null;
-
-  return {
-    version: 1,
-    type: "DIRECT_MESSAGE",
-    room_id: roomId,
-    message_id: messageId,
-    sender_id: senderId,
-    sender_username: senderUsername,
-    sender_nickname: stringValue(rawData.sender_nickname),
-    sender_full_name:
-      stringValue(rawData.sender_full_name) || senderUsername,
-    sender_profile_image_url: stringValue(rawData.sender_profile_image_url),
-    sender_is_admin: booleanValue(rawData.sender_is_admin),
-    url: stringValue(rawData.url) || `auran://messages/${roomId}`,
-  };
-}
-
-export function setActiveDirectRoomId(roomId: string | null): void {
-  activeDirectRoomId = roomId;
-}
-
-export function shouldSuppressDirectMessageNotification(
-  data: DirectMessagePushData | null,
-  appState: AppStateStatus = AppState.currentState,
-): boolean {
-  return (
-    appState === "active"
-    && data !== null
-    && activeDirectRoomId === data.room_id
-  );
-}
-
-function clearStoredNotificationResponse(): void {
-  Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
-}
-
-function emitNavigation(data: DirectMessagePushData): boolean {
-  const handled = Array.from(navigationListeners).some((listener) => {
-    try {
-      return listener(data);
-    } catch {
-      return false;
-    }
-  });
-  pendingNavigation = handled ? null : data;
-  return handled;
-}
-
-export function subscribeToDirectMessagePushNavigation(
-  listener: NavigationListener,
-): () => void {
-  navigationListeners.add(listener);
-  if (pendingNavigation) {
-    const pending = pendingNavigation;
-    Promise.resolve().then(() => {
-      if (navigationListeners.has(listener) && listener(pending)) {
-        pendingNavigation = null;
-        clearStoredNotificationResponse();
-      }
-    });
-  }
-  return () => {
-    navigationListeners.delete(listener);
-  };
-}
-
-export function consumePendingDirectMessagePushNavigation():
-  | DirectMessagePushData
-  | null {
-  const pending = pendingNavigation;
-  pendingNavigation = null;
-  if (pending) clearStoredNotificationResponse();
-  return pending;
-}
-
-function handleNotificationResponse(
-  response: Notifications.NotificationResponse | null,
-): void {
-  if (!response) return;
-  const responseId = response.notification.request.identifier;
-  if (lastHandledResponseId === responseId) return;
-
-  const data = parseDirectMessagePushData(
-    response.notification.request.content.data as Record<string, unknown>,
-  );
-  if (!data) return;
-  lastHandledResponseId = responseId;
-  if (emitNavigation(data)) clearStoredNotificationResponse();
-}
-
 if (Platform.OS !== "web") {
   Notifications.setNotificationHandler({
-    handleNotification: async (notification) => {
-      const data = parseDirectMessagePushData(
-        notification.request.content.data as Record<string, unknown>,
-      );
-      const suppress = shouldSuppressDirectMessageNotification(data);
-      return {
-        shouldPlaySound: !suppress,
-        shouldSetBadge: false,
-        shouldShowBanner: !suppress,
-        shouldShowList: !suppress,
-      };
-    },
+    handleNotification: async () => ({
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
   });
 }
 
@@ -197,23 +61,6 @@ function getEasProjectId(): string | undefined {
   return expoExtra?.eas?.projectId || Constants.easConfig?.projectId;
 }
 
-async function ensureAndroidDirectMessageChannel(): Promise<void> {
-  if (Platform.OS !== "android") return;
-  await Notifications.setNotificationChannelAsync(
-    DIRECT_MESSAGE_CHANNEL_ID,
-    {
-      name: "1:1 메시지",
-      description: "새로운 1:1 메시지 알림",
-      importance: Notifications.AndroidImportance.HIGH,
-      sound: "default",
-      vibrationPattern: [0, 200, 100, 200],
-      lightColor: "#7C3AED",
-      lockscreenVisibility:
-        Notifications.AndroidNotificationVisibility.PRIVATE,
-    },
-  );
-}
-
 async function saveTokenOnServer(expoPushToken: string): Promise<void> {
   const deviceId = await getPushInstallationId();
   await api.post("/notifications/push-tokens", {
@@ -224,8 +71,6 @@ async function saveTokenOnServer(expoPushToken: string): Promise<void> {
   });
   await AsyncStorage.setItem(EXPO_PUSH_TOKEN_KEY, expoPushToken);
 
-  // Receipt processing is diagnostic cleanup and should not make registration
-  // fail when the Expo service is temporarily unavailable.
   api.post("/notifications/push-tokens/sync-receipts").catch(() => undefined);
 }
 
@@ -235,10 +80,6 @@ export async function registerCurrentInstallationForPush():
     return { state: "unsupported", reason: "web" };
   }
 
-  await ensureAndroidDirectMessageChannel();
-
-  // Remote push was removed from Expo Go on Android in SDK 53. Avoid calling
-  // getExpoPushTokenAsync there, which otherwise produces a development error.
   if (isAndroidExpoGo()) {
     return { state: "unsupported", reason: "android-expo-go" };
   }
@@ -265,8 +106,6 @@ export async function registerCurrentInstallationForPush():
     await saveTokenOnServer(expoPushToken);
     return { state: "registered" };
   } catch {
-    // Offline startup and missing native credentials are recoverable. The
-    // manager retries when the app next becomes active.
     return { state: "unavailable", reason: "token-registration-failed" };
   }
 }
@@ -283,8 +122,6 @@ export async function deactivateCurrentInstallationPushToken(): Promise<void> {
     }
   } finally {
     await AsyncStorage.removeItem(EXPO_PUSH_TOKEN_KEY);
-    // This also protects an offline logout: the old native token stops
-    // receiving even if the backend could not be reached for deactivation.
     try {
       await Notifications.unregisterForNotificationsAsync();
     } catch {
@@ -298,20 +135,11 @@ export function startPushNotificationListeners(
 ): () => void {
   if (Platform.OS === "web") return () => undefined;
 
-  const responseSubscription =
-    Notifications.addNotificationResponseReceivedListener(
-      handleNotificationResponse,
-    );
   const tokenSubscription = Notifications.addPushTokenListener(() => {
     onTokenRolled();
   });
 
-  Notifications.getLastNotificationResponseAsync()
-    .then(handleNotificationResponse)
-    .catch(() => undefined);
-
   return () => {
-    responseSubscription.remove();
     tokenSubscription.remove();
   };
 }

@@ -21,7 +21,6 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import api from "../services/api";
 import { Comment, CommentNode } from "./CommentsModal";
-import { SendPostDmModal } from "./SendPostDmModal";
 import { PostCarousel } from "./PostCarousel";
 import { VerifiedYouTubeCard } from "./VerifiedYouTubeCard";
 import { HashtagText } from "./HashtagText";
@@ -70,7 +69,6 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
 
   const [post, setPost] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  const [dmModalVisible, setDmModalVisible] = useState<boolean>(false);
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
   const [reportComment, setReportComment] = useState<Comment | null>(null);
@@ -604,9 +602,6 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                   }}>
                     <Ionicons name="chatbubble-outline" size={22} color={colors.textPrimary} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setDmModalVisible(true)}>
-                    <Ionicons name="paper-plane-outline" size={22} color={colors.textPrimary} />
-                  </TouchableOpacity>
                 </View>
 
                 {/* Bookmark Button (Shifted slightly left) */}
@@ -808,13 +803,6 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
             />
           </>
         )}
-
-        {/* Send Post by DM Modal */}
-        <SendPostDmModal
-          visible={dmModalVisible}
-          post={post}
-          onClose={() => setDmModalVisible(false)}
-        />
       </SafeAreaView>
     </Modal>
   );

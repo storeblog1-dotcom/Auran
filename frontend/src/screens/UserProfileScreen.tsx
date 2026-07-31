@@ -132,42 +132,7 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
     }
   };
 
-  const handleStartDirectMessage = async () => {
-    if (!profile) return;
-    try {
-      const res = await api.post("/direct/rooms", {
-        target_user_id: profile.id,
-      });
-      const room = res.data?.data || res.data;
-      navigation.navigate("MainTabs", {
-        screen: "Messages",
-        params: {
-          screen: "ChatRoom",
-          params: {
-            roomId: room.id,
-            requestStatus: room.request_status,
-            isOutgoingRequest: room.is_outgoing_request,
-            targetUser: {
-              id: profile.id,
-              username: profile.username,
-              nickname: profile.nickname,
-              full_name: profile.full_name,
-              profile_image_url: profile.profile_image_url,
-              is_admin: profile.is_admin,
-            },
-          },
-        },
-      });
-    } catch (err: any) {
-      console.log("Error starting chat from UserProfileScreen", err);
-      Alert.alert(
-        "메시지를 보낼 수 없음",
-        err.response?.data?.error?.message ||
-          err.response?.data?.detail ||
-          "메시지를 보낼 수 없습니다."
-      );
-    }
-  };
+
 
   const openUserListModal = (type: "followers" | "following") => {
     setUserListType(type);
@@ -332,21 +297,6 @@ export const UserProfileScreen = ({ route, navigation }: any) => {
                     >
                       {profile.is_following ? "팔로잉" : "+ Follow"}
                     </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.purplePillBtn,
-                      {
-                        borderColor: purpleBorder,
-                        backgroundColor: isDark ? "rgba(168, 85, 247, 0.12)" : "rgba(124, 58, 237, 0.08)",
-                      },
-                    ]}
-                    onPress={handleStartDirectMessage}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="chatbubble-ellipses-outline" size={18} color={purpleAccent} />
-                    <Text style={[styles.purplePillBtnText, { color: purpleAccent }]}>Message</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
