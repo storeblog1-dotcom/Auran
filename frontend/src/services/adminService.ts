@@ -288,4 +288,7 @@ export const adminService = {
   },
   runGovernanceMaintenance: async (): Promise<{ expired_sanctions: number; permanent_review_due_user_ids: string[] }> =>
     (await api.post("/governance/admin/maintenance")).data.data,
+  resetFeatureAuditPassword: async (adminPassword: string): Promise<void> => {
+    await api.post("/admin/integrations/feature-audit/reset", { admin_password: adminPassword });
+  },
 };

@@ -134,6 +134,13 @@ const features = [
     priority: "정책 문서만 바꾸지 말고 데이터 모델·API 권한·자동 파기·관리자 처리와 사용자 화면을 같은 기준으로 구현해야 합니다.",
     capabilities: [
       {
+        title: "감사 페이지 접근 보호", status: "verify",
+        description: "/feature-audit의 HTML·CSS·JavaScript·테스트 계정 자료 전체를 서버 인증 뒤에 두고 공용 감사 비밀번호를 앱 Superadmin 비밀번호와 분리합니다.",
+        behavior: "초기 비밀번호는 배포 Secret으로만 전달하고 DB에는 bcrypt 해시만 저장합니다. 최초 로그인 직후 12자 이상 새 비밀번호 설정을 강제하며 Secure·HttpOnly·SameSite 세션, CSRF 검증, 5회 실패 15분 잠금, 비밀번호 변경 시 전체 세션 무효화를 적용합니다.",
+        completion: "운영 URL 최초 비밀번호 변경, 비인증 자산 직접 접근 차단, 잠금·초기화·세션 만료를 실제 브라우저에서 검증해야 합니다.",
+        evidence: "backend/app/modules/feature_audit · 20260802_feature_audit_auth migration · AdminIntegrationSection.tsx",
+      },
+      {
         title: "회원가입 동의와 연령 정책", status: "verify",
         description: "이용약관, 개인정보 수집·이용, 보안 로그, 커뮤니티 정책, 만 14세 이상 확인을 구분하고 정책 버전별 동의 증거를 보존합니다.",
         behavior: "필수·선택·민감정보 동의를 분리하고 약관 버전, 문서 해시, 동의 시각, 가입 IP, 설치 식별자 HMAC, 앱 버전을 기록합니다. 성적 지향 정보는 선택 입력·별도 동의·기본 비공개로 취급합니다.",
@@ -295,6 +302,10 @@ const features = [
 ];
 
 const statusLabel = { implemented: "구현", verify: "검증 대기", risk: "주의", planned: "구현 예정", external: "외부 등록 대기", excluded: "범위 제외" };
+const auditAuthBar = document.createElement("div");
+auditAuthBar.className = "audit-auth-bar";
+auditAuthBar.innerHTML = '<a href="/feature-audit/change-password">비밀번호 변경</a><a href="/feature-audit/logout">로그아웃</a>';
+document.body.appendChild(auditAuthBar);
 const average = Math.round(features.reduce((sum, feature) => sum + feature.score, 0) / features.length);
 const summaryGrid = document.querySelector("#summaryGrid");
 const featureSections = document.querySelector("#featureSections");

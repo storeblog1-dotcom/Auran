@@ -17,6 +17,7 @@ from app.modules.community.models import CommunityBoard, CommunityNotice  # noqa
 from app.modules.hashtags.models import Hashtag, PostHashtag  # noqa: F401
 from app.modules.reports.models import HiddenContent, Report  # noqa: F401
 from app.modules.governance.models import AccountSanction, IntegrationCredential, ModerationAppeal, ModerationCheck, PolicyDocument, UserConsent  # noqa: F401
+from app.modules.feature_audit.models import FeatureAuditCredential, FeatureAuditLoginThrottle  # noqa: F401
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -92,6 +93,11 @@ async def lifespan(app: FastAPI):
                     admin_user.hashed_password = hash_password(settings.bootstrap_admin_password)
                 await db.commit()
                 print("[STARTUP] Updated configured bootstrap superadmin role")
+
+    if settings.feature_audit_initial_password:
+        async with AsyncSession(engine) as db:
+            from app.modules.feature_audit.service import ensure_credential
+            await ensure_credential(db)
 
     yield
     # 앱 종료 시
@@ -189,6 +195,7 @@ from app.modules.admin.router import router as admin_router
 from app.modules.community.router import router as community_router
 from app.modules.reports.router import router as reports_router
 from app.modules.governance.router import router as governance_router, admin_router as integration_admin_router
+from app.modules.feature_audit.router import router as feature_audit_router
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
@@ -204,3 +211,4 @@ app.include_router(community_router, prefix="/api/v1")
 app.include_router(reports_router, prefix="/api/v1")
 app.include_router(governance_router, prefix="/api/v1")
 app.include_router(integration_admin_router, prefix="/api/v1")
+app.include_router(feature_audit_router)

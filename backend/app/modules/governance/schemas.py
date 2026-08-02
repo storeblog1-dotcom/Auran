@@ -59,6 +59,10 @@ class AdminRoleUpdate(BaseModel):
     admin_password: str = Field(..., min_length=1, max_length=256)
 
 
+class FeatureAuditPasswordReset(BaseModel):
+    admin_password: str = Field(..., min_length=1, max_length=256)
+
+
 class IntegrationSummary(BaseModel):
     provider: str
     configured: bool

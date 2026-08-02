@@ -10,6 +10,7 @@ export const AdminIntegrationSection = ({ colors, primaryAccent }: any) => {
   const [secret, setSecret] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [auditResetPassword, setAuditResetPassword] = useState("");
 
   const load = async () => {
     try { setItems(await adminService.getIntegrations()); }
@@ -32,6 +33,28 @@ export const AdminIntegrationSection = ({ colors, primaryAccent }: any) => {
   return <ScrollView contentContainerStyle={styles.content}>
     <Text style={[styles.heading, { color: colors.textPrimary }]}>외부 서비스·비밀키</Text>
     <Text style={[styles.guide, { color: colors.textSecondary }]}>전체 키는 저장 후 다시 표시되지 않습니다. 새 키 등록 → 연결 검사 → 활성화 순서로 진행하세요. Git, APK, 프론트 환경변수에는 키를 넣지 마세요.</Text>
+    <View style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
+      <Text style={[styles.title, { color: colors.textPrimary }]}>기능 구현 감사 페이지</Text>
+      <Text style={[styles.guide, { color: colors.textSecondary, marginBottom: 0 }]}>비밀번호를 잊은 경우에만 초기화하세요. 모든 감사 페이지 세션이 종료되고 다음 로그인에서 새 비밀번호 설정이 강제됩니다.</Text>
+      <TextInput secureTextEntry value={auditResetPassword} onChangeText={setAuditResetPassword} placeholder="최고 관리자 비밀번호 재입력" placeholderTextColor={colors.textSecondary} style={[styles.input, { color: colors.textPrimary, borderColor: colors.borderColor }]} />
+      <TouchableOpacity
+        disabled={busy || !auditResetPassword}
+        style={[styles.button, { backgroundColor: primaryAccent, marginTop: 10 }, (busy || !auditResetPassword) && styles.disabled]}
+        onPress={() => Alert.alert("감사 페이지 비밀번호 초기화", "초기화하면 기존 세션이 모두 종료됩니다.", [
+          { text: "취소", style: "cancel" },
+          { text: "초기화", style: "destructive", onPress: async () => {
+            setBusy(true);
+            try {
+              await adminService.resetFeatureAuditPassword(auditResetPassword);
+              setAuditResetPassword("");
+              Alert.alert("초기화 완료", "초기 비밀번호로 로그인한 뒤 새 비밀번호를 설정해야 합니다.");
+            } catch (error: any) {
+              Alert.alert("초기화 실패", error.response?.data?.detail || "최고 관리자 비밀번호를 확인해 주세요.");
+            } finally { setBusy(false); }
+          } },
+        ])}
+      ><Text style={{ color: "#fff", fontWeight: "800" }}>감사 페이지 비밀번호 초기화</Text></TouchableOpacity>
+    </View>
     {!items.length ? <ActivityIndicator color={primaryAccent} /> : items.map((item) => <View key={item.provider} style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
       <View style={styles.row}><View style={{ flex: 1 }}><Text style={[styles.title, { color: colors.textPrimary }]}>{LABELS[item.provider]}</Text><Text style={{ color: colors.textSecondary }}>{item.configured ? `등록됨 · 끝자리 ${item.last_four || "----"}` : "키 미등록"}</Text></View><View style={[styles.badge, { backgroundColor: item.enabled ? "#16a34a22" : "#64748b22" }]}><Text style={{ color: item.enabled ? "#16a34a" : colors.textSecondary, fontWeight: "800" }}>{item.enabled ? "활성" : "비활성"}</Text></View></View>
       <Text style={[styles.meta, { color: colors.textSecondary }]}>마스터 키: {item.bootstrap_ready ? "준비됨" : "미등록"} · 검사: {item.last_test_status || "대기"}</Text>
