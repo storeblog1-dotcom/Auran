@@ -1,5 +1,7 @@
 # 관리자 외부 연동·비밀키 운영 가이드
 
+현재 배포는 Google Secret Manager가 아니라 GitHub Actions Secrets에서 서버 전용 값을 Cloud Run 환경변수로 전달합니다. 비밀 원문은 코드, APK, 문서와 API 응답에 넣지 않습니다.
+
 ## 권한
 
 - `moderator`: 신고 조회와 검토
@@ -9,13 +11,22 @@
 
 ## 최초 부트스트랩
 
-다음 값은 앱이나 관리자 화면에 입력하지 않고 Cloud Run Secret Manager에서 환경변수로 주입합니다.
+다음 값은 앱이나 관리자 화면에 입력하지 않고 GitHub Actions Secrets에서 Cloud Run 환경변수로 주입합니다.
 
 - `INTEGRATION_MASTER_KEY`: URL-safe base64로 인코딩한 무작위 32바이트 키
 - `INSTALLATION_HMAC_SECRET`: 설치 식별자 HMAC 전용 무작위 비밀
+- `FEATURE_AUDIT_INITIAL_PASSWORD`: 기능 구현 감사 페이지를 초기화할 때만 쓰는 임시 비밀번호
 - `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`: 최고 관리자 최초 생성이 정말 필요한 환경에서만 임시 등록
 
 부트스트랩 최고 관리자가 만들어진 뒤에는 세 관리자 환경변수를 제거해도 기존 계정은 유지됩니다. 소스 코드, GitHub 저장소, APK, 프론트 환경변수, AsyncStorage, 로그 또는 지원 티켓에 값을 복사하지 않습니다.
+
+## 기능 구현 감사 페이지
+
+- 운영 경로는 `/feature-audit`이며 HTML, CSS, JavaScript와 테스트 계정 자료까지 인증 뒤에 둡니다.
+- 초기 비밀번호는 `FEATURE_AUDIT_INITIAL_PASSWORD`로 주입하고 최초 로그인 직후 변경합니다.
+- DB에는 bcrypt 해시만 저장하며 앱 Superadmin 비밀번호와 별개입니다.
+- 새 비밀번호를 설정하거나 초기화하면 기존 감사 페이지 세션이 모두 무효화됩니다.
+- 비밀번호를 잊으면 앱의 Superadmin 전용 외부 연동 메뉴에서 앱 관리자 비밀번호를 재입력하고 초기화합니다.
 
 ## 공급자 키 등록
 

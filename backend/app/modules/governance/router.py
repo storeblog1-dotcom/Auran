@@ -15,7 +15,7 @@ from app.modules.audit.service import record
 from app.modules.auth.dependencies import get_current_active_user, get_current_admin_user, get_current_superadmin_user, get_current_user
 from app.modules.auth.models import User
 from app.modules.governance.models import AccountSanction, IntegrationCredential, ModerationAppeal, ModerationCheck, PolicyDocument, UserConsent
-from app.modules.governance.schemas import AdminRoleUpdate, AppealCreate, AppealDecision, IntegrationEnabledUpdate, IntegrationSecretUpsert, PermanentDeletionConfirm
+from app.modules.governance.schemas import AdminRoleUpdate, AppealCreate, AppealDecision, FeatureAuditPasswordReset, IntegrationEnabledUpdate, IntegrationSecretUpsert, PermanentDeletionConfirm
 from app.modules.governance.service import SUPPORTED_PROVIDERS, active_policies, encrypt_secret, test_provider
 
 
@@ -134,6 +134,30 @@ def _summary(provider: str, credential: IntegrationCredential | None) -> dict:
         "last_error": credential.last_error if credential else None,
         "bootstrap_ready": bool(settings.integration_master_key),
     }
+
+
+@admin_router.post("/feature-audit/reset", summary="기능 감사 페이지 비밀번호 초기화")
+async def reset_feature_audit_password(
+    body: FeatureAuditPasswordReset,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_superadmin_user),
+) -> ApiResponse[dict]:
+    if not admin.hashed_password or not verify_password(body.admin_password, admin.hashed_password):
+        raise UnauthorizedException("최고 관리자 재인증에 실패했습니다.")
+    from app.modules.feature_audit.service import reset_password
+
+    credential = await reset_password(db, admin_user_id=admin.id)
+    await record(
+        db,
+        user_id=None,
+        event_type="feature_audit_password_reset",
+        ip_address=get_client_ip(request),
+        target_type="feature_audit",
+        snapshot={"admin_id": str(admin.id), "session_version": credential.session_version},
+    )
+    await db.commit()
+    return ApiResponse.ok({"must_change_password": True, "sessions_invalidated": True})
 
 
 @admin_router.get("", summary="외부 연동 상태")

@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     bootstrap_admin_username: str = ""
     bootstrap_admin_email: str = ""
     bootstrap_admin_password: str = ""
+    feature_audit_initial_password: str = ""
+    feature_audit_session_hours: int = 8
 
     # CORS
     allowed_origins: str = "*,http://localhost:3000,http://localhost:8081"
