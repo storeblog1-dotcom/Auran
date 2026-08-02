@@ -115,6 +115,7 @@ async def get_user_profile(
         is_mutual_following=is_mutual_following,
         is_me=is_me,
         is_admin=target_user.is_admin,
+        admin_role=target_user.admin_role if is_me else None,
         created_at=target_user.created_at,
     )
 

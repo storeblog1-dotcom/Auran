@@ -63,6 +63,7 @@ class UserProfileResponse(BaseModel):
     is_mutual_following: bool = False
     is_me: bool = False
     is_admin: bool = False
+    admin_role: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -217,7 +217,7 @@ const features = [
         description: "현재 is_admin 단일 권한을 moderator·admin·superadmin으로 분리하고 외부 연동 설정은 Superadmin만 변경합니다.",
         behavior: "OpenAI, Resend, Turnstile, Google Vision 카드를 제공하며 자격증명 등록, 연결 테스트, 활성화, 비활성화, 회전과 폐기를 지원합니다. 전체 키는 다시 보여주지 않습니다.",
         completion: "권한 migration, 재인증, 연동 관리 API·화면, 접근 거부와 감사 테스트가 필요합니다.",
-        evidence: "User.admin_role · governance integration API · AdminIntegrationSection.tsx · AdminScreen integrations tab",
+        evidence: "User.admin_role · /users/me self-role response · governance integration API · AdminIntegrationSection.tsx · AdminScreen integrations tab",
         technical: [
           ["권한", "moderator는 신고 처리, admin은 회원·콘텐츠·제재, superadmin만 비밀키·관리자 권한·보안 설정을 관리합니다."],
           ["화면 표시", "코드 준비, 키 등록 여부, 마스킹된 마지막 4자, 연결 상태, 마지막 성공 시각, 최근 오류와 운영 상태만 표시합니다."],
