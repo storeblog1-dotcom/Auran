@@ -5,8 +5,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .models import AuditEvent
 
 
-def _retention_deadline() -> datetime:
-    return datetime.now(timezone.utc) + timedelta(days=365)
+def _retention_deadline(event_type: str) -> datetime:
+    evidence_events = {
+        "admin_report_view", "admin_report_action", "admin_report_legal_hold",
+        "moderation_appeal_submitted", "moderation_appeal_decided",
+        "permanent_deletion_confirmed", "integration_secret_rotated",
+        "integration_enabled_changed",
+    }
+    days = 365 if event_type in evidence_events else 180
+    return datetime.now(timezone.utc) + timedelta(days=days)
 
 
 async def record(
@@ -28,7 +35,7 @@ async def record(
         target_id=str(target_id) if target_id else None,
         revision_id=revision_id,
         snapshot=json.dumps(snapshot, ensure_ascii=False, default=str) if snapshot else None,
-        retention_until=_retention_deadline(),
+        retention_until=_retention_deadline(event_type),
     )
     db.add(event)
     return event

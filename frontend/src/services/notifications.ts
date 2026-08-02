@@ -15,13 +15,15 @@ export interface NotificationItem {
   id: string;
   recipient_id: string;
   sender: SenderSummary;
-  type: "LIKE" | "COMMENT" | "FOLLOW" | "MENTION" | "DIRECT_MESSAGE" | "REPORT_RESULT" | "MODERATION_WARNING";
+  type: "LIKE" | "COMMENT" | "FOLLOW" | "MENTION" | "DIRECT_MESSAGE" | "REPORT_RESULT" | "MODERATION_WARNING" | "CONTENT_MODERATION_RESULT" | "SANCTION_NOTICE" | "ADMIN_REPORT";
   message?: string | null;
   post_id?: string | null;
   comment_id?: string | null;
   direct_message_id?: string | null;
   is_read: boolean;
   created_at: string;
+  actors?: Array<{ id: string; username: string; nickname?: string | null; profile_image_url?: string | null; is_admin?: boolean }>;
+  aggregate_count?: number;
 }
 
 export interface NotificationListResponse {

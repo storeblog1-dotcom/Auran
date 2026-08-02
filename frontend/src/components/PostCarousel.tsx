@@ -21,6 +21,7 @@ const DEFAULT_HEIGHT = CAROUSEL_ITEM_WIDTH * 1.28;
 interface MediaItem {
   id?: string;
   media_url: string;
+  thumbnail_media_url?: string | null;
   detail_media_url?: string | null;
   media_type?: string;
   order?: number;

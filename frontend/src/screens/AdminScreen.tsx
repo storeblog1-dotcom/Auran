@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
 import {
   adminService,
   AdminStats,
@@ -34,11 +35,14 @@ import { AdminPostSection } from "../components/admin/AdminPostSection";
 import { AdminUserSection } from "../components/admin/AdminUserSection";
 import { AdminReportSection } from "../components/admin/AdminReportSection";
 import { AdminActivitySection } from "../components/admin/AdminActivitySection";
+import { AdminIntegrationSection } from "../components/admin/AdminIntegrationSection";
+import { AdminSafetySection } from "../components/admin/AdminSafetySection";
 
-type AdminTab = "stats" | "users" | "posts" | "activity" | "reports" | "community";
+type AdminTab = "stats" | "users" | "posts" | "activity" | "reports" | "community" | "integrations" | "safety";
 
 export const AdminScreen = ({ navigation }: any) => {
   const { colors, isDark } = useTheme();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>("stats");
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -152,15 +156,21 @@ export const AdminScreen = ({ navigation }: any) => {
   };
   const moderateReport = async (
     status: "reviewing" | "resolved" | "rejected",
-    action: "maintain" | "hide" | "delete" | "warn" | "suspend",
+    contentAction: "maintain" | "hide" | "delete",
+    sanctionType: "none" | "warning" | "suspend_5d" | "suspend_10d" | "suspend_30d" | "permanent",
   ) => {
     if (!selectedReport) return;
+    if (sanctionType !== "none" && !reportNote.trim()) {
+      Alert.alert("조치 사유 필요", "이용자 제재 사유를 입력해 주세요.");
+      return;
+    }
     try {
       await adminService.moderateReport(
         selectedReport.target_type,
         selectedReport.target_id,
         status,
-        action,
+        contentAction,
+        sanctionType,
         reportNote,
       );
       setReportModalVisible(false);
@@ -475,6 +485,22 @@ export const AdminScreen = ({ navigation }: any) => {
           <Ionicons name="list-outline" size={16} color={activeTab === "community" ? primaryAccent : colors.textMuted} />
           <Text style={[styles.tabText, { color: activeTab === "community" ? primaryAccent : colors.textMuted, fontWeight: activeTab === "community" ? "bold" : "500" }]}>커뮤니티</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === "safety" && { borderBottomColor: primaryAccent, borderBottomWidth: 3 }]}
+          onPress={() => setActiveTab("safety")}
+        >
+          <Ionicons name="shield-checkmark-outline" size={16} color={activeTab === "safety" ? primaryAccent : colors.textMuted} />
+          <Text style={[styles.tabText, { color: activeTab === "safety" ? primaryAccent : colors.textMuted, fontWeight: activeTab === "safety" ? "bold" : "500" }]}>안전 검토</Text>
+        </TouchableOpacity>
+        {user?.admin_role === "superadmin" && (
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === "integrations" && { borderBottomColor: primaryAccent, borderBottomWidth: 3 }]}
+            onPress={() => setActiveTab("integrations")}
+          >
+            <Ionicons name="key-outline" size={16} color={activeTab === "integrations" ? primaryAccent : colors.textMuted} />
+            <Text style={[styles.tabText, { color: activeTab === "integrations" ? primaryAccent : colors.textMuted, fontWeight: activeTab === "integrations" ? "bold" : "500" }]}>외부 연동</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* Main Content Area */}
@@ -562,6 +588,14 @@ export const AdminScreen = ({ navigation }: any) => {
           onRefresh={handleRefresh}
           onSelectReport={openReport}
         />
+      )}
+
+      {activeTab === "integrations" && user?.admin_role === "superadmin" && (
+        <AdminIntegrationSection colors={colors} primaryAccent={primaryAccent} />
+      )}
+
+      {activeTab === "safety" && (
+        <AdminSafetySection colors={colors} primaryAccent={primaryAccent} />
       )}
 
       {activeTab === "activity" && (

@@ -154,6 +154,8 @@ async def register(db: AsyncSession, data: RegisterRequest) -> User:
         profile_visibility=data.profile_visibility,
         hashed_password=hash_password(data.password),
     )
+    from app.modules.governance.service import installation_hmac
+    user.installation_id_hmac = installation_hmac(data.installation_id)
     db.add(user)
     await db.flush()   # id 생성 (commit은 get_db()에서)
     await db.refresh(user)
@@ -194,7 +196,7 @@ async def login(db: AsyncSession, data: LoginRequest) -> TokenResponse:
     return await _issue_tokens_for_user(db, user)
 
 
-async def google_login(db: AsyncSession, data: GoogleLoginRequest) -> TokenResponse:
+async def google_login(db: AsyncSession, data: GoogleLoginRequest, *, ip_address: str | None = None) -> TokenResponse:
     """
     Google OAuth 로그인 / 자동 회원가입:
     1. token이 전달된 경우 구글 서버에서 id_token 검증 및 유저 프로필 획득
@@ -242,6 +244,10 @@ async def google_login(db: AsyncSession, data: GoogleLoginRequest) -> TokenRespo
 
     # 2. 없으면 신규 유저 생성
     if not user:
+        if not data.installation_id or not data.policy_acceptances:
+            raise BadRequestException("신규 Google 계정은 정책 동의 화면을 먼저 완료해야 합니다.")
+        from app.modules.governance.service import enforce_signup_risk
+        await enforce_signup_risk(db, ip_address=ip_address, installation_id=data.installation_id)
         base_username = (email.split("@")[0] if email else "g_user").lower()
         clean_username = re.sub(r"[^a-zA-Z0-9_.]", "", base_username)[:20] or "g_user"
 
@@ -264,9 +270,22 @@ async def google_login(db: AsyncSession, data: GoogleLoginRequest) -> TokenRespo
             hashed_password=hash_password(secrets.token_urlsafe(32)),
             is_verified=True,
         )
+        from app.modules.governance.service import installation_hmac
+        user.installation_id_hmac = installation_hmac(data.installation_id)
         db.add(user)
         await db.flush()
         await db.refresh(user)
+        from app.modules.governance.service import validate_and_store_consents
+        await validate_and_store_consents(
+            db,
+            user_id=user.id,
+            acceptances=data.policy_acceptances,
+            ip_address=ip_address,
+            installation_id=data.installation_id,
+        )
+        from app.modules.audit.service import record
+        await record(db, user_id=user.id, event_type="signup", ip_address=ip_address, target_type="user", target_id=user.id, snapshot={"provider": "google", "policy_versions": {item.policy_key: item.version for item in data.policy_acceptances}, "installation_id_hmac": user.installation_id_hmac})
+        await db.commit()
     else:
         # 기존 유저에 google_id 연결 안 되어 있으면 업데이트
         if google_id and not user.google_id:

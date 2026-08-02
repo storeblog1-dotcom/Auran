@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -87,10 +88,22 @@ async def get_optional_current_user(
 
 async def get_current_active_user(
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> User:
     """is_active 상태인 사용자만 허용"""
     if not current_user.is_active:
         raise UnauthorizedException("비활성화된 계정입니다")
+    if current_user.permanently_suspended_at:
+        raise UnauthorizedException("영구 정지된 계정입니다. 이의신청 절차를 이용해 주세요.")
+    now = datetime.now(timezone.utc)
+    if current_user.suspended_until:
+        suspended_until = current_user.suspended_until
+        if suspended_until.tzinfo is None:
+            suspended_until = suspended_until.replace(tzinfo=timezone.utc)
+        if suspended_until > now:
+            raise UnauthorizedException(f"{suspended_until.isoformat()}까지 이용이 정지되었습니다.")
+        current_user.suspended_until = None
+        await db.commit()
     return current_user
 
 
@@ -98,8 +111,16 @@ async def get_current_admin_user(
     current_user: User = Depends(get_current_active_user),
 ) -> User:
     """is_admin=True 인 사용자만 허용"""
-    if not current_user.is_admin:
+    if not current_user.is_admin and current_user.admin_role not in {"moderator", "admin", "superadmin"}:
         raise ForbiddenException("관리자 권한이 필요합니다")
+    return current_user
+
+
+async def get_current_superadmin_user(
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    if current_user.admin_role != "superadmin":
+        raise ForbiddenException("최고 관리자 권한이 필요합니다")
     return current_user
 
 

@@ -51,9 +51,11 @@ class Post(Base):
     moderation_hidden: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False, index=True
     )
-    moderation_hidden: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default="false", nullable=False, index=True
+    moderation_status: Mapped[str] = mapped_column(
+        String(24), default="published", server_default="published", nullable=False, index=True
     )
+    moderation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    moderated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # ─── 타임스탬프 ───────────────────────────────────────────
     created_at: Mapped[datetime] = mapped_column(
@@ -164,6 +166,7 @@ class PostMedia(Base):
     )
 
     media_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    thumbnail_media_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     detail_media_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     media_type: Mapped[str] = mapped_column(String(20), default="image", nullable=False)
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -257,9 +260,6 @@ class Comment(Base):
     )
     reply_to_display_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    moderation_hidden: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default="false", nullable=False, index=True
-    )
     moderation_hidden: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False, index=True
     )

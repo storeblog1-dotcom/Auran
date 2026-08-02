@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.response import ApiResponse
+from app.common.exceptions import BadRequestException, NotFoundException
 from app.core.database import get_db
 from app.modules.auth.dependencies import (
     get_current_active_user,
@@ -302,7 +303,18 @@ async def block_user(
     u_res = await db.execute(u_stmt)
     target_user = u_res.scalars().first()
     if not target_user:
-        return ApiResponse.error(message="사용자를 찾을 수 없습니다.")
+        raise NotFoundException("User")
+    if target_user.id == current_user.id:
+        raise BadRequestException("자기 자신을 차단할 수 없습니다.")
+
+    existing = await db.scalar(
+        select(UserBlock).where(
+            UserBlock.blocker_id == current_user.id,
+            UserBlock.blocked_id == target_user.id,
+        )
+    )
+    if existing:
+        return ApiResponse.ok({"message": f"@{username} 님은 이미 차단되어 있습니다."})
 
     block = UserBlock(blocker_id=current_user.id, blocked_id=target_user.id)
     db.add(block)
@@ -318,3 +330,42 @@ async def block_user(
 
     await db.commit()
     return ApiResponse.ok({"message": f"@{username} 님을 차단했습니다."})
+
+
+@router.delete("/{username}/block", summary="사용자 차단 해제")
+async def unblock_user(
+    username: str,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    target_user = await db.scalar(select(User).where(User.username == username))
+    if not target_user:
+        raise NotFoundException("User")
+    block = await db.scalar(
+        select(UserBlock).where(
+            UserBlock.blocker_id == current_user.id,
+            UserBlock.blocked_id == target_user.id,
+        )
+    )
+    if block:
+        await db.delete(block)
+        await db.commit()
+    return ApiResponse.ok({"message": f"@{username} 님의 차단을 해제했습니다."})
+
+
+@router.get("/me/blocked-users", summary="차단한 사용자 목록")
+async def get_blocked_users(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    rows = (
+        await db.execute(
+            select(User)
+            .join(UserBlock, UserBlock.blocked_id == User.id)
+            .where(UserBlock.blocker_id == current_user.id)
+            .order_by(User.username.asc())
+        )
+    ).scalars().all()
+    return ApiResponse.ok(
+        [UserSummaryResponse.model_validate(user) for user in rows]
+    )

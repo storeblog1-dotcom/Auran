@@ -46,6 +46,16 @@ class Settings(BaseSettings):
     # Server-only YouTube Data API v3 key for video safety verification.
     youtube_data_api_key: str = ""
 
+    # Governance and external integrations. The bootstrap key must be supplied
+    # by the deployment secret manager, never by an admin API or the database.
+    integration_master_key: str = ""
+    integration_key_version: str = "v1"
+    content_moderation_required: bool = False
+    installation_hmac_secret: str = ""
+    bootstrap_admin_username: str = ""
+    bootstrap_admin_email: str = ""
+    bootstrap_admin_password: str = ""
+
     # CORS
     allowed_origins: str = "*,http://localhost:3000,http://localhost:8081"
 

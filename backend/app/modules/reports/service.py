@@ -55,6 +55,7 @@ async def _post_snapshot(db: AsyncSession, post: Post) -> dict:
         "media": [
             {
                 "url": media.media_url,
+                "thumbnail_url": media.thumbnail_media_url or media.media_url,
                 "detail_url": media.detail_media_url,
                 "type": media.media_type,
                 "order": media.order,
@@ -171,7 +172,8 @@ async def create_report(
         target_user_id=target_user_id,
         reason_code=data.reason_code,
         detail=(data.detail or "").strip() or None,
-        priority=1 if data.reason_code in {"illegal", "privacy"} else 0,
+        reason_codes=data.reason_codes,
+        priority=10 if any(code in {"child_safety", "nonconsensual_sexual", "self_harm"} for code in data.reason_codes) else 5 if any(code in {"illegal", "privacy", "outing"} for code in data.reason_codes) else 0,
         snapshot=snapshot,
         reporter_ip=reporter_ip,
         retention_until=retention_deadline(),

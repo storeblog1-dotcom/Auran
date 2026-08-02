@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -10,6 +10,7 @@ import {
   Dimensions,
   ActivityIndicator,
   RefreshControl,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
@@ -19,6 +20,7 @@ import { getFullImageUrl } from "../config";
 import { useTheme } from "../context/ThemeContext";
 import { PostDetailModal } from "../components/PostDetailModal";
 import { getDisplayName } from "../utils/displayName";
+import { prefetchPostImages } from "../utils/imagePrefetch";
 import {
   AdminAvatar,
   AdminBadge,
@@ -38,22 +40,38 @@ export const SearchScreen = ({ navigation }: any) => {
   const [loadingExplore, setLoadingExplore] = useState(false);
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [explorePage, setExplorePage] = useState(1);
+  const [hasMoreExplore, setHasMoreExplore] = useState(true);
+  const [loadingMoreExplore, setLoadingMoreExplore] = useState(false);
+  const exploreRequestInFlightRef = useRef(false);
+  const exploreLoadMoreInFlightRef = useRef(false);
+  const exploreRankingSeedRef = useRef(`${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
 
   // Detail Modal State
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
 
-  const fetchExplorePosts = async () => {
+  const fetchExplorePosts = async (refresh: boolean = false) => {
+    if (exploreRequestInFlightRef.current) return;
+    exploreRequestInFlightRef.current = true;
     setLoadingExplore(true);
     try {
-      const response = await api.get("/posts/explore");
+      if (refresh) {
+        exploreRankingSeedRef.current = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      }
+      const response = await api.get("/posts/explore", {
+        params: { page: 1, size: 30, ranking_seed: exploreRankingSeedRef.current },
+      });
       if (response.data && response.data.data) {
-        const shuffled = [...response.data.data].sort(() => Math.random() - 0.5);
-        setExplorePosts(shuffled);
+        void prefetchPostImages(response.data.data, 24, "thumbnail");
+        setExplorePosts(response.data.data);
+        setExplorePage(1);
+        setHasMoreExplore(Boolean(response.data.meta?.has_more));
       }
     } catch (err) {
       console.log("Error fetching explore posts", err);
     } finally {
+      exploreRequestInFlightRef.current = false;
       setLoadingExplore(false);
       setRefreshing(false);
     }
@@ -65,53 +83,78 @@ export const SearchScreen = ({ navigation }: any) => {
     }, [])
   );
 
-  const [searchTab, setSearchTab] = useState<"users" | "hashtags">("users");
+  const [searchTab, setSearchTab] = useState<"users" | "posts" | "hashtags">("users");
   const [hashtagResults, setHashtagResults] = useState<any[]>([]);
+  const [postResults, setPostResults] = useState<any[]>([]);
+  const searchRequestRef = useRef(0);
 
   useEffect(() => {
+    const requestId = ++searchRequestRef.current;
     if (!query.trim()) {
       setSearchResults([]);
       setHashtagResults([]);
+      setPostResults([]);
+      setLoadingSearch(false);
       return;
     }
 
     const timer = setTimeout(() => {
       if (searchTab === "users") {
-        searchUsers(query.trim());
+        searchUsers(query.trim(), requestId);
+      } else if (searchTab === "posts") {
+        searchPosts(query.trim(), requestId);
       } else {
-        searchHashtags(query.trim());
+        searchHashtags(query.trim(), requestId);
       }
     }, 300);
 
     return () => clearTimeout(timer);
   }, [query, searchTab]);
 
-  const searchUsers = async (q: string) => {
+  const searchUsers = async (q: string, requestId?: number) => {
     setLoadingSearch(true);
     try {
       const response = await api.get(`/users/search?q=${encodeURIComponent(q)}`);
       if (response.data && response.data.data) {
-        setSearchResults(response.data.data);
+        if (!requestId || requestId === searchRequestRef.current) {
+          setSearchResults(response.data.data);
+        }
       }
     } catch (err) {
       console.log("Error searching users", err);
     } finally {
-      setLoadingSearch(false);
+      if (!requestId || requestId === searchRequestRef.current) setLoadingSearch(false);
     }
   };
 
-  const searchHashtags = async (q: string) => {
+  const searchHashtags = async (q: string, requestId?: number) => {
     setLoadingSearch(true);
     try {
       const cleanQ = q.replace(/^#/, "");
       const response = await api.get(`/tags/search?q=${encodeURIComponent(cleanQ)}`);
       if (response.data) {
-        setHashtagResults(Array.isArray(response.data) ? response.data : response.data.data || []);
+        if (!requestId || requestId === searchRequestRef.current) {
+          setHashtagResults(Array.isArray(response.data) ? response.data : response.data.data || []);
+        }
       }
     } catch (err) {
       console.log("Error searching hashtags", err);
     } finally {
-      setLoadingSearch(false);
+      if (!requestId || requestId === searchRequestRef.current) setLoadingSearch(false);
+    }
+  };
+
+  const searchPosts = async (q: string, requestId?: number) => {
+    setLoadingSearch(true);
+    try {
+      const response = await api.get(`/posts/search?q=${encodeURIComponent(q)}`);
+      if (!requestId || requestId === searchRequestRef.current) {
+        setPostResults(response.data?.data || []);
+      }
+    } catch (err) {
+      console.log("Error searching posts", err);
+    } finally {
+      if (!requestId || requestId === searchRequestRef.current) setLoadingSearch(false);
     }
   };
 
@@ -139,14 +182,45 @@ export const SearchScreen = ({ navigation }: any) => {
       );
     } catch (err) {
       console.log("Error toggling follow", err);
-      searchUsers(query);
+      searchUsers(query, searchRequestRef.current);
     }
   };
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchExplorePosts();
+    fetchExplorePosts(true);
   };
+
+  const loadMoreExplore = useCallback(async () => {
+    if (
+      exploreRequestInFlightRef.current
+      || exploreLoadMoreInFlightRef.current
+      || loadingMoreExplore
+      || !hasMoreExplore
+    ) return;
+
+    exploreLoadMoreInFlightRef.current = true;
+    setLoadingMoreExplore(true);
+    const nextPage = explorePage + 1;
+    try {
+      const response = await api.get("/posts/explore", {
+        params: { page: nextPage, size: 30, ranking_seed: exploreRankingSeedRef.current },
+      });
+      const items = response.data?.data || [];
+      void prefetchPostImages(items, 30, "thumbnail");
+      setExplorePosts((current) => {
+        const knownIds = new Set(current.map((item) => item.id));
+        return [...current, ...items.filter((item: any) => !knownIds.has(item.id))];
+      });
+      setExplorePage(nextPage);
+      setHasMoreExplore(Boolean(response.data?.meta?.has_more));
+    } catch (err) {
+      console.log("Error loading more explore posts", err);
+    } finally {
+      exploreLoadMoreInFlightRef.current = false;
+      setLoadingMoreExplore(false);
+    }
+  }, [explorePage, hasMoreExplore, loadingMoreExplore]);
 
   const renderSearchResultItem = ({ item }: { item: any }) => {
     return (
@@ -200,7 +274,9 @@ export const SearchScreen = ({ navigation }: any) => {
   };
 
   const renderExploreGridItem = ({ item }: { item: any }) => {
-    const mainMedia = item.media && item.media.length > 0 ? item.media[0].media_url : null;
+    const mainMedia = item.media && item.media.length > 0
+      ? item.media[0].thumbnail_media_url || item.media[0].media_url
+      : null;
     const imageUrl = getFullImageUrl(mainMedia);
 
     return (
@@ -249,6 +325,13 @@ export const SearchScreen = ({ navigation }: any) => {
       {isSearchMode && (
         <View style={[styles.searchTabRow, { borderBottomColor: colors.borderColor }]}>
           <TouchableOpacity
+            style={[styles.searchTabItem, searchTab === "posts" && [styles.searchTabActive, { borderBottomColor: colors.textPrimary }]]}
+            onPress={() => setSearchTab("posts")}
+          >
+            <Text style={[styles.searchTabText, { color: searchTab === "posts" ? colors.textPrimary : colors.textMuted }]}>게시물</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={[styles.searchTabItem, searchTab === "users" && [styles.searchTabActive, { borderBottomColor: colors.textPrimary }]]}
             onPress={() => setSearchTab("users")}
           >
@@ -285,6 +368,19 @@ export const SearchScreen = ({ navigation }: any) => {
               </View>
             }
           />
+        ) : searchTab === "posts" ? (
+          <FlatList
+            key="search_grid_posts"
+            data={postResults}
+            keyExtractor={(item) => item.id}
+            numColumns={3}
+            renderItem={renderExploreGridItem}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>게시물 검색 결과가 없습니다.</Text>
+              </View>
+            }
+          />
         ) : (
           <FlatList
             key="search_list_hashtags"
@@ -309,6 +405,13 @@ export const SearchScreen = ({ navigation }: any) => {
           keyExtractor={(item) => item.id}
           numColumns={3}
           renderItem={renderExploreGridItem}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS === "android"}
+          onEndReached={loadMoreExplore}
+          onEndReachedThreshold={0.6}
+          ListFooterComponent={loadingMoreExplore ? <ActivityIndicator style={{ paddingVertical: 18 }} color={colors.accentBlue} /> : null}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.textPrimary} />
           }
@@ -328,7 +431,7 @@ export const SearchScreen = ({ navigation }: any) => {
           setDetailModalVisible(false);
           setSelectedPostId(null);
         }}
-        onPostUpdated={fetchExplorePosts}
+        onPostUpdated={() => fetchExplorePosts(false)}
       />
     </View>
   );

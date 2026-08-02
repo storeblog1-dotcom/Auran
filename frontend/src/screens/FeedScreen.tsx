@@ -10,6 +10,7 @@ import {
   Dimensions,
   Alert,
   ScrollView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -17,6 +18,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import api from "../services/api";
 import { getDisplayName } from "../utils/displayName";
+import { prefetchPostImages } from "../utils/imagePrefetch";
 import { CommentsModal } from "../components/CommentsModal";
 import { StoryBar } from "../components/StoryBar";
 import { StoryViewerModal } from "../components/StoryViewerModal";
@@ -114,17 +116,6 @@ const FeedPostCard = React.memo(
                           {isFollowing ? "팔로잉" : "팔로우"}
                         </Text>
                       </TouchableOpacity>
-                      {onStartConversation && (
-                        <TouchableOpacity
-                          style={[styles.headerFollowBtn, { backgroundColor: colors.bgInput, borderColor: colors.borderColor, marginLeft: 6, flexDirection: "row", alignItems: "center" }]}
-                          onPress={() => onStartConversation(item.user)}
-                        >
-                          <Ionicons name="chatbubbles-outline" size={13} color={colors.accentPurple || "#a855f7"} style={{ marginRight: 3 }} />
-                          <Text style={[styles.headerFollowBtnText, { color: colors.accentPurple || "#a855f7" }]}>
-                            대화
-                          </Text>
-                        </TouchableOpacity>
-                      )}
                     </>
                   )}
                 </View>
@@ -211,6 +202,22 @@ const FeedPostCard = React.memo(
                   {item.reposts_count || 0}
                 </Text>
               </TouchableOpacity>
+
+              {!isMe && onStartConversation && (
+                <TouchableOpacity
+                  style={styles.actionIconButton}
+                  onPress={() => onStartConversation(item.user)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${getDisplayName(item.user)}님과 대화 시작`}
+                >
+                  <Ionicons
+                    name="paper-plane-outline"
+                    size={23}
+                    color={colors.textPrimary}
+                  />
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Bookmark Button */}
@@ -257,6 +264,9 @@ export const FeedScreen = ({ navigation }: any) => {
   const [loading, setLoading] = useState(true);
   const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [feedPage, setFeedPage] = useState(1);
+  const [hasMoreFeed, setHasMoreFeed] = useState(true);
+  const [loadingMoreFeed, setLoadingMoreFeed] = useState(false);
 
   // Modal States
   const [notificationsModalVisible, setNotificationsModalVisible] = useState<boolean>(false);
@@ -277,6 +287,8 @@ export const FeedScreen = ({ navigation }: any) => {
   const feedUpdatedAtRef = useRef<number>(0);
   const storiesUpdatedAtRef = useRef<number>(0);
   const inFlightFeedRef = useRef<boolean>(false);
+  const inFlightLoadMoreRef = useRef<boolean>(false);
+  const rankingSeedRef = useRef(`${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
   const inFlightStoriesRef = useRef<boolean>(false);
   const lastUserIdRef = useRef<string | undefined>(user?.id);
 
@@ -287,6 +299,9 @@ export const FeedScreen = ({ navigation }: any) => {
       feedUpdatedAtRef.current = 0;
       storiesUpdatedAtRef.current = 0;
       setPosts([]);
+      setFeedPage(1);
+      setHasMoreFeed(true);
+      rankingSeedRef.current = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
       setStoryGroups([]);
       setLoading(true);
     }
@@ -338,15 +353,21 @@ export const FeedScreen = ({ navigation }: any) => {
     }
 
     try {
-      const feedItems = await feedService.getFeedPosts();
+      if (force) {
+        rankingSeedRef.current = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      }
+      const result = await feedService.getFeedPosts(1, 20, rankingSeedRef.current);
+      void prefetchPostImages(result.items, 10);
       setPosts((prevPosts) => {
-        if (areFeedPostsEqual(prevPosts, feedItems)) {
+        if (areFeedPostsEqual(prevPosts, result.items)) {
           console.log("[FEED_PERF] Posts identical, skipping setPosts state update!");
           return prevPosts;
         }
         console.log("[FEED_PERF] Feed updated with new data, committing setPosts.");
-        return feedItems;
+        return result.items;
       });
+      setFeedPage(1);
+      setHasMoreFeed(result.hasMore);
       feedUpdatedAtRef.current = Date.now();
     } catch (err) {
       console.log("Error fetching feed", err);
@@ -357,6 +378,34 @@ export const FeedScreen = ({ navigation }: any) => {
       setBackgroundRefreshing(false);
     }
   };
+
+  const loadMoreFeed = useCallback(async () => {
+    if (
+      inFlightFeedRef.current
+      || inFlightLoadMoreRef.current
+      || loadingMoreFeed
+      || !hasMoreFeed
+    ) return;
+
+    inFlightLoadMoreRef.current = true;
+    setLoadingMoreFeed(true);
+    const nextPage = feedPage + 1;
+    try {
+      const result = await feedService.getFeedPosts(nextPage, 20, rankingSeedRef.current);
+      void prefetchPostImages(result.items, 12);
+      setPosts((current) => {
+        const knownIds = new Set(current.map((item) => item.id));
+        return [...current, ...result.items.filter((item) => !knownIds.has(item.id))];
+      });
+      setFeedPage(nextPage);
+      setHasMoreFeed(result.hasMore);
+    } catch (err) {
+      console.log("Error loading more feed posts", err);
+    } finally {
+      inFlightLoadMoreRef.current = false;
+      setLoadingMoreFeed(false);
+    }
+  }, [feedPage, hasMoreFeed, loadingMoreFeed]);
 
   useEffect(() => {
     fetchFeed();
@@ -524,7 +573,10 @@ export const FeedScreen = ({ navigation }: any) => {
     if (!targetUser?.id) return;
     try {
       const conv = await directService.createOrGetConversation(targetUser.id);
-      navigation.navigate("DirectChat", {
+      const tabNavigation = navigation.getParent?.();
+      const rootNavigation = tabNavigation?.getParent?.();
+      tabNavigation?.navigate("DirectInbox");
+      (rootNavigation || navigation).navigate("DirectChat", {
         conversationId: conv.id,
         targetUser: conv.target_user || targetUser,
       });
@@ -641,6 +693,13 @@ export const FeedScreen = ({ navigation }: any) => {
           data={posts}
           keyExtractor={keyExtractor}
           renderItem={renderPostItem}
+          initialNumToRender={3}
+          maxToRenderPerBatch={4}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === "android"}
+          onEndReached={loadMoreFeed}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={loadingMoreFeed ? <ActivityIndicator style={{ paddingVertical: 20 }} color={colors.accentBlue} /> : null}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.textPrimary} />
           }
@@ -913,6 +972,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
+  },
+  actionIconButton: {
+    minWidth: 28,
+    minHeight: 28,
+    alignItems: "center",
+    justifyContent: "center",
   },
   actionCountText: {
     fontSize: 13,

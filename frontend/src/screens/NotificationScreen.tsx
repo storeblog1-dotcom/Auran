@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,6 +23,7 @@ import {
   AdminBadge,
   openUserProfile,
 } from "../components/AdminIdentity";
+import { NotificationActor, NotificationActorsModal } from "../components/NotificationActorsModal";
 
 export const NotificationScreen = () => {
   const { colors } = useTheme();
@@ -39,6 +41,9 @@ export const NotificationScreen = () => {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [autoOpenComments, setAutoOpenComments] = useState<boolean>(false);
+  const [notificationActors, setNotificationActors] = useState<NotificationActor[]>([]);
+
+  const confirmProfile = (actor: NotificationActor) => Alert.alert(actor.nickname || actor.username, "이 사용자의 프로필로 이동할까요?", [{ text: "취소", style: "cancel" }, { text: "프로필 보기", onPress: () => { setNotificationActors([]); openUserProfile(navigation, actor as any); } }]);
 
   useFocusEffect(
     useCallback(() => {
@@ -64,7 +69,7 @@ export const NotificationScreen = () => {
     }
 
     if (item.type === "FOLLOW") {
-      openUserProfile(navigation, item.sender);
+      confirmProfile(item.sender as NotificationActor);
     } else if (item.type === "COMMENT") {
       if (item.post_id) {
         setAutoOpenComments(true);
@@ -73,12 +78,11 @@ export const NotificationScreen = () => {
         openUserProfile(navigation, item.sender);
       }
     } else if (item.type === "LIKE" || item.type === "MENTION") {
-      if (item.post_id) {
-        setAutoOpenComments(false);
-        setSelectedPostId(item.post_id);
-      } else {
-        openUserProfile(navigation, item.sender);
-      }
+      setNotificationActors(item.actors?.length ? item.actors : [item.sender]);
+    } else if (item.type === "DIRECT_MESSAGE") {
+      navigation.navigate("MainTabs", { screen: "DirectInbox" });
+    } else if (item.type === "CONTENT_MODERATION_RESULT" || item.type === "SANCTION_NOTICE") {
+      navigation.navigate("SafetyCenter");
     }
   };
 
@@ -95,7 +99,9 @@ export const NotificationScreen = () => {
       case "DIRECT_MESSAGE":
         return <Ionicons name="paper-plane" size={10} color="#ffffff" />;
       case "REPORT_RESULT":
+      case "CONTENT_MODERATION_RESULT":
         return <Ionicons name="shield-checkmark" size={10} color="#ffffff" />;
+      case "SANCTION_NOTICE":
       case "MODERATION_WARNING":
         return <Ionicons name="warning" size={10} color="#ffffff" />;
       default:
@@ -282,6 +288,7 @@ export const NotificationScreen = () => {
         initialOpenComments={autoOpenComments}
         onClose={() => setSelectedPostId(null)}
       />
+      <NotificationActorsModal visible={notificationActors.length > 0} actors={notificationActors} onClose={() => setNotificationActors([])} onSelect={confirmProfile} />
     </SafeAreaView>
   );
 

@@ -8,19 +8,23 @@ import React, {
   useMemo,
 } from "react";
 import { AppState, AppStateStatus } from "react-native";
+import * as Notifications from "expo-notifications";
 import { useAuth } from "./AuthContext";
 import {
   notificationService,
   NotificationItem,
 } from "../services/notifications";
 import { ToastData } from "../components/NotificationToast";
+import { directService } from "../features/direct/services/directService";
 
 interface NotificationContextType {
   notifications: NotificationItem[];
   unreadCount: number;
+  directUnreadCount: number;
   toastNotification: ToastData | null;
   loading: boolean;
   refreshNotifications: () => Promise<void>;
+  refreshDirectUnread: () => Promise<void>;
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   clearToast: () => void;
@@ -36,6 +40,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [directUnreadCount, setDirectUnreadCount] = useState<number>(0);
   const [toastNotification, setToastNotification] = useState<ToastData | null>(
     null
   );
@@ -99,6 +104,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
+  const refreshDirectUnread = useCallback(async () => {
+    const userId = currentUserIdRef.current;
+    if (!userId) return;
+    try {
+      const count = await directService.getUnreadCount();
+      if (currentUserIdRef.current === userId) {
+        setDirectUnreadCount(count);
+      }
+    } catch {
+      // The notification channel remains usable if DM sync is temporarily down.
+    }
+  }, []);
+
   const markAsRead = useCallback(async (id: string) => {
     try {
       await notificationService.markAsRead(id);
@@ -139,6 +157,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
             return [newNotif, ...prev];
           });
           setUnreadCount((prev) => prev + 1);
+          if (newNotif.type === "DIRECT_MESSAGE") {
+            setDirectUnreadCount((prev) => prev + 1);
+          }
           triggerToast(newNotif);
         }
       },
@@ -199,6 +220,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
     if (!userId) {
       setNotifications([]);
       setUnreadCount(0);
+      setDirectUnreadCount(0);
       setToastNotification(null);
       recentToastIdsRef.current = [];
       stopPollingTimer();
@@ -206,7 +228,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     setLoading(true);
-    refreshNotifications().finally(() => {
+    Promise.all([refreshNotifications(), refreshDirectUnread()]).finally(() => {
       if (currentUserIdRef.current === userId) {
         setLoading(false);
       }
@@ -219,6 +241,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
       pollingTimerRef.current = setInterval(() => {
         if (appStateRef.current === "active") {
           runPollingCheck();
+          refreshDirectUnread();
         }
       }, intervalMs);
     };
@@ -232,6 +255,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
       ) {
         // Immediate sync upon returning to foreground
         runPollingCheck();
+        refreshDirectUnread();
         startPolling();
       } else if (nextAppState.match(/inactive|background/)) {
         stopPollingTimer();
@@ -252,21 +276,25 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
     user?.id,
     isWsConnected,
     refreshNotifications,
+    refreshDirectUnread,
     runPollingCheck,
     stopPollingTimer,
   ]);
 
   useEffect(() => {
     prevUnreadCountRef.current = unreadCount;
+    void Notifications.setBadgeCountAsync(unreadCount).catch(() => undefined);
   }, [unreadCount]);
 
   const value = useMemo(
     () => ({
       notifications,
       unreadCount,
+      directUnreadCount,
       toastNotification,
       loading,
       refreshNotifications,
+      refreshDirectUnread,
       markAsRead,
       markAllAsRead,
       clearToast,
@@ -274,9 +302,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
     [
       notifications,
       unreadCount,
+      directUnreadCount,
       toastNotification,
       loading,
       refreshNotifications,
+      refreshDirectUnread,
       markAsRead,
       markAllAsRead,
       clearToast,

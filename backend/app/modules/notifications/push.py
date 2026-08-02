@@ -93,6 +93,39 @@ def build_direct_message_push_payload(
     }
 
 
+def build_notification_push_payload(
+    *,
+    expo_push_token: str,
+    notification: Notification,
+) -> dict[str, Any]:
+    """Build a navigation-safe Expo payload for non-DM notifications."""
+    nickname = _sender_value(notification.sender, "nickname")
+    username = _sender_value(notification.sender, "username", "")
+    display_name = nickname or username or "Auran"
+    notification_type = str(notification.type)
+    data: dict[str, Any] = {
+        "version": 1,
+        "type": notification_type,
+        "notification_id": str(notification.id),
+    }
+    if notification.post_id:
+        data["post_id"] = str(notification.post_id)
+    if notification.comment_id:
+        data["comment_id"] = str(notification.comment_id)
+    if username:
+        data["sender_username"] = username
+
+    return {
+        "to": expo_push_token,
+        "title": display_name,
+        "body": (notification.message or "새 알림이 도착했습니다.")[:180],
+        "sound": "default",
+        "channelId": DIRECT_MESSAGE_CHANNEL_ID,
+        "priority": "high",
+        "data": data,
+    }
+
+
 def _expo_headers() -> dict[str, str]:
     headers = {
         "Accept": "application/json",
@@ -230,13 +263,27 @@ async def send_direct_message_push(
         return 0
 
     # Local import keeps the notification model independent of the DM model.
-    from app.modules.direct.models import ChatMessage
+    from app.modules.direct.models import ChatMessage, DirectMessage
 
     message_result = await db.execute(
         select(ChatMessage).where(ChatMessage.id == message_id)
     )
     message = message_result.scalar_one_or_none()
+    is_direct_v2 = False
     if message is None:
+        message_result = await db.execute(
+            select(DirectMessage).where(DirectMessage.id == message_id)
+        )
+        message = message_result.scalar_one_or_none()
+        is_direct_v2 = message is not None
+    if message is None:
+        return 0
+
+    from app.modules.direct.router import is_direct_conversation_active
+    conversation_id = str(message.conversation_id if is_direct_v2 else message.room_id)
+    if await is_direct_conversation_active(conversation_id, str(notification.recipient_id)):
+        # The in-app notification and WebSocket message remain; only the
+        # redundant device push is skipped while this exact room is visible.
         return 0
 
     token_result = await db.execute(
@@ -270,11 +317,11 @@ async def send_direct_message_push(
         payloads = [
             build_direct_message_push_payload(
                 expo_push_token=token.expo_push_token,
-                room_id=str(message.room_id),
+                room_id=conversation_id,
                 message_id=str(message.id),
                 sender=notification.sender,
                 content=message.content,
-                message_type=message.message_type,
+                message_type=("TEXT" if is_direct_v2 else message.message_type),
             )
             for token in batch
         ]
@@ -313,6 +360,89 @@ async def send_direct_message_push(
                     token.is_active = False
 
     await db.commit()
+    return sent_count
+
+
+async def send_notification_push(
+    db: AsyncSession,
+    *,
+    notification: Notification,
+) -> int:
+    """Send a saved notification without making its originating action fail."""
+    if notification.type == "DIRECT_MESSAGE":
+        return await send_direct_message_push(db, notification=notification)
+
+    token_result = await db.execute(
+        select(PushToken).where(
+            PushToken.user_id == notification.recipient_id,
+            PushToken.is_active.is_(True),
+        )
+    )
+    tokens = [
+        token
+        for token in token_result.scalars().all()
+        if is_expo_push_token(token.expo_push_token)
+    ]
+    if not tokens:
+        return 0
+
+    sent_count = 0
+    for batch_start in range(0, len(tokens), EXPO_BATCH_SIZE):
+        batch = tokens[batch_start : batch_start + EXPO_BATCH_SIZE]
+        deliveries = [
+            PushDelivery(
+                push_token_id=token.id,
+                notification_id=notification.id,
+                status="PENDING",
+            )
+            for token in batch
+        ]
+        db.add_all(deliveries)
+        await db.flush()
+        payloads = [
+            build_notification_push_payload(
+                expo_push_token=token.expo_push_token,
+                notification=notification,
+            )
+            for token in batch
+        ]
+
+        try:
+            response = await _post_expo(settings.expo_push_url, payloads)
+            tickets = response.get("data")
+            if not isinstance(tickets, list) or len(tickets) != len(batch):
+                raise ValueError("Expo Push Service returned mismatched ticket data")
+        except Exception as exc:
+            error_message = str(exc)[:500]
+            for token, delivery in zip(batch, deliveries):
+                delivery.status = "ERROR"
+                delivery.error = error_message
+                token.last_error = error_message
+            logger.warning("Expo push request failed: %s", exc)
+            continue
+
+        for token, delivery, ticket in zip(batch, deliveries, tickets):
+            if not isinstance(ticket, dict):
+                delivery.status = "ERROR"
+                delivery.error = "Invalid Expo push ticket"
+                continue
+            error, details = _ticket_error(ticket)
+            delivery.details = details
+            if ticket.get("status") == "ok" and isinstance(ticket.get("id"), str):
+                delivery.status = "TICKETED"
+                delivery.expo_ticket_id = ticket["id"]
+                delivery.error = None
+                sent_count += 1
+                token.last_error = None
+            else:
+                delivery.status = "ERROR"
+                delivery.error = (error or "Expo rejected the push notification")[:500]
+                token.last_error = error
+                if error == "DeviceNotRegistered":
+                    token.is_active = False
+
+        await db.commit()
+
     return sent_count
 
 

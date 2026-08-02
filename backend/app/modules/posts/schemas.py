@@ -9,6 +9,11 @@ class PostMediaCreate(BaseModel):
     """게시물 미디어 생성 스키마"""
 
     media_url: str = Field(..., max_length=500, description="미디어 URL")
+    thumbnail_media_url: Optional[str] = Field(
+        None,
+        max_length=500,
+        description="탐색 그리드용 썸네일 URL",
+    )
     detail_media_url: Optional[str] = Field(
         None,
         max_length=500,
@@ -23,6 +28,7 @@ class PostMediaResponse(BaseModel):
 
     id: UUID
     media_url: str
+    thumbnail_media_url: Optional[str] = None
     detail_media_url: Optional[str] = None
     media_type: str
     order: int
@@ -147,6 +153,8 @@ class PostResponse(BaseModel):
     youtube_title: Optional[str] = None
     youtube_thumbnail_url: Optional[str] = None
     visibility: str = "public"
+    moderation_status: str = "published"
+    moderation_reason: Optional[str] = None
     media: List[PostMediaResponse]
     likes_count: int = 0
     comments_count: int = 0

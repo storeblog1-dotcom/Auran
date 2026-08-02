@@ -17,6 +17,10 @@ export interface AdminUserItem {
   profile_image_url?: string;
   is_active: boolean;
   is_admin: boolean;
+  admin_role?: "member" | "moderator" | "admin" | "superadmin";
+  suspended_until?: string | null;
+  permanently_suspended_at?: string | null;
+  forced_deletion_due_at?: string | null;
   posts_count?: number;
   comments_count?: number;
   created_at?: string;
@@ -38,6 +42,7 @@ export interface AdminPostItem {
   caption?: string;
   media?: Array<{
     media_url?: string;
+    thumbnail_media_url?: string | null;
     detail_media_url?: string | null;
     url?: string;
     image_url?: string;
@@ -86,7 +91,7 @@ export interface AdminContentRevision {
   content_type?: string | null;
   location?: string | null;
   visibility?: string | null;
-  media?: Array<{ media_url: string; detail_media_url?: string | null; media_type: string; order: number }>;
+  media?: Array<{ media_url: string; thumbnail_media_url?: string | null; detail_media_url?: string | null; media_type: string; order: number }>;
   post?: {
     id: string;
     content_number?: string | null;
@@ -95,7 +100,7 @@ export interface AdminContentRevision {
     board_label?: string | null;
     location?: string | null;
     visibility?: string | null;
-    media?: Array<{ media_url: string; detail_media_url?: string | null; media_type: string; order: number }>;
+    media?: Array<{ media_url: string; thumbnail_media_url?: string | null; detail_media_url?: string | null; media_type: string; order: number }>;
   };
   author: {
     id: string;
@@ -139,6 +144,7 @@ export interface AdminReportDetail extends AdminReportGroup {
     id: string;
     reporter_id?: string | null;
     reason_code: string;
+    reason_codes?: string[];
     detail?: string | null;
     status: string;
     reporter_ip?: string | null;
@@ -146,6 +152,43 @@ export interface AdminReportDetail extends AdminReportGroup {
     resolution_action?: string | null;
     resolution_note?: string | null;
   }>;
+}
+
+export interface AdminIntegrationItem {
+  provider: "openai" | "resend" | "turnstile" | "google_vision";
+  configured: boolean;
+  enabled: boolean;
+  last_four?: string | null;
+  fingerprint?: string | null;
+  last_test_status?: string | null;
+  last_tested_at?: string | null;
+  last_error?: string | null;
+  bootstrap_ready: boolean;
+}
+
+export interface AdminModerationCheck {
+  id: string;
+  user_id: string;
+  post_id?: string | null;
+  target_type: string;
+  provider: string;
+  status: string;
+  categories: Record<string, boolean>;
+  scores: Record<string, number>;
+  error_code?: string | null;
+  created_at: string;
+}
+
+export interface AdminModerationAppeal {
+  id: string;
+  user_id: string;
+  sanction_id?: string | null;
+  moderation_check_id?: string | null;
+  statement: string;
+  status: string;
+  decision_note?: string | null;
+  created_at: string;
+  reviewed_at?: string | null;
 }
 
 export const adminService = {
@@ -219,12 +262,30 @@ export const adminService = {
     targetType: string,
     targetId: string,
     status: "received" | "reviewing" | "resolved" | "rejected",
-    action: "maintain" | "hide" | "delete" | "warn" | "suspend",
+    contentAction: "maintain" | "hide" | "delete",
+    sanctionType: "none" | "warning" | "suspend_5d" | "suspend_10d" | "suspend_30d" | "permanent",
     note?: string,
   ): Promise<void> => {
-    await api.patch(`/admin/reports/${targetType}/${targetId}`, { status, action, note: note || null });
+    await api.patch(`/admin/reports/${targetType}/${targetId}`, { status, content_action: contentAction, sanction_type: sanctionType, note: note || null });
   },
   setReportLegalHold: async (targetType: string, targetId: string, enabled: boolean): Promise<void> => {
     await api.patch(`/admin/reports/${targetType}/${targetId}/legal-hold`, null, { params: { enabled } });
   },
+  getIntegrations: async (): Promise<AdminIntegrationItem[]> =>
+    (await api.get("/admin/integrations")).data.data,
+  saveIntegrationSecret: async (provider: string, secret: string, adminPassword: string): Promise<AdminIntegrationItem> =>
+    (await api.put(`/admin/integrations/${provider}`, { secret, admin_password: adminPassword, config: {} })).data.data,
+  testIntegration: async (provider: string): Promise<AdminIntegrationItem> =>
+    (await api.post(`/admin/integrations/${provider}/test`)).data.data,
+  setIntegrationEnabled: async (provider: string, enabled: boolean): Promise<AdminIntegrationItem> =>
+    (await api.patch(`/admin/integrations/${provider}/enabled`, { enabled })).data.data,
+  getModerationChecks: async (status?: string): Promise<AdminModerationCheck[]> =>
+    (await api.get("/governance/admin/moderation-checks", { params: { status: status || undefined } })).data.data,
+  getModerationAppeals: async (status?: string): Promise<AdminModerationAppeal[]> =>
+    (await api.get("/governance/admin/appeals", { params: { status: status || undefined } })).data.data,
+  decideModerationAppeal: async (appealId: string, status: "approved" | "rejected", note: string): Promise<void> => {
+    await api.patch(`/governance/admin/appeals/${appealId}`, { status, note });
+  },
+  runGovernanceMaintenance: async (): Promise<{ expired_sanctions: number; permanent_review_due_user_ids: string[] }> =>
+    (await api.post("/governance/admin/maintenance")).data.data,
 };

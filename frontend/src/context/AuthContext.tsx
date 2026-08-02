@@ -23,6 +23,7 @@ export interface User {
   is_private?: boolean;
   allow_message_requests?: boolean;
   is_admin?: boolean;
+  admin_role?: "member" | "moderator" | "admin" | "superadmin";
   profile_image_url?: string;
   posts_count?: number;
   followers_count?: number;

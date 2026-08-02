@@ -166,6 +166,15 @@ export const ProfileScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           )}
 
+          <TouchableOpacity
+            accessibilityLabel="안전 센터"
+            onPress={() => navigation.navigate("SafetyCenter")}
+            style={[styles.headerIconBtn, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="shield-outline" size={18} color={primaryAccent} />
+          </TouchableOpacity>
+
           {/* Theme Toggle Button */}
           <TouchableOpacity
             onPress={toggleTheme}

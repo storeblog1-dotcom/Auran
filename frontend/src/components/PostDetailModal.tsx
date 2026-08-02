@@ -25,6 +25,7 @@ import { PostCarousel } from "./PostCarousel";
 import { VerifiedYouTubeCard } from "./VerifiedYouTubeCard";
 import { HashtagText } from "./HashtagText";
 import { getDisplayName } from "../utils/displayName";
+import { directService } from "../features/direct/services/directService";
 import { PostOptionsSheet } from "./PostOptionsSheet";
 import { ReportSheet } from "./ReportSheet";
 import {
@@ -287,6 +288,28 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
       ],
       { cancelable: true }
     );
+  };
+
+  const handleStartConversation = async () => {
+    if (!post?.user?.id) return;
+
+    try {
+      const conversation = await directService.createOrGetConversation(
+        post.user.id,
+      );
+      onClose();
+
+      const tabNavigation = navigation.getParent?.();
+      const rootNavigation = tabNavigation?.getParent?.();
+      tabNavigation?.navigate("DirectInbox");
+      (rootNavigation || navigation).navigate("DirectChat", {
+        conversationId: conversation.id,
+        targetUser: conversation.target_user || post.user,
+      });
+    } catch (err) {
+      console.log("Error starting conversation from post detail", err);
+      Alert.alert("알림", "대화를 시작할 수 없습니다.");
+    }
   };
 
   const handleToggleLike = async () => {
@@ -602,6 +625,23 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                   }}>
                     <Ionicons name="chatbubble-outline" size={22} color={colors.textPrimary} />
                   </TouchableOpacity>
+                  {!adminMode &&
+                    post.user?.id &&
+                    currentUser?.id !== post.user.id &&
+                    currentUser?.username !== post.user?.username && (
+                      <TouchableOpacity
+                        onPress={handleStartConversation}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${getDisplayName(post.user)}님과 대화 시작`}
+                      >
+                        <Ionicons
+                          name="paper-plane-outline"
+                          size={23}
+                          color={colors.textPrimary}
+                        />
+                      </TouchableOpacity>
+                    )}
                 </View>
 
                 {/* Bookmark Button (Shifted slightly left) */}

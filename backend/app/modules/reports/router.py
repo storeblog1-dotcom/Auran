@@ -1,7 +1,7 @@
 import uuid
 import logging
 from collections import OrderedDict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -9,7 +9,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.client_ip import get_client_ip
-from app.common.exceptions import NotFoundException
+from app.common.exceptions import BadRequestException, NotFoundException
 from app.common.response import ApiResponse
 from app.core.database import get_db
 from app.modules.audit.service import record
@@ -21,6 +21,7 @@ from app.modules.posts.models import Comment, Post
 from app.modules.reports.models import HiddenContent, Report
 from app.modules.reports.schemas import HideContentRequest, ReportCreate, ReportModerationUpdate
 from app.modules.reports.service import create_report, hide_report_target
+from app.modules.governance.models import AccountSanction
 
 
 router = APIRouter(tags=["Reports"])
@@ -45,6 +46,7 @@ def _report_item(report: Report, *, include_ip: bool = False) -> dict[str, Any]:
         "id": report.id,
         "reporter_id": report.reporter_id,
         "reason_code": report.reason_code,
+        "reason_codes": report.reason_codes or [report.reason_code],
         "detail": report.detail,
         "status": report.status,
         "reporter_ip": report.reporter_ip if include_ip else None,
@@ -64,6 +66,18 @@ async def submit_report(
     report = await create_report(
         db, reporter=current_user, data=body, reporter_ip=get_client_ip(request)
     )
+    admins = list((await db.execute(select(User).where(User.is_admin.is_(True), User.id != current_user.id))).scalars().all())
+    for admin in admins:
+        try:
+            await create_notification(
+                db,
+                recipient_id=admin.id,
+                sender_id=current_user.id,
+                type="ADMIN_REPORT",
+                message=f"긴급도 {report.priority} 신고가 접수되었습니다: {', '.join(report.reason_codes or [report.reason_code])}",
+            )
+        except Exception:
+            logger.exception("Failed to notify admin %s for report %s", admin.id, report.id)
     return ApiResponse.ok(
         {
             "id": report.id,
@@ -157,6 +171,7 @@ async def admin_report_detail(
     ).scalars().all()
     if not reports:
         raise NotFoundException("Report")
+
     await record(
         db,
         user_id=None,
@@ -195,7 +210,17 @@ async def moderate_report_group(
     if not reports:
         raise NotFoundException("Report")
 
-    if body.action == "hide":
+    allowed_content_actions = {
+        "post": {"maintain", "hide", "delete"},
+        "comment": {"maintain", "hide", "delete"},
+        "profile": {"maintain"},
+    }
+    if body.content_action not in allowed_content_actions.get(target_type, set()):
+        raise BadRequestException(
+            f"{target_type} 신고에는 {body.content_action} 콘텐츠 조치를 적용할 수 없습니다."
+        )
+
+    if body.content_action == "hide":
         if target_type == "post":
             post = await db.scalar(select(Post).where(Post.id == target_id))
             if post:
@@ -204,7 +229,7 @@ async def moderate_report_group(
             comment = await db.scalar(select(Comment).where(Comment.id == target_id))
             if comment:
                 comment.moderation_hidden = True
-    elif body.action == "delete":
+    elif body.content_action == "delete":
         if target_type == "post":
             await post_service.delete_post(
                 db, target_id, admin, ip_address=get_client_ip(request)
@@ -213,17 +238,41 @@ async def moderate_report_group(
             await post_service.delete_comment(
                 db, target_id, admin, ip_address=get_client_ip(request)
             )
-    elif body.action == "suspend" and reports[0].target_user_id:
-        target_user = await db.scalar(select(User).where(User.id == reports[0].target_user_id))
-        if target_user:
-            target_user.is_active = False
+    target_user = None
+    if reports[0].target_user_id:
+        target_user = await db.scalar(select(User).where(User.id == reports[0].target_user_id).with_for_update())
+    sanction = None
+    if body.sanction_type != "none":
+        if not target_user:
+            raise BadRequestException("제재할 작성자를 확인할 수 없습니다.")
+        duration_days = {"suspend_5d": 5, "suspend_10d": 10, "suspend_30d": 30}.get(body.sanction_type)
+        ends_at = datetime.now(timezone.utc) + timedelta(days=duration_days) if duration_days else None
+        sanction = AccountSanction(
+            user_id=target_user.id,
+            sanction_type=body.sanction_type,
+            reason=(body.note or "").strip(),
+            starts_at=datetime.now(timezone.utc),
+            ends_at=ends_at,
+            created_by=admin.id,
+            source_target_type=target_type,
+            source_target_id=target_id,
+        )
+        db.add(sanction)
+        if duration_days:
+            target_user.suspended_until = ends_at
+        elif body.sanction_type == "permanent":
+            target_user.permanently_suspended_at = datetime.now(timezone.utc)
+            target_user.forced_deletion_due_at = datetime.now(timezone.utc) + timedelta(days=90)
+            from sqlalchemy import update
+            await db.execute(update(Post).where(Post.user_id == target_user.id).values(moderation_hidden=True))
+            await db.execute(update(Comment).where(Comment.user_id == target_user.id).values(moderation_hidden=True))
 
     now = datetime.now(timezone.utc)
     reporter_ids: set[uuid.UUID] = set()
     for report in reports:
         report.status = body.status
         report.reviewer_id = admin.id
-        report.resolution_action = body.action
+        report.resolution_action = f"{body.content_action}:{body.sanction_type}"
         report.resolution_note = body.note
         report.reviewed_at = now
         if report.reporter_id and report.reporter_id != admin.id:
@@ -238,20 +287,16 @@ async def moderate_report_group(
         snapshot={
             "admin_id": str(admin.id),
             "status": body.status,
-            "action": body.action,
+            "content_action": body.content_action,
+            "sanction_type": body.sanction_type,
             "note": body.note,
         },
     )
     await db.commit()
-    result_message = _report_result_message(status=body.status, action=body.action, note=body.note)
-    for reporter_id in reporter_ids:
+    if sanction and target_user and target_user.id != admin.id:
         try:
-            await create_notification(db, recipient_id=reporter_id, sender_id=admin.id, type="REPORT_RESULT", message=result_message, post_id=target_id if target_type == "post" else None)
-        except Exception:
-            logger.exception("Failed to notify report recipient %s", reporter_id)
-    if body.action == "warn" and reports[0].target_user_id and reports[0].target_user_id != admin.id:
-        try:
-            await create_notification(db, recipient_id=reports[0].target_user_id, sender_id=admin.id, type="MODERATION_WARNING", message=body.note or "커뮤니티 운영정책 위반 신고가 접수되어 경고 조치되었습니다.", post_id=target_id if target_type == "post" else None)
+            label = {"warning": "경고", "suspend_5d": "5일 이용 정지", "suspend_10d": "10일 이용 정지", "suspend_30d": "30일 이용 정지", "permanent": "영구 정지 및 90일 이의신청 기간"}.get(body.sanction_type, body.sanction_type)
+            await create_notification(db, recipient_id=target_user.id, sender_id=admin.id, type="SANCTION_NOTICE", message=f"운영정책에 따라 {label} 조치되었습니다. 사유: {(body.note or '').strip()[:300]}", post_id=target_id if target_type == "post" else None)
         except Exception:
             logger.exception("Failed to notify moderated user %s", reports[0].target_user_id)
     return ApiResponse.ok({"message": "신고 처리를 저장했습니다."})

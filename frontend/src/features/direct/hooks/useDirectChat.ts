@@ -4,7 +4,7 @@ import { directService } from "../services/directService";
 import { DirectMessage } from "../types/direct";
 
 export function useDirectChat(conversationId: string) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
@@ -18,10 +18,12 @@ export function useDirectChat(conversationId: string) {
     setLoading(true);
     try {
       const data = await directService.getMessages(conversationId, 30);
-      setMessages(data);
+      setMessages([...data].reverse());
       setHasMore(data.length >= 30);
     } catch (err) {
-      console.log("Error loading initial direct messages", err);
+      if (__DEV__) {
+        console.log("Error loading initial direct messages", err);
+      }
     } finally {
       setLoading(false);
     }
@@ -31,23 +33,30 @@ export function useDirectChat(conversationId: string) {
   const loadMoreMessages = useCallback(async () => {
     if (!conversationId || loadingMore || !hasMore || messages.length === 0) return;
 
-    const firstMsg = messages[0];
-    if (!firstMsg || firstMsg.isOptimistic) return;
+    const oldestMsg = messages[messages.length - 1];
+    if (!oldestMsg || oldestMsg.isOptimistic) return;
 
     setLoadingMore(true);
     try {
-      const olderData = await directService.getMessages(conversationId, 30, firstMsg.id);
+      const olderData = await directService.getMessages(
+        conversationId,
+        30,
+        oldestMsg.id,
+      );
       if (olderData.length > 0) {
+        const normalizedOlder = [...olderData].reverse();
         setMessages((prev) => {
           // Avoid duplicate keys
           const existingIds = new Set(prev.map((m) => m.id));
-          const filteredNew = olderData.filter((m) => !existingIds.has(m.id));
-          return [...filteredNew, ...prev];
+          const filteredNew = normalizedOlder.filter((m) => !existingIds.has(m.id));
+          return [...prev, ...filteredNew];
         });
       }
       setHasMore(olderData.length >= 30);
     } catch (err) {
-      console.log("Error loading older messages", err);
+      if (__DEV__) {
+        console.log("Error loading older messages", err);
+      }
     } finally {
       setLoadingMore(false);
     }
@@ -58,14 +67,12 @@ export function useDirectChat(conversationId: string) {
     if (!conversationId) return;
 
     let socket: WebSocket | null = null;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
     try {
-      const wsUrl = directService.getWebSocketUrl(conversationId);
+      if (!token) return;
+      const wsUrl = directService.getWebSocketUrl(conversationId, token);
       socket = new WebSocket(wsUrl);
       wsRef.current = socket;
-
-      socket.onopen = () => {
-        console.log(`[DirectWS] Connected to conversation ${conversationId}`);
-      };
 
       socket.onmessage = (event) => {
         try {
@@ -87,32 +94,41 @@ export function useDirectChat(conversationId: string) {
                     m.content === incomingMsg.content
                   )
               );
-              return [...cleanPrev, incomingMsg];
+              return [incomingMsg, ...cleanPrev];
             });
           }
         } catch (e) {
-          console.log("[DirectWS] Error parsing websocket message", e);
+          if (__DEV__) {
+            console.log("[DirectWS] Error parsing websocket message", e);
+          }
         }
+      };
+      socket.onopen = () => {
+        socket?.send("ping");
+        heartbeat = setInterval(() => {
+          if (socket?.readyState === WebSocket.OPEN) socket.send("ping");
+        }, 45_000);
       };
 
       socket.onerror = (err) => {
-        console.log("[DirectWS] Socket error", err);
-      };
-
-      socket.onclose = () => {
-        console.log("[DirectWS] Socket closed");
+        if (__DEV__) {
+          console.log("[DirectWS] Socket error", err);
+        }
       };
     } catch (e) {
-      console.log("[DirectWS] Error creating socket", e);
+      if (__DEV__) {
+        console.log("[DirectWS] Error creating socket", e);
+      }
     }
 
     return () => {
+      if (heartbeat) clearInterval(heartbeat);
       if (socket) {
         socket.close();
       }
       wsRef.current = null;
     };
-  }, [conversationId]);
+  }, [conversationId, token]);
 
   // 4. Initial Load
   useEffect(() => {
@@ -141,8 +157,8 @@ export function useDirectChat(conversationId: string) {
         isOptimistic: true,
       };
 
-      // 1. Optimistically append
-      setMessages((prev) => [...prev, optimisticMsg]);
+      // 1. Optimistically insert at the inverted list's latest position
+      setMessages((prev) => [optimisticMsg, ...prev]);
 
       try {
         // 2. Call API
@@ -153,7 +169,9 @@ export function useDirectChat(conversationId: string) {
           prev.map((m) => (m.id === tempId ? realMsg : m))
         );
       } catch (err) {
-        console.log("Error sending direct message", err);
+        if (__DEV__) {
+          console.log("Error sending direct message", err);
+        }
         // 4. On failure, remove optimistic message
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
       }
