@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
+from app.modules.governance.schemas import PolicyAcceptance
 
 
 # ─── Request Schemas ─────────────────────────────────────────
@@ -15,10 +16,10 @@ class RegisterRequest(BaseModel):
         examples=["john_doe"],
     )
     email: EmailStr = Field(..., examples=["john@example.com"])
-    password: str = Field(..., min_length=4, max_length=128, examples=["password123"])
+    password: str = Field(..., min_length=8, max_length=128, examples=["password123"])
     nickname: str = Field(..., min_length=1, max_length=50, examples=["Aura"])
     full_name: str = Field(..., min_length=1, max_length=100, examples=["Aura"])
-    age: int | None = Field(None, ge=18, le=120)
+    age: int | None = Field(None, ge=14, le=120)
     gender: str | None = Field(None, max_length=30)
     sexual_orientation: str | None = Field(None, max_length=30)
     sexual_orientations: list[str] = Field(default_factory=list, max_length=10)
@@ -27,12 +28,14 @@ class RegisterRequest(BaseModel):
     bio: str | None = Field(None, max_length=500)
     profile_image_url: str | None = Field(None, max_length=500)
     profile_visibility: str = Field("mutual_followers", pattern=r"^(public|mutual_followers|private)$")
+    installation_id: str = Field(..., min_length=12, max_length=128)
+    policy_acceptances: list[PolicyAcceptance] = Field(..., min_length=4, max_length=10)
 
     @field_validator("password")
     @classmethod
     def password_strength(cls, v: str) -> str:
-        if len(v.strip()) < 4:
-            raise ValueError("비밀번호는 최소 4자 이상이어야 합니다")
+        if len(v.strip()) < 8:
+            raise ValueError("비밀번호는 최소 8자 이상이어야 합니다")
         return v
 
 
@@ -63,6 +66,8 @@ class GoogleLoginRequest(BaseModel):
     full_name: str | None = Field(None, description="이름")
     google_id: str | None = Field(None, description="Google 고유 Sub ID")
     profile_image_url: str | None = Field(None, description="프로필 사진 URL")
+    installation_id: str | None = Field(None, min_length=12, max_length=128)
+    policy_acceptances: list[PolicyAcceptance] = Field(default_factory=list, max_length=10)
 
 
 # ─── Response Schemas ────────────────────────────────────────
@@ -96,6 +101,9 @@ class UserMe(BaseModel):
     is_private: bool = False
     allow_message_requests: bool = True
     is_admin: bool = False
+    admin_role: str = "member"
+    suspended_until: datetime | None = None
+    permanently_suspended_at: datetime | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -25,7 +25,8 @@ export interface AdminReportDetailModalProps {
   onClose: () => void;
   onModerate: (
     status: "reviewing" | "resolved" | "rejected",
-    action: "maintain" | "hide" | "delete" | "warn" | "suspend"
+    contentAction: "maintain" | "hide" | "delete",
+    sanctionType: "none" | "warning" | "suspend_5d" | "suspend_10d" | "suspend_30d" | "permanent"
   ) => void | Promise<void>;
 }
 
@@ -49,6 +50,12 @@ export const AdminReportDetailModal: React.FC<AdminReportDetailModalProps> = ({
   onClose,
   onModerate,
 }) => {
+  const [contentAction, setContentAction] = useState<"maintain" | "hide" | "delete">("maintain");
+  const [sanctionType, setSanctionType] = useState<"none" | "warning" | "suspend_5d" | "suspend_10d" | "suspend_30d" | "permanent">("none");
+  const [revealedImages, setRevealedImages] = useState<Record<string, boolean>>({});
+  useEffect(() => { if (visible) { setContentAction("maintain"); setSanctionType("none"); setRevealedImages({}); } }, [visible, selectedReport?.target_id]);
+  const contentOptions = selectedReport?.target_type === "profile" ? [["maintain", "유지"]] : [["maintain", "유지"], ["hide", "숨김"], ["delete", "삭제"]];
+  const sanctionOptions = [["none", "제재 없음"], ["warning", "경고"], ["suspend_5d", "5일 정지"], ["suspend_10d", "10일 정지"], ["suspend_30d", "30일 정지"], ["permanent", "영구 정지"]];
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
@@ -79,10 +86,11 @@ export const AdminReportDetailModal: React.FC<AdminReportDetailModalProps> = ({
                     <Text style={{ color: colors.textSecondary, fontWeight: "800", marginBottom: 8 }}>신고 게시물 이미지</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
                       {getReportedPostImages(selectedReport.snapshot).map((media, index) => (
-                        <View key={`${media.url}-${index}`} style={{ width: 168, height: 168, borderRadius: 12, overflow: "hidden", backgroundColor: colors.bgPrimary, borderWidth: 1, borderColor: colors.borderColor, alignItems: "center", justifyContent: "center" }}>
+                        <TouchableOpacity key={`${media.url}-${index}`} onPress={() => setRevealedImages((current) => ({ ...current, [media.url!]: !current[media.url!] }))} style={{ width: 168, height: 168, borderRadius: 12, overflow: "hidden", backgroundColor: colors.bgPrimary, borderWidth: 1, borderColor: colors.borderColor, alignItems: "center", justifyContent: "center" }}>
                           <Ionicons name="image-outline" size={28} color={colors.textMuted} />
-                          <Image source={{ uri: getFullImageUrl(media.url!) }} style={{ position: "absolute", width: "100%", height: "100%" }} resizeMode="cover" />
-                        </View>
+                          <Image blurRadius={revealedImages[media.url!] ? 0 : 24} source={{ uri: getFullImageUrl(media.url!) }} style={{ position: "absolute", width: "100%", height: "100%" }} resizeMode="cover" />
+                          {!revealedImages[media.url!] && <View style={{ position: "absolute", backgroundColor: "#0009", paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8 }}><Text style={{ color: "#fff", fontWeight: "800" }}>민감 이미지 보기</Text></View>}
+                        </TouchableOpacity>
                       ))}
                     </ScrollView>
                   </View>
@@ -90,7 +98,7 @@ export const AdminReportDetailModal: React.FC<AdminReportDetailModalProps> = ({
               </View>
               {selectedReport.reports?.map((report) => (
                 <View key={report.id} style={[styles.postCard, { backgroundColor: colors.bgCard, borderColor: colors.borderColor }]}>
-                  <Text style={{ color: colors.textPrimary, fontWeight: "800" }}>{report.reason_code}</Text>
+                  <Text style={{ color: colors.textPrimary, fontWeight: "800" }}>{(report.reason_codes?.length ? report.reason_codes : [report.reason_code]).join(" · ")}</Text>
                   {!!report.detail && <Text style={{ color: colors.textPrimary, marginTop: 5 }}>{report.detail}</Text>}
                   <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 7 }}>신고 IP: {report.reporter_ip || "기록 없음"}</Text>
                   <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 3 }}>{new Date(report.created_at).toLocaleString("ko-KR")}</Text>
@@ -104,25 +112,12 @@ export const AdminReportDetailModal: React.FC<AdminReportDetailModalProps> = ({
                 placeholderTextColor={colors.textMuted}
                 style={[styles.searchInput, { color: colors.textPrimary, backgroundColor: colors.bgCard, borderColor: colors.borderColor, borderWidth: 1, borderRadius: 12, minHeight: 90, padding: 12, textAlignVertical: "top" }]}
               />
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
-                {[
-                  ["reviewing", "maintain", "검토 중"],
-                  ["resolved", "maintain", "유지"],
-                  ["resolved", "hide", "숨김"],
-                  ["resolved", "delete", "삭제"],
-                  ["resolved", "warn", "경고"],
-                  ["resolved", "suspend", "정지"],
-                  ["rejected", "maintain", "기각"],
-                ].map(([statusValue, actionValue, label]) => (
-                  <TouchableOpacity
-                    key={`${statusValue}:${actionValue}`}
-                    onPress={() => onModerate(statusValue as any, actionValue as any)}
-                    style={{ backgroundColor: actionValue === "delete" || actionValue === "suspend" ? "#ef4444" : primaryAccent, paddingHorizontal: 14, paddingVertical: 11, borderRadius: 12 }}
-                  >
-                    <Text style={{ color: "#fff", fontWeight: "800" }}>{label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <Text style={[styles.optionTitle, { color: colors.textPrimary }]}>콘텐츠 처리</Text>
+              <View style={styles.optionRow}>{contentOptions.map(([value, label]) => <TouchableOpacity key={value} onPress={() => setContentAction(value as any)} style={[styles.option, { borderColor: contentAction === value ? primaryAccent : colors.borderColor, backgroundColor: contentAction === value ? `${primaryAccent}22` : colors.bgCard }]}><Text style={{ color: colors.textPrimary, fontWeight: "800" }}>{label}</Text></TouchableOpacity>)}</View>
+              <Text style={[styles.optionTitle, { color: colors.textPrimary }]}>이용자 제재</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>콘텐츠 판정과 별개입니다. AI 결과만으로 자동 선택하지 않습니다.</Text>
+              <View style={styles.optionRow}>{sanctionOptions.map(([value, label]) => <TouchableOpacity key={value} onPress={() => setSanctionType(value as any)} style={[styles.option, { borderColor: sanctionType === value ? primaryAccent : colors.borderColor, backgroundColor: sanctionType === value ? `${primaryAccent}22` : colors.bgCard }]}><Text style={{ color: value === "permanent" ? "#dc2626" : colors.textPrimary, fontWeight: "800" }}>{label}</Text></TouchableOpacity>)}</View>
+              <View style={styles.optionRow}><TouchableOpacity onPress={() => onModerate("reviewing", "maintain", "none")} style={[styles.finalButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textPrimary, fontWeight: "800" }}>검토 중 저장</Text></TouchableOpacity><TouchableOpacity onPress={() => onModerate("rejected", "maintain", "none")} style={[styles.finalButton, { borderColor: colors.borderColor }]}><Text style={{ color: colors.textPrimary, fontWeight: "800" }}>신고 기각</Text></TouchableOpacity><TouchableOpacity onPress={() => onModerate("resolved", contentAction, sanctionType)} style={[styles.finalButton, { backgroundColor: sanctionType === "permanent" || contentAction === "delete" ? "#dc2626" : primaryAccent }]}><Text style={{ color: "#fff", fontWeight: "900" }}>처리 완료</Text></TouchableOpacity></View>
             </>
           )}
         </ScrollView>
@@ -160,4 +155,8 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     textAlignVertical: "center",
   },
+  optionTitle: { fontSize: 15, fontWeight: "900", marginTop: 16, marginBottom: 8 },
+  optionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+  option: { minHeight: 42, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" },
+  finalButton: { minHeight: 46, borderWidth: 1, borderRadius: 12, paddingHorizontal: 13, alignItems: "center", justifyContent: "center" },
 });

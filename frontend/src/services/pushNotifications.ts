@@ -23,7 +23,7 @@ if (Platform.OS !== "web") {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldPlaySound: true,
-      shouldSetBadge: false,
+      shouldSetBadge: true,
       shouldShowBanner: true,
       shouldShowList: true,
     }),
@@ -132,14 +132,31 @@ export async function deactivateCurrentInstallationPushToken(): Promise<void> {
 
 export function startPushNotificationListeners(
   onTokenRolled: () => void,
+  onNotificationResponse: (data: Record<string, unknown>) => void,
 ): () => void {
   if (Platform.OS === "web") return () => undefined;
 
   const tokenSubscription = Notifications.addPushTokenListener(() => {
     onTokenRolled();
   });
+  const responseSubscription = Notifications.addNotificationResponseReceivedListener(
+    (response) => {
+      onNotificationResponse(
+        response.notification.request.content.data as Record<string, unknown>,
+      );
+    },
+  );
+  void Notifications.getLastNotificationResponseAsync().then((response) => {
+    if (response) {
+      onNotificationResponse(
+        response.notification.request.content.data as Record<string, unknown>,
+      );
+      void Notifications.clearLastNotificationResponseAsync();
+    }
+  });
 
   return () => {
     tokenSubscription.remove();
+    responseSubscription.remove();
   };
 }

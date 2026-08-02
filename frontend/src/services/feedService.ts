@@ -45,11 +45,22 @@ export interface StoryGroupItem {
   stories?: any[];
 }
 
+export interface FeedPage {
+  items: FeedPostItem[];
+  hasMore: boolean;
+}
+
 export const feedService = {
-  getFeedPosts: async (): Promise<FeedPostItem[]> => {
-    const response = await api.get("/posts/feed");
-    if (!response.data) return [];
-    return response.data.data || (Array.isArray(response.data) ? response.data : []);
+  getFeedPosts: async (
+    page: number = 1,
+    size: number = 20,
+    rankingSeed: string = "default",
+  ): Promise<FeedPage> => {
+    const response = await api.get("/posts/feed", {
+      params: { page, size, ranking_seed: rankingSeed },
+    });
+    const items = response.data?.data || (Array.isArray(response.data) ? response.data : []);
+    return { items, hasMore: Boolean(response.data?.meta?.has_more) };
   },
 
   getStoriesFeed: async (): Promise<StoryGroupItem[]> => {

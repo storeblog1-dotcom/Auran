@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="description" content="Auran 핵심 기능 구현 현황과 검증 근거를 단계별로 확인하는 감사 보고서" />
+    <title>Auran 기능 구현 감사</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="test-accounts.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#report">본문으로 이동</a>
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="Auran 기능 감사 홈">
+        <span class="brand-mark">A</span>
+        <span><strong>Auran</strong><small>기능 구현 감사</small></span>
+      </a>
+      <div class="top-actions">
+        <button class="quiet-button" id="expandAll" type="button">모두 펼치기</button>
+        <button class="primary-button" id="printReport" type="button">보고서 인쇄</button>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">IMPLEMENTATION REVIEW · 2026.08.02</p>
+          <h1 id="hero-title">기능이 있는지에서 끝내지 않고,<br /><em>실제로 연결됐는지</em>까지 봅니다.</h1>
+          <p class="hero-lead">알림, 프로필, 검색, 업로드, 관리자와 피드 배포·성능 기능을 구조 → 상세 → 코드·API 근거 순서로 내려가며 확인할 수 있습니다.</p>
+        </div>
+        <div class="hero-score" aria-label="전체 구현 현황">
+          <div class="score-ring" id="scoreRing"><strong id="scoreValue">0</strong><span>%</span></div>
+          <p>코드 구현 기준</p>
+          <small>실기기·운영 검증 전 최종 확정 금지</small>
+        </div>
+      </section>
+
+      <section class="summary-grid" id="summaryGrid" aria-label="기능 요약"></section>
+
+      <section class="workspace" id="report">
+        <aside class="sidebar" aria-label="보고서 탐색">
+          <div class="search-wrap">
+            <label for="featureSearch">기능 검색</label>
+            <input id="featureSearch" type="search" placeholder="예: 푸시, 차단, 임시 저장" autocomplete="off" />
+          </div>
+          <div class="filter-group" role="group" aria-label="구현 상태 필터">
+            <button class="filter-chip active" data-filter="all" type="button">전체</button>
+            <button class="filter-chip" data-filter="implemented" type="button">구현</button>
+            <button class="filter-chip" data-filter="verify" type="button">검증 대기</button>
+            <button class="filter-chip" data-filter="risk" type="button">주의</button>
+            <button class="filter-chip" data-filter="planned" type="button">구현 예정</button>
+            <button class="filter-chip" data-filter="external" type="button">외부 등록</button>
+            <button class="filter-chip" data-filter="excluded" type="button">범위 제외</button>
+          </div>
+          <nav id="sideNav"></nav>
+        </aside>
+
+        <div class="report-content">
+          <section class="section-block priority-block" aria-labelledby="priority-title">
+            <div class="section-heading">
+              <div><span class="section-number">00</span><h2 id="priority-title">실행 순서</h2></div>
+              <p>사용자 영향도와 운영 위험도를 함께 반영한 순서입니다.</p>
+            </div>
+            <ol class="priority-list" id="priorityList"></ol>
+          </section>
+
+          <div id="featureSections"></div>
+
+          <section class="section-block test-accounts" id="test-accounts" aria-labelledby="test-accounts-title">
+            <div class="section-heading">
+              <div><span class="section-number">09</span><h2 id="test-accounts-title">테스트 계정·콘텐츠</h2></div>
+              <p>테스트 사용자 20명과 계정별 피드·익명 게시물 생성 결과입니다.</p>
+            </div>
+            <div id="testAccountDashboard"></div>
+          </section>
+
+          <section class="section-block verification" aria-labelledby="verification-title">
+            <div class="section-heading">
+              <div><span class="section-number">10</span><h2 id="verification-title">검증 기준</h2></div>
+              <p>코드 완료와 실제 정상 동작을 구분합니다.</p>
+            </div>
+            <div class="verification-grid">
+              <article><span>01</span><h3>정적 검사</h3><p>TypeScript, Python 테스트, diff 오류를 확인합니다.</p></article>
+              <article><span>02</span><h3>통합 환경</h3><p>DB migration과 운영 API 연결 상태를 확인합니다.</p></article>
+              <article><span>03</span><h3>실기기</h3><p>푸시, 이미지 처리, 앱 복귀와 권한 흐름을 검증합니다.</p></article>
+              <article><span>04</span><h3>운영 판정</h3><p>사용자 확인 뒤에만 최종 완료로 전환합니다.</p></article>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <footer><p>Auran Feature Audit · 자동 생성된 구현·검증 대시보드</p><button id="copySummary" type="button">요약 복사</button></footer>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

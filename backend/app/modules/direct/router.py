@@ -13,7 +13,7 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import String, and_, cast, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1720,6 +1720,9 @@ async def get_direct_conversations(
 
     result = []
     for conv in conversations:
+        current_member = next(
+            (m for m in conv.members if m.user_id == current_user.id), None
+        )
         other_member = next(
             (m for m in conv.members if m.user_id != current_user.id), None
         )
@@ -1728,12 +1731,37 @@ async def get_direct_conversations(
             if other_member and other_member.user
             else None
         )
+        last_message = await db.scalar(
+            select(DirectMessage)
+            .where(DirectMessage.conversation_id == conv.id)
+            .order_by(DirectMessage.created_at.desc())
+            .limit(1)
+        )
+        unread_query = select(func.count(DirectMessage.id)).where(
+            DirectMessage.conversation_id == conv.id,
+            DirectMessage.sender_id != current_user.id,
+        )
+        if current_member and current_member.last_read_at:
+            unread_query = unread_query.where(
+                DirectMessage.created_at > current_member.last_read_at
+            )
+        unread_count = int((await db.scalar(unread_query)) or 0)
         result.append(
             {
                 "id": str(conv.id),
                 "target_user": target_user_data,
                 "created_at": conv.created_at.isoformat() if conv.created_at else None,
                 "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+                "last_message": (
+                    {
+                        "id": str(last_message.id),
+                        "content": last_message.content,
+                        "created_at": last_message.created_at.isoformat(),
+                    }
+                    if last_message
+                    else None
+                ),
+                "unread_count": unread_count,
             }
         )
 
@@ -1741,6 +1769,34 @@ async def get_direct_conversations(
         "status": "success",
         "data": result,
     }
+
+
+@router.get(
+    "/conversations-unread-count",
+    summary="1:1 대화 전체 안 읽은 메시지 수",
+    response_model=dict,
+)
+async def get_direct_conversations_unread_count(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    memberships = (
+        await db.execute(
+            select(DirectConversationMember).where(
+                DirectConversationMember.user_id == current_user.id
+            )
+        )
+    ).scalars().all()
+    total = 0
+    for membership in memberships:
+        query = select(func.count(DirectMessage.id)).where(
+            DirectMessage.conversation_id == membership.conversation_id,
+            DirectMessage.sender_id != current_user.id,
+        )
+        if membership.last_read_at:
+            query = query.where(DirectMessage.created_at > membership.last_read_at)
+        total += int((await db.scalar(query)) or 0)
+    return {"status": "success", "data": {"unread_count": total}}
 
 
 @router.get(
@@ -1817,6 +1873,41 @@ class DirectConversationWSManager:
 direct_ws_manager = DirectConversationWSManager()
 
 
+def _presence_key(conversation_id: str, user_id: str) -> str:
+    return f"dm:presence:{conversation_id}:{user_id}"
+
+
+async def set_direct_presence(conversation_id: str, user_id: str) -> None:
+    try:
+        from redis.asyncio import from_url
+        client = from_url(settings.redis_url, decode_responses=True)
+        await client.set(_presence_key(conversation_id, user_id), "1", ex=120)
+        await client.aclose()
+    except Exception:
+        logging.getLogger(__name__).warning("Unable to refresh DM presence", exc_info=True)
+
+
+async def clear_direct_presence(conversation_id: str, user_id: str) -> None:
+    try:
+        from redis.asyncio import from_url
+        client = from_url(settings.redis_url, decode_responses=True)
+        await client.delete(_presence_key(conversation_id, user_id))
+        await client.aclose()
+    except Exception:
+        logging.getLogger(__name__).warning("Unable to clear DM presence", exc_info=True)
+
+
+async def is_direct_conversation_active(conversation_id: str, user_id: str) -> bool:
+    try:
+        from redis.asyncio import from_url
+        client = from_url(settings.redis_url, decode_responses=True)
+        active = bool(await client.exists(_presence_key(conversation_id, user_id)))
+        await client.aclose()
+        return active
+    except Exception:
+        return False
+
+
 @router.get(
     "/conversations/{conversation_id}/messages",
     summary="1:1 대화방 메시지 목록 조회",
@@ -1855,6 +1946,36 @@ async def get_direct_messages(
 
     messages.reverse()
 
+    if messages and before is None:
+        current_member = await db.scalar(
+            select(DirectConversationMember).where(
+                DirectConversationMember.conversation_id == conversation_id,
+                DirectConversationMember.user_id == current_user.id,
+            )
+        )
+        newest_received = next(
+            (item for item in reversed(messages) if item.sender_id != current_user.id),
+            None,
+        )
+        if current_member and newest_received:
+            current_member.last_read_at = newest_received.created_at
+            from app.modules.notifications.models import Notification
+
+            conversation_message_ids = select(cast(DirectMessage.id, String)).where(
+                DirectMessage.conversation_id == conversation_id,
+                DirectMessage.created_at <= newest_received.created_at,
+            )
+            await db.execute(
+                update(Notification)
+                .where(
+                    Notification.recipient_id == current_user.id,
+                    Notification.type == "DIRECT_MESSAGE",
+                    Notification.direct_message_id.in_(conversation_message_ids),
+                )
+                .values(is_read=True)
+            )
+            await db.commit()
+
     result = []
     for msg in messages:
         sender_resp = (
@@ -1878,6 +1999,54 @@ async def get_direct_messages(
         "status": "success",
         "data": result,
     }
+
+
+@router.post(
+    "/conversations/{conversation_id}/read",
+    summary="1:1 대화 읽음 처리",
+    response_model=dict,
+)
+async def mark_direct_conversation_read(
+    conversation_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    membership = await db.scalar(
+        select(DirectConversationMember).where(
+            DirectConversationMember.conversation_id == conversation_id,
+            DirectConversationMember.user_id == current_user.id,
+        )
+    )
+    if not membership:
+        raise ForbiddenException("해당 대화방에 접근할 권한이 없습니다.")
+    newest_received_at = await db.scalar(
+        select(DirectMessage.created_at)
+        .where(
+            DirectMessage.conversation_id == conversation_id,
+            DirectMessage.sender_id != current_user.id,
+        )
+        .order_by(DirectMessage.created_at.desc())
+        .limit(1)
+    )
+    if newest_received_at:
+        membership.last_read_at = newest_received_at
+        from app.modules.notifications.models import Notification
+
+        conversation_message_ids = select(cast(DirectMessage.id, String)).where(
+            DirectMessage.conversation_id == conversation_id,
+            DirectMessage.created_at <= newest_received_at,
+        )
+        await db.execute(
+            update(Notification)
+            .where(
+                Notification.recipient_id == current_user.id,
+                Notification.type == "DIRECT_MESSAGE",
+                Notification.direct_message_id.in_(conversation_message_ids),
+            )
+            .values(is_read=True)
+        )
+        await db.commit()
+    return {"status": "success", "data": {"read_at": newest_received_at}}
 
 
 @router.post(
@@ -1935,6 +2104,23 @@ async def send_direct_message(
         },
     )
 
+    other_member = next(
+        (member for member in conv.members if member.user_id != current_user.id),
+        None,
+    )
+    if other_member:
+        from app.modules.notifications.models import NotificationType
+        from app.modules.notifications.service import create_notification
+
+        await create_notification(
+            db,
+            recipient_id=other_member.user_id,
+            sender_id=current_user.id,
+            type=NotificationType.DIRECT_MESSAGE.value,
+            message=f"{current_user.nickname or current_user.username}님이 메시지를 보냈습니다.",
+            direct_message_id=str(msg.id),
+        )
+
     return {
         "status": "success",
         "data": msg_data,
@@ -1945,13 +2131,33 @@ async def send_direct_message(
 async def direct_conversation_ws(
     websocket: WebSocket,
     conversation_id: uuid.UUID,
+    token: str = Query(...),
 ):
     conv_id_str = str(conversation_id)
+    try:
+        payload = decode_token(token)
+        if payload.get("type") == "refresh" or not payload.get("sub"):
+            raise ValueError("invalid websocket token")
+        user_id = uuid.UUID(str(payload["sub"]))
+        async with AsyncSessionLocal() as db:
+            membership = await db.scalar(select(DirectConversationMember.id).where(DirectConversationMember.conversation_id == conversation_id, DirectConversationMember.user_id == user_id))
+            user = await db.scalar(select(User).where(User.id == user_id, User.is_active.is_(True)))
+        if not membership or not user:
+            raise ValueError("not a conversation member")
+    except Exception:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
     await direct_ws_manager.connect(conv_id_str, websocket)
+    await set_direct_presence(conv_id_str, str(user_id))
     try:
         while True:
-            await websocket.receive_text()
+            data = await websocket.receive_text()
+            await set_direct_presence(conv_id_str, str(user_id))
+            if data == "ping":
+                await websocket.send_text("pong")
     except WebSocketDisconnect:
         direct_ws_manager.disconnect(conv_id_str, websocket)
     except Exception:
         direct_ws_manager.disconnect(conv_id_str, websocket)
+    finally:
+        await clear_direct_presence(conv_id_str, str(user_id))

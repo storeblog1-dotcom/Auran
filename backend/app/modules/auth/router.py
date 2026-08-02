@@ -53,8 +53,20 @@ async def register(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[UserMe]:
+    client_ip = get_client_ip(request)
+    from app.modules.governance.service import enforce_signup_risk
+    await enforce_signup_risk(db, ip_address=client_ip, installation_id=body.installation_id)
     user = await service.register(db, body)
-    await record(db, user_id=user.id, event_type="signup", ip_address=get_client_ip(request), target_type="user", target_id=user.id)
+    from app.modules.governance.service import validate_and_store_consents
+    await validate_and_store_consents(
+        db,
+        user_id=user.id,
+        acceptances=body.policy_acceptances,
+        ip_address=client_ip,
+        installation_id=body.installation_id,
+        sensitive_data_provided=bool(body.sexual_orientation or body.sexual_orientations),
+    )
+    await record(db, user_id=user.id, event_type="signup", ip_address=client_ip, target_type="user", target_id=user.id, snapshot={"policy_versions": {item.policy_key: item.version for item in body.policy_acceptances}, "installation_id_hmac": user.installation_id_hmac})
     await db.commit()
     return ApiResponse.ok(UserMe.model_validate(user))
 
@@ -79,9 +91,10 @@ async def login(
 )
 async def google_login(
     body: GoogleLoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[TokenResponse]:
-    tokens = await service.google_login(db, body)
+    tokens = await service.google_login(db, body, ip_address=get_client_ip(request))
     return ApiResponse.ok(tokens)
 
 

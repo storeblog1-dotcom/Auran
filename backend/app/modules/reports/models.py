@@ -24,6 +24,7 @@ class Report(Base):
     target_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     target_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
     reason_code: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    reason_codes: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
     detail: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="received", server_default="received", index=True)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")

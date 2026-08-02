@@ -13,7 +13,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as Location from "expo-location";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../services/api";
 import { useTheme } from "../context/ThemeContext";
@@ -24,9 +26,16 @@ interface MediaPickItem {
   id: string;
   uri: string;
   asset?: any;
+  originalUri?: string;
+  originalWidth?: number;
+  originalHeight?: number;
+  cropAspect?: "original" | "square" | "portrait";
+  thumbnailUri?: string;
+  detailUri?: string;
 }
 
 type PostVisibility = "public" | "followers" | "private";
+const CREATE_POST_DRAFT_KEY = "auran_create_post_draft_v1";
 
 const VISIBILITY_OPTIONS: Array<{
   value: PostVisibility;
@@ -59,6 +68,9 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
   const [visibility, setVisibility] = useState<PostVisibility>("public");
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
 
   const verifyYoutubeUrl = async (url: string) => {
     const clean = url.trim();
@@ -127,19 +139,51 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
         const loaded: MediaPickItem[] = editPost.media.map((m: any, idx: number) => ({
           id: m.id ? String(m.id) : `edit-m-${idx}`,
           uri: m.media_url,
+          thumbnailUri: m.thumbnail_media_url || m.media_url,
+          detailUri: m.detail_media_url || m.media_url,
         }));
         setSelectedMedia(loaded);
       }
     } else {
-      setSelectedMedia([]);
-      setCaption("");
-      setHashtags("");
-      setLocationName("");
-      setYoutubeUrl("");
-      setVisibility("public");
-      fetchCurrentGPSLocation();
+      AsyncStorage.getItem(CREATE_POST_DRAFT_KEY)
+        .then((raw) => {
+          if (!raw) {
+            void fetchCurrentGPSLocation();
+            return;
+          }
+          const draft = JSON.parse(raw);
+          setSelectedMedia(Array.isArray(draft.selectedMedia) ? draft.selectedMedia : []);
+          setCaption(typeof draft.caption === "string" ? draft.caption : "");
+          setHashtags(typeof draft.hashtags === "string" ? draft.hashtags : "");
+          setLocationName(typeof draft.locationName === "string" ? draft.locationName : "");
+          setYoutubeUrl(typeof draft.youtubeUrl === "string" ? draft.youtubeUrl : "");
+          setVisibility(["public", "followers", "private"].includes(draft.visibility) ? draft.visibility : "public");
+          setDraftSavedAt(typeof draft.savedAt === "string" ? draft.savedAt : null);
+        })
+        .catch(() => void fetchCurrentGPSLocation())
+        .finally(() => setDraftReady(true));
     }
   }, [editPost]);
+
+  useEffect(() => {
+    if (isEditMode || !draftReady || submitting) return;
+    const timer = setTimeout(() => {
+      const savedAt = new Date().toISOString();
+      void AsyncStorage.setItem(
+        CREATE_POST_DRAFT_KEY,
+        JSON.stringify({
+          selectedMedia,
+          caption,
+          hashtags,
+          locationName,
+          youtubeUrl,
+          visibility,
+          savedAt,
+        }),
+      ).then(() => setDraftSavedAt(savedAt));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [caption, draftReady, hashtags, isEditMode, locationName, selectedMedia, submitting, visibility, youtubeUrl]);
 
   const fetchCurrentGPSLocation = async () => {
     setLoadingLocation(true);
@@ -201,6 +245,10 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
           id: `picked-${timestampBase}-${idx}`,
           uri: asset.uri,
           asset,
+          originalUri: asset.uri,
+          originalWidth: asset.width,
+          originalHeight: asset.height,
+          cropAspect: "original",
         }));
 
         setSelectedMedia((prev) => [...prev, ...newPicked].slice(0, 10));
@@ -228,6 +276,10 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
           id: `cam-${Date.now()}`,
           uri: result.assets[0].uri,
           asset: result.assets[0],
+          originalUri: result.assets[0].uri,
+          originalWidth: result.assets[0].width,
+          originalHeight: result.assets[0].height,
+          cropAspect: "original",
         };
         setSelectedMedia((prev) => [captured, ...prev].slice(0, 10));
       }
@@ -241,6 +293,64 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
     setSelectedMedia((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleCycleCrop = async (index: number) => {
+    const item = selectedMedia[index];
+    if (!item || item.uri.startsWith("http")) return;
+    const nextAspect = item.cropAspect === "square"
+      ? "portrait"
+      : item.cropAspect === "portrait"
+        ? "original"
+        : "square";
+    const sourceUri = item.originalUri || item.uri;
+    const sourceWidth = item.originalWidth || item.asset?.width;
+    const sourceHeight = item.originalHeight || item.asset?.height;
+    if (nextAspect === "original") {
+      setSelectedMedia((current) => current.map((entry, entryIndex) => (
+        entryIndex === index ? { ...entry, uri: sourceUri, cropAspect: "original" } : entry
+      )));
+      return;
+    }
+    if (!sourceWidth || !sourceHeight) return;
+    const targetRatio = nextAspect === "square" ? 1 : 4 / 5;
+    let cropWidth = sourceWidth;
+    let cropHeight = sourceHeight;
+    if (sourceWidth / sourceHeight > targetRatio) cropWidth = sourceHeight * targetRatio;
+    else cropHeight = sourceWidth / targetRatio;
+    try {
+      const result = await ImageManipulator.manipulateAsync(
+        sourceUri,
+        [{
+          crop: {
+            originX: Math.max(0, Math.round((sourceWidth - cropWidth) / 2)),
+            originY: Math.max(0, Math.round((sourceHeight - cropHeight) / 2)),
+            width: Math.round(cropWidth),
+            height: Math.round(cropHeight),
+          },
+        }],
+        { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG },
+      );
+      setSelectedMedia((current) => current.map((entry, entryIndex) => (
+        entryIndex === index
+          ? {
+              ...entry,
+              uri: result.uri,
+              cropAspect: nextAspect,
+              asset: {
+                ...entry.asset,
+                uri: result.uri,
+                width: result.width,
+                height: result.height,
+                mimeType: "image/jpeg",
+                fileName: `cropped_${Date.now()}.jpg`,
+              },
+            }
+          : entry
+      )));
+    } catch {
+      Alert.alert("자르기 실패", "이미지를 자르지 못했습니다. 다시 시도해 주세요.");
+    }
+  };
+
   // 4. 피드에 게시물 업로드 / 수정
   const handleCreatePost = async () => {
     if (selectedMedia.length === 0) {
@@ -249,6 +359,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
     }
 
     setSubmitting(true);
+    setUploadProgress(0);
     try {
       const formattedHashtags = formatHashtags(hashtags);
       const finalCaption = formattedHashtags
@@ -282,6 +393,8 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
           if (item.uri.startsWith("http://") || item.uri.startsWith("https://")) {
             uploadedMediaList.push({
               media_url: item.uri,
+              thumbnail_media_url: item.thumbnailUri || item.uri,
+              detail_media_url: item.detailUri || item.uri,
               media_type: "image",
               order: i,
             });
@@ -300,11 +413,17 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
 
             const uploadRes = await api.post("/uploads/image", formData, {
               headers: { "Content-Type": "multipart/form-data" },
+              onUploadProgress: (event) => {
+                const fileRatio = event.total ? event.loaded / event.total : 0;
+                setUploadProgress(Math.min(90, Math.round(((i + fileRatio) / selectedMedia.length) * 90)));
+              },
             });
 
             if (uploadRes.data?.data?.url) {
               uploadedMediaList.push({
                 media_url: uploadRes.data.data.url,
+                thumbnail_media_url:
+                  uploadRes.data.data.thumbnail_url || uploadRes.data.data.url,
                 detail_media_url:
                   uploadRes.data.data.detail_url || uploadRes.data.data.url,
                 media_type: "image",
@@ -312,8 +431,10 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
               });
             }
           }
+          setUploadProgress(Math.min(90, Math.round(((i + 1) / selectedMedia.length) * 90)));
         }
 
+        setUploadProgress(95);
         await api.post("/posts", {
           caption: finalCaption,
           location: locationName || null,
@@ -322,11 +443,15 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
           media: uploadedMediaList,
         });
 
+        setDraftReady(false);
         setSelectedMedia([]);
         setCaption("");
         setHashtags("");
         setLocationName("");
         setYoutubeUrl("");
+        setUploadProgress(100);
+        await AsyncStorage.removeItem(CREATE_POST_DRAFT_KEY);
+        setDraftSavedAt(null);
         navigation.navigate("Feed");
         Alert.alert("성공", "새 피드가 성공적으로 공유되었습니다!");
       }
@@ -348,6 +473,7 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
       );
     } finally {
       setSubmitting(false);
+      setUploadProgress(0);
     }
   };
 
@@ -404,6 +530,19 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
                   >
                     <Ionicons name="close" size={14} color="#fff" />
                   </TouchableOpacity>
+                  {!item.uri.startsWith("http") && (
+                    <TouchableOpacity
+                      style={styles.cropBadge}
+                      onPress={() => void handleCycleCrop(idx)}
+                      activeOpacity={0.8}
+                      accessibilityLabel="이미지 자르기 비율 변경"
+                    >
+                      <Ionicons name="crop-outline" size={14} color="#fff" />
+                      <Text style={styles.cropBadgeText}>
+                        {item.cropAspect === "square" ? "1:1" : item.cropAspect === "portrait" ? "4:5" : "원본"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               ))}
             </ScrollView>
@@ -556,6 +695,17 @@ export const CreatePostScreen = ({ route, navigation }: any) => {
             </>
           )}
         </TouchableOpacity>
+        {!isEditMode && draftSavedAt && !submitting ? (
+          <Text style={[styles.draftStatus, { color: colors.textMuted }]}>임시 저장됨</Text>
+        ) : null}
+        {submitting ? (
+          <View style={styles.progressSection}>
+            <View style={[styles.progressTrack, { backgroundColor: colors.bgInput }]}>
+              <View style={[styles.progressFill, { width: `${uploadProgress}%`, backgroundColor: colors.accentBlue }]} />
+            </View>
+            <Text style={[styles.progressText, { color: colors.textSecondary }]}>{uploadProgress}%</Text>
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -643,6 +793,23 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     justifyContent: "center",
     alignItems: "center",
+  },
+  cropBadge: {
+    position: "absolute",
+    left: 6,
+    bottom: 6,
+    minHeight: 24,
+    borderRadius: 12,
+    paddingHorizontal: 7,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0,0,0,0.72)",
+  },
+  cropBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "700",
   },
   emptyBox: {
     height: 140,
@@ -757,5 +924,34 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  draftStatus: {
+    marginTop: -20,
+    marginBottom: 18,
+    textAlign: "center",
+    fontSize: 12,
+  },
+  progressSection: {
+    marginTop: -20,
+    marginBottom: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  progressTrack: {
+    flex: 1,
+    height: 8,
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 4,
+  },
+  progressText: {
+    width: 38,
+    fontSize: 12,
+    textAlign: "right",
+    fontVariant: ["tabular-nums"],
   },
 });

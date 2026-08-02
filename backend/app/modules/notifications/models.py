@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum as PyEnum
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,6 +18,11 @@ class NotificationType(str, PyEnum):
     FOLLOW = "FOLLOW"
     MENTION = "MENTION"
     DIRECT_MESSAGE = "DIRECT_MESSAGE"
+    REPORT_RESULT = "REPORT_RESULT"
+    MODERATION_WARNING = "MODERATION_WARNING"
+    CONTENT_MODERATION_RESULT = "CONTENT_MODERATION_RESULT"
+    SANCTION_NOTICE = "SANCTION_NOTICE"
+    ADMIN_REPORT = "ADMIN_REPORT"
 
 
 class Notification(Base):
@@ -67,6 +72,9 @@ class Notification(Base):
     comment_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     direct_message_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    group_key: Mapped[str | None] = mapped_column(String(180), nullable=True, index=True)
+    actors: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    aggregate_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
     is_read: Mapped[bool] = mapped_column(
         Boolean,

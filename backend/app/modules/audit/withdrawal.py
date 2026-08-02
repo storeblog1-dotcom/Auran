@@ -10,7 +10,10 @@ from app.modules.posts.models import PostMedia
 
 
 WITHDRAWAL_GRACE_DAYS = 7
-PERSONAL_DATA_RETENTION_DAYS = 365
+# Ordinary account profile and authentication data is purged immediately after
+# the 7-day cancellation period. Separately justified report/revision evidence
+# keeps its own retention deadline and legal-hold flag.
+PERSONAL_DATA_RETENTION_DAYS = 0
 
 
 def utc_now() -> datetime:

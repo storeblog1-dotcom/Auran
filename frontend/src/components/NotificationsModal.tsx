@@ -8,6 +8,7 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,6 +24,7 @@ import {
   AdminBadge,
   showAdminProfilePrivateAlert,
 } from "./AdminIdentity";
+import { NotificationActor, NotificationActorsModal } from "./NotificationActorsModal";
 
 interface NotificationsModalProps {
   visible: boolean;
@@ -38,6 +40,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   const navigation = useNavigation<any>();
   const [selectedPostId, setSelectedPostId] = React.useState<string | null>(null);
   const [autoOpenComments, setAutoOpenComments] = React.useState<boolean>(false);
+  const [notificationActors, setNotificationActors] = React.useState<NotificationActor[]>([]);
   const { colors } = useTheme();
   const {
     notifications,
@@ -65,6 +68,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
       navigation.navigate("UserProfile", { username: item.sender.username });
     }
   };
+  const confirmProfile = (actor: NotificationActor) => Alert.alert(actor.nickname || actor.username, "이 사용자의 프로필로 이동할까요?", [{ text: "취소", style: "cancel" }, { text: "프로필 보기", onPress: () => { setNotificationActors([]); onClose(); if (onNavigateProfile) onNavigateProfile(actor.username); else navigation.navigate("UserProfile", { username: actor.username }); } }]);
 
   const formatTimeAgo = (dateStr?: string) => {
     if (!dateStr) return "";
@@ -93,7 +97,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
     if (item.type === "FOLLOW") {
       if (item.sender?.username) {
-        openSenderProfile(item);
+        confirmProfile(item.sender as NotificationActor);
       }
     } else if (item.type === "COMMENT") {
       if (item.post_id) {
@@ -103,12 +107,13 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         openSenderProfile(item);
       }
     } else if (item.type === "LIKE" || item.type === "MENTION") {
-      if (item.post_id) {
-        setAutoOpenComments(false);
-        setSelectedPostId(item.post_id);
-      } else if (item.sender?.username) {
-        openSenderProfile(item);
-      }
+      setNotificationActors(item.actors?.length ? item.actors : [item.sender]);
+    } else if (item.type === "DIRECT_MESSAGE") {
+      onClose();
+      navigation.navigate("DirectInbox");
+    } else if (item.type === "CONTENT_MODERATION_RESULT" || item.type === "SANCTION_NOTICE") {
+      onClose();
+      navigation.navigate("SafetyCenter");
     }
   };
 
@@ -243,6 +248,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
           initialOpenComments={autoOpenComments}
           onClose={() => setSelectedPostId(null)}
         />
+        <NotificationActorsModal visible={notificationActors.length > 0} actors={notificationActors} onClose={() => setNotificationActors([])} onSelect={confirmProfile} />
       </SafeAreaView>
     </Modal>
   );

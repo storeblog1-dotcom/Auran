@@ -1,6 +1,7 @@
 import json
 import logging
 import uuid
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set
 
 from fastapi import WebSocket
@@ -63,7 +64,46 @@ async def create_notification(
     if recipient_id == sender_id:
         return None
 
-    notification = Notification(
+    from app.modules.auth.models import User
+    sender = await db.scalar(select(User).where(User.id == sender_id))
+    actor = {
+        "id": str(sender_id),
+        "username": sender.username if sender else "",
+        "nickname": sender.nickname if sender else None,
+        "profile_image_url": sender.profile_image_url if sender else None,
+        "is_admin": bool(sender and sender.is_admin),
+    }
+    group_key = None
+    if type in {"LIKE", "MENTION"} and post_id:
+        group_key = f"{recipient_id}:{type}:{post_id}:{comment_id or ''}"
+        grouped = await db.scalar(
+            select(Notification)
+            .where(
+                Notification.recipient_id == recipient_id,
+                Notification.group_key == group_key,
+                Notification.is_read.is_(False),
+            )
+            .order_by(Notification.created_at.desc())
+            .limit(1)
+        )
+        if grouped:
+            actors = [item for item in (grouped.actors or []) if item.get("id") != str(sender_id)]
+            actors.append(actor)
+            grouped.actors = actors[-50:]
+            grouped.aggregate_count = len(grouped.actors)
+            grouped.sender_id = sender_id
+            display = actor.get("nickname") or actor.get("username") or "사용자"
+            grouped.message = f"{display}님 외 {max(0, grouped.aggregate_count - 1)}명이 반응했습니다." if grouped.aggregate_count > 1 else message
+            grouped.created_at = datetime.now(timezone.utc)
+            await db.commit()
+            notification = grouped
+        else:
+            notification = None
+    else:
+        notification = None
+
+    if notification is None:
+        notification = Notification(
         recipient_id=recipient_id,
         sender_id=sender_id,
         type=type,
@@ -71,10 +111,13 @@ async def create_notification(
         post_id=post_id,
         comment_id=comment_id,
         direct_message_id=direct_message_id,
+        group_key=group_key,
+        actors=[actor],
+        aggregate_count=1,
         is_read=False,
-    )
-    db.add(notification)
-    await db.commit()
+        )
+        db.add(notification)
+        await db.commit()
 
     # 릴레이션 eager loading 후 WebSocket 실시간 알림 발송
     stmt = select(Notification).options(
@@ -90,21 +133,17 @@ async def create_notification(
     }
     await notification_manager.send_notification(str(recipient_id), payload)
 
-    if type == NotificationType.DIRECT_MESSAGE.value:
-        try:
-            from app.modules.notifications.push import send_direct_message_push
+    try:
+        from app.modules.notifications.push import send_notification_push
 
-            await send_direct_message_push(
-                db,
-                notification=loaded_notification,
-            )
-        except Exception:
-            # A push provider outage must never fail a message that is already
-            # saved and visible through the chat transport.
-            logger.exception(
-                "Failed to send DM push notification %s",
-                loaded_notification.id,
-            )
+        await send_notification_push(db, notification=loaded_notification)
+    except Exception:
+        # A push provider outage must never fail the action that created the
+        # already-persisted in-app notification.
+        logger.exception(
+            "Failed to send push notification %s",
+            loaded_notification.id,
+        )
 
     return notification
 

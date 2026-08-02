@@ -219,11 +219,11 @@ export const AdminUserActivityModal: React.FC<AdminUserActivityModalProps> = ({
     };
     Alert.alert(
       "신고 처리 실행",
-      `해당 신고 항목을 [${actionLabels[action]}] 조치하시겠습니까?\n처리 결과가 신고자(들)에게 자동 안내됩니다.`,
+      `해당 신고 항목을 [${actionLabels[action]}] 조치하시겠습니까?\n신고자에게 구체적인 제재 결과는 안내하지 않습니다.`,
       [
         { text: "취소", style: "cancel" },
         {
-          text: "실행 및 신고자 알림 전송",
+          text: "조치 실행",
           style: action === "delete" || action === "suspend" ? "destructive" : "default",
           onPress: async () => {
             try {
@@ -231,10 +231,11 @@ export const AdminUserActivityModal: React.FC<AdminUserActivityModalProps> = ({
                 report.target_type,
                 report.target_id,
                 "resolved",
-                action,
+                action === "hide" || action === "delete" ? action : "maintain",
+                action === "warn" ? "warning" : action === "suspend" ? "suspend_5d" : "none",
                 `관리자 조치: ${actionLabels[action]}`
               );
-              Alert.alert("완료", `신고가 [${actionLabels[action]}] 처리되었으며 신고자에게 결과 알림이 전송되었습니다.`);
+              Alert.alert("완료", `신고가 [${actionLabels[action]}] 처리되었습니다.`);
               if (user?.id) fetchUserData(user.id);
             } catch (err) {
               console.log("Failed to moderate report in modal", err);

@@ -36,6 +36,9 @@ export const EditProfileScreen = ({ navigation }: any) => {
     user?.allow_message_requests !== false
   );
   const [saving, setSaving] = useState(false);
+  const [showBlockedUsers, setShowBlockedUsers] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
+  const [loadingBlockedUsers, setLoadingBlockedUsers] = useState(false);
 
   // Password section
   const [showPasswordSection, setShowPasswordSection] = useState(false);
@@ -95,6 +98,30 @@ export const EditProfileScreen = ({ navigation }: any) => {
       console.error("Failed to update message request setting", error);
       setAllowMessageRequests(!value);
       Alert.alert("오류", "메시지 요청 설정을 변경하지 못했습니다.");
+    }
+  };
+
+  const handleToggleBlockedUsers = async () => {
+    const nextVisible = !showBlockedUsers;
+    setShowBlockedUsers(nextVisible);
+    if (!nextVisible) return;
+    setLoadingBlockedUsers(true);
+    try {
+      const response = await api.get("/users/me/blocked-users");
+      setBlockedUsers(response.data?.data || []);
+    } catch {
+      Alert.alert("오류", "차단 목록을 불러오지 못했습니다.");
+    } finally {
+      setLoadingBlockedUsers(false);
+    }
+  };
+
+  const handleUnblockUser = async (username: string) => {
+    try {
+      await api.delete(`/users/${username}/block`);
+      setBlockedUsers((current) => current.filter((item) => item.username !== username));
+    } catch {
+      Alert.alert("오류", "차단을 해제하지 못했습니다.");
     }
   };
 
@@ -393,6 +420,34 @@ export const EditProfileScreen = ({ navigation }: any) => {
           />
         </View>
 
+        <TouchableOpacity style={styles.passwordToggleBtn} onPress={handleToggleBlockedUsers}>
+          <View style={styles.settingButtonContent}>
+            <Ionicons name="ban-outline" size={16} color="#0095f6" />
+            <Text style={styles.passwordToggleText}>차단한 사용자</Text>
+            <Ionicons name={showBlockedUsers ? "chevron-up" : "chevron-down"} size={16} color="#0095f6" />
+          </View>
+        </TouchableOpacity>
+        {showBlockedUsers ? (
+          <View style={styles.blockedUsersContainer}>
+            {loadingBlockedUsers ? (
+              <ActivityIndicator color="#0095f6" />
+            ) : blockedUsers.length === 0 ? (
+              <Text style={styles.blockedUsersEmpty}>차단한 사용자가 없습니다.</Text>
+            ) : blockedUsers.map((blockedUser) => (
+              <View key={blockedUser.id} style={styles.blockedUserRow}>
+                <AdminAvatar user={blockedUser} style={styles.blockedUserAvatar} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.blockedUserName}>{blockedUser.nickname || blockedUser.full_name || blockedUser.username}</Text>
+                  <Text style={styles.blockedUserUsername}>@{blockedUser.username}</Text>
+                </View>
+                <TouchableOpacity style={styles.unblockButton} onPress={() => void handleUnblockUser(blockedUser.username)}>
+                  <Text style={styles.unblockButtonText}>차단 해제</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         {/* Password Change Toggle Button */}
         <TouchableOpacity
           style={styles.passwordToggleBtn}
@@ -595,6 +650,59 @@ const styles = StyleSheet.create({
     color: "#0095f6",
     fontWeight: "bold",
     fontSize: 14,
+  },
+  settingButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  blockedUsersContainer: {
+    marginHorizontal: 20,
+    marginTop: -8,
+    marginBottom: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#262626",
+    borderRadius: 8,
+    backgroundColor: "#121212",
+  },
+  blockedUsersEmpty: {
+    color: "#8e8e8e",
+    paddingVertical: 8,
+    textAlign: "center",
+  },
+  blockedUserRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 8,
+  },
+  blockedUserAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+  },
+  blockedUserName: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  blockedUserUsername: {
+    color: "#8e8e8e",
+    fontSize: 12,
+  },
+  unblockButton: {
+    borderWidth: 1,
+    borderColor: "#3a3a3c",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  unblockButtonText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
   },
   passwordContainer: {
     borderTopWidth: 0.5,

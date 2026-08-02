@@ -24,6 +24,8 @@ class NotificationRead(BaseModel):
     post_id: Optional[uuid.UUID] = None
     comment_id: Optional[str] = None
     direct_message_id: Optional[str] = None
+    actors: list[dict] = []
+    aggregate_count: int = 1
     is_read: bool
     created_at: datetime
 

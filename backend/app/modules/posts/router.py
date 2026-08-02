@@ -70,19 +70,19 @@ async def verify_youtube_url(
 async def get_feed_posts(
     page: int = Query(1, ge=1, description="페이지 번호"),
     size: int = Query(20, ge=1, le=100, description="페이지당 개수"),
+    ranking_seed: str = Query("default", min_length=1, max_length=64, description="페이지 간 랜덤 순서를 고정하는 세션 seed"),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[list[PostResponse]]:
     import time
     t_start = time.perf_counter()
     offset = (page - 1) * size
-    posts, total = await service.get_feed_posts(
-        db, current_user=current_user, limit=size, offset=offset
+    posts, has_more = await service.get_feed_posts(
+        db, current_user=current_user, limit=size, offset=offset, ranking_seed=ranking_seed
     )
-    has_more = (offset + len(posts)) < total
     from app.core.config import settings
     t_ser_start = time.perf_counter()
-    res = ApiResponse.paginated(data=posts, total=total, has_more=has_more)
+    res = ApiResponse.paginated(data=posts, has_more=has_more)
     t_ser_end = time.perf_counter()
     if settings.enable_perf_log:
         print(f"[PERF_LOG] [ROUTER] [/feed] ApiResponse/JSON 모델 변환 시간: {(t_ser_end - t_ser_start)*1000:.2f} ms")
@@ -98,15 +98,42 @@ async def get_feed_posts(
 async def get_explore_posts(
     page: int = Query(1, ge=1, description="페이지 번호"),
     size: int = Query(30, ge=1, le=100, description="페이지당 개수"),
+    ranking_seed: str = Query("default", min_length=1, max_length=64, description="페이지 간 랜덤 순서를 고정하는 세션 seed"),
     current_user: User | None = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[list[PostResponse]]:
     offset = (page - 1) * size
-    posts, total = await service.get_explore_posts(
-        db, current_user=current_user, limit=size, offset=offset
+    posts, has_more = await service.get_explore_posts(
+        db, current_user=current_user, limit=size, offset=offset, ranking_seed=ranking_seed
     )
-    has_more = (offset + len(posts)) < total
-    return ApiResponse.paginated(data=posts, total=total, has_more=has_more)
+    return ApiResponse.paginated(data=posts, has_more=has_more)
+
+
+@router.get(
+    "/search",
+    response_model=ApiResponse[list[PostResponse]],
+    summary="게시물 검색",
+)
+async def search_posts(
+    q: str = Query(..., min_length=1, max_length=100),
+    page: int = Query(1, ge=1),
+    size: int = Query(30, ge=1, le=100),
+    current_user: User | None = Depends(get_optional_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[list[PostResponse]]:
+    offset = (page - 1) * size
+    posts, total = await service.search_posts(
+        db,
+        query=q,
+        current_user=current_user,
+        limit=size,
+        offset=offset,
+    )
+    return ApiResponse.paginated(
+        data=posts,
+        total=total,
+        has_more=offset + len(posts) < total,
+    )
 
 
 @router.get(

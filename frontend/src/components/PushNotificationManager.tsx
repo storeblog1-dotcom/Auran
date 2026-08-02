@@ -6,6 +6,7 @@ import {
   registerCurrentInstallationForPush,
   startPushNotificationListeners,
 } from "../services/pushNotifications";
+import { navigateFromPushData } from "../navigation/RootNavigator";
 
 const RETRY_INTERVAL_MS = 60_000;
 
@@ -42,6 +43,7 @@ export const PushNotificationManager: React.FC = () => {
     void register(true);
     const stopNotificationListeners = startPushNotificationListeners(
       () => void register(true),
+      navigateFromPushData,
     );
     const appStateSubscription = AppState.addEventListener(
       "change",

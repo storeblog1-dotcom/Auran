@@ -1,7 +1,8 @@
 import uuid
+from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import and_, exists, func, literal_column, or_, select, union_all
+from sqlalchemy import String, and_, case, cast, exists, func, literal, literal_column, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -33,6 +34,65 @@ from app.modules.posts.schemas import (
 )
 from app.modules.posts.youtube import VerifiedYouTubeVideo, verify_youtube_watch_url
 from app.modules.users.models import Follow
+
+
+FEED_COMMENT_WEIGHT = 2
+FEED_FRESH_BONUS = 10
+FEED_FRESH_HOURS = 24
+
+
+def calculate_feed_rank_score(
+    likes_count: int,
+    comments_count: int,
+    *,
+    is_fresh: bool,
+) -> int:
+    """Mirror the SQL ranking formula for diagnostics and unit tests."""
+    return (
+        max(0, likes_count)
+        + max(0, comments_count) * FEED_COMMENT_WEIGHT
+        + (FEED_FRESH_BONUS if is_fresh else 0)
+    )
+
+
+def _ranked_posts_query(*, current_user: Optional[User], ranking_seed: str, require_media: bool):
+    likes = (
+        select(PostLike.post_id.label("post_id"), func.count(PostLike.id).label("likes_count"))
+        .group_by(PostLike.post_id)
+        .subquery()
+    )
+    comments = (
+        select(Comment.post_id.label("post_id"), func.count(Comment.id).label("comments_count"))
+        .where(Comment.moderation_hidden.is_(False))
+        .group_by(Comment.post_id)
+        .subquery()
+    )
+    engagement_score = (
+        func.coalesce(likes.c.likes_count, 0)
+        + func.coalesce(comments.c.comments_count, 0) * FEED_COMMENT_WEIGHT
+    )
+    freshness_bonus = case(
+        (
+            Post.created_at
+            >= func.now() - literal_column(f"INTERVAL '{FEED_FRESH_HOURS} hours'"),
+            FEED_FRESH_BONUS,
+        ),
+        else_=0,
+    )
+    ranking_score = engagement_score + freshness_bonus
+    seeded_random_key = func.md5(func.concat(cast(Post.id, String), literal(ranking_seed)))
+    filters = [Post.board_type.is_(None), _post_visibility_clause(current_user)]
+    if require_media:
+        filters.append(Post.media.any())
+    return (
+        select(Post)
+        .join(User, Post.user_id == User.id)
+        .outerjoin(likes, likes.c.post_id == Post.id)
+        .outerjoin(comments, comments.c.post_id == Post.id)
+        .options(joinedload(Post.user), selectinload(Post.media))
+        .where(*filters)
+        .order_by(ranking_score.desc(), seeded_random_key.asc(), Post.id.asc())
+    )
 
 
 def should_anonymize_user(board_type: str | None, is_admin: bool) -> bool:
@@ -252,6 +312,7 @@ async def _build_post_responses_batch(
             PostMediaResponse(
                 id=m.id,
                 media_url=m.media_url,
+                thumbnail_media_url=m.thumbnail_media_url or m.media_url,
                 detail_media_url=m.detail_media_url or m.media_url,
                 media_type=m.media_type,
                 order=m.order,
@@ -386,6 +447,7 @@ async def create_post(
         media_obj = PostMedia(
             post_id=post.id,
             media_url=item.media_url,
+            thumbnail_media_url=item.thumbnail_media_url,
             detail_media_url=item.detail_media_url or item.media_url,
             media_type=item.media_type,
             order=item.order,
@@ -393,6 +455,28 @@ async def create_post(
         db.add(media_obj)
 
     await db.flush()
+    from app.modules.governance.service import moderate_openai, notify_content_moderation
+
+    moderation_text = "\n".join(
+        value.strip() for value in (post.title, post.caption) if value and value.strip()
+    )
+    decision = await moderate_openai(
+        db,
+        user_id=current_user.id,
+        target_type="post_text",
+        text=moderation_text or None,
+        post_id=post.id,
+    )
+    if decision.status in {"rejected", "review_required", "provider_error"}:
+        post.moderation_status = decision.status
+        post.moderation_hidden = True
+        post.moderation_reason = decision.user_message
+        post.moderated_at = datetime.now(timezone.utc)
+    else:
+        post.moderation_status = "published"
+        post.moderation_hidden = False
+        post.moderation_reason = None
+        post.moderated_at = datetime.now(timezone.utc) if decision.status == "safe" else None
     revision = await preserve_post(
         db, post, lifecycle_event="created", ip_address=ip_address
     )
@@ -407,6 +491,10 @@ async def create_post(
         snapshot={"title": post.title, "caption": post.caption},
     )
     await db.commit()
+
+    if decision.status in {"rejected", "review_required", "provider_error"}:
+        await notify_content_moderation(db, user_id=current_user.id, decision=decision)
+        raise BadRequestException(decision.user_message)
 
     if post.caption:
         from app.modules.hashtags.router import update_post_hashtags
@@ -448,21 +536,19 @@ async def get_feed_posts(
     current_user: Optional[User] = None,
     limit: int = 20,
     offset: int = 0,
-) -> tuple[List[PostResponse], int]:
-    """로그인한 사용자가 팔로우하는 사람들과 본인의 피드 게시물을 최신순으로 조회합니다 (게시판 글 제외)."""
+    ranking_seed: str = "default",
+) -> tuple[List[PostResponse], bool]:
+    """Return engagement-ranked, session-shuffled feed posts."""
     import time
     from app.core.config import settings
     t_posts_start = time.perf_counter()
-    # COUNT(*) 쿼리를 제거하고 limit + 1 조회를 통해 has_more 및 total을 연산 (SQL 1회 절감)
+    # limit + 1 keeps has_more accurate without a separate COUNT query.
     result = await db.execute(
-        select(Post)
-        .join(User, Post.user_id == User.id)
-        .options(joinedload(Post.user), selectinload(Post.media))
-        .where(
-            Post.board_type.is_(None),
-            _post_visibility_clause(current_user),
+        _ranked_posts_query(
+            current_user=current_user,
+            ranking_seed=ranking_seed,
+            require_media=False,
         )
-        .order_by(Post.created_at.desc(), Post.id.desc())
         .offset(offset)
         .limit(limit + 1)
     )
@@ -471,13 +557,11 @@ async def get_feed_posts(
 
     has_more = len(fetched_posts) > limit
     posts = fetched_posts[:limit] if has_more else fetched_posts
-    total = offset + len(posts)
-
     if settings.enable_perf_log:
         print(f"[PERF_LOG] [FEED] 기본 게시물 목록 쿼리 시간 (joinedload user + selectinload media 포함): {(t_posts_end - t_posts_start)*1000:.2f} ms")
 
     items = await _build_post_responses_batch(db, posts, current_user=current_user)
-    return items, total
+    return items, has_more
 
 
 async def get_community_posts(
@@ -627,6 +711,7 @@ async def update_post(
             media_obj = PostMedia(
                 post_id=post.id,
                 media_url=item.media_url,
+                thumbnail_media_url=item.thumbnail_media_url,
                 detail_media_url=item.detail_media_url or item.media_url,
                 media_type=item.media_type,
                 order=item.order,
@@ -811,6 +896,18 @@ async def create_comment(
     post_res = await db.execute(select(Post.id).where(Post.id == post_id))
     if not post_res.scalar_one_or_none():
         raise NotFoundException("Post")
+
+    from app.modules.governance.service import moderate_openai, notify_content_moderation
+
+    decision = await moderate_openai(
+        db,
+        user_id=current_user.id,
+        target_type="comment_text",
+        text=data.content,
+    )
+    if decision.status in {"rejected", "review_required", "provider_error"}:
+        await notify_content_moderation(db, user_id=current_user.id, decision=decision)
+        raise BadRequestException(decision.user_message)
 
     reply_to_display_name = None
     if data.mention_user_id:
@@ -1365,29 +1462,72 @@ async def get_explore_posts(
     current_user: Optional[User] = None,
     limit: int = 30,
     offset: int = 0,
-) -> tuple[List[PostResponse], int]:
-    """전체 사용자의 게시물을 최신순으로 조회하여 탐색(Explore) 피드에 제공합니다."""
-    visibility_clause = _post_visibility_clause(current_user)
-    count_res = await db.execute(
-        select(func.count(Post.id))
-        .join(User, Post.user_id == User.id)
-        .where(visibility_clause)
-    )
-    total = count_res.scalar() or 0
-
+    ranking_seed: str = "default",
+) -> tuple[List[PostResponse], bool]:
+    """Return ranked, shuffled image posts for the Explore grid."""
     result = await db.execute(
-        select(Post)
-        .join(User, Post.user_id == User.id)
-        .options(selectinload(Post.user), selectinload(Post.media))
-        .where(visibility_clause)
-        .order_by(Post.created_at.desc())
+        _ranked_posts_query(
+            current_user=current_user,
+            ranking_seed=ranking_seed,
+            require_media=True,
+        )
         .offset(offset)
-        .limit(limit)
+        .limit(limit + 1)
     )
-    posts = result.scalars().all()
+    fetched_posts = list(result.scalars().all())
+    has_more = len(fetched_posts) > limit
+    posts = fetched_posts[:limit] if has_more else fetched_posts
 
     items = await _build_post_responses_batch(db, list(posts), current_user=current_user)
-    return items, total
+    return items, has_more
+
+
+async def search_posts(
+    db: AsyncSession,
+    *,
+    query: str,
+    current_user: Optional[User] = None,
+    limit: int = 30,
+    offset: int = 0,
+) -> tuple[List[PostResponse], int]:
+    """Search visible post titles, captions and author names."""
+    clean_query = query.strip()
+    if not clean_query:
+        return [], 0
+    pattern = f"%{clean_query}%"
+    visibility_clause = _post_visibility_clause(current_user)
+    search_clause = or_(
+        Post.title.ilike(pattern),
+        Post.caption.ilike(pattern),
+        User.username.ilike(pattern),
+        User.nickname.ilike(pattern),
+        User.full_name.ilike(pattern),
+    )
+    total = int(
+        (
+            await db.scalar(
+                select(func.count(Post.id))
+                .join(User, Post.user_id == User.id)
+                .where(visibility_clause, search_clause)
+            )
+        )
+        or 0
+    )
+    posts = (
+        await db.execute(
+            select(Post)
+            .join(User, Post.user_id == User.id)
+            .options(selectinload(Post.user), selectinload(Post.media))
+            .where(visibility_clause, search_clause)
+            .order_by(Post.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+    ).scalars().all()
+    return (
+        await _build_post_responses_batch(db, list(posts), current_user=current_user),
+        total,
+    )
 
 
 async def toggle_repost_post(

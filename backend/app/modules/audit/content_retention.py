@@ -64,6 +64,7 @@ async def preserve_post(
             {
                 "id": str(item.id),
                 "media_url": item.media_url,
+                "thumbnail_media_url": item.thumbnail_media_url or item.media_url,
                 "detail_media_url": item.detail_media_url or item.media_url,
                 "media_type": item.media_type,
                 "order": item.order,

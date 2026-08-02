@@ -16,6 +16,7 @@ from app.modules.direct.models import ChatRoom, ChatRoomMember, ChatMessage, Dir
 from app.modules.community.models import CommunityBoard, CommunityNotice  # noqa: F401
 from app.modules.hashtags.models import Hashtag, PostHashtag  # noqa: F401
 from app.modules.reports.models import HiddenContent, Report  # noqa: F401
+from app.modules.governance.models import AccountSanction, IntegrationCredential, ModerationAppeal, ModerationCheck, PolicyDocument, UserConsent  # noqa: F401
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -59,34 +60,38 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"[STARTUP] Column alter notice: {e}")
 
-    # ─── Ensure Admin User (auran / !Qwertyuiop1) ───
-    async with AsyncSession(engine) as db:
-        from sqlalchemy import select
-        from app.modules.auth.models import User
-        from app.core.security import hash_password
+    # Optional one-time bootstrap. Production credentials must come from the
+    # deployment secret manager; no fixed password is embedded in source.
+    if settings.bootstrap_admin_username and settings.bootstrap_admin_password:
+        async with AsyncSession(engine) as db:
+            from sqlalchemy import select
+            from app.modules.auth.models import User
+            from app.core.security import hash_password
 
-        res = await db.execute(select(User).where(User.username == "auran"))
-        admin_user = res.scalar_one_or_none()
+            res = await db.execute(select(User).where(User.username == settings.bootstrap_admin_username))
+            admin_user = res.scalar_one_or_none()
 
-        if not admin_user:
-            admin_user = User(
-                username="auran",
-                email="auran@auran.com",
-                full_name="관리자 (Auran)",
-                hashed_password=hash_password("!Qwertyuiop1"),
-                is_active=True,
-                is_verified=True,
-                is_admin=True,
-            )
-            db.add(admin_user)
-            await db.commit()
-            print("[STARTUP] Created admin user: auran")
-        else:
-            if not admin_user.is_admin or not admin_user.hashed_password:
-                admin_user.is_admin = True
-                admin_user.hashed_password = hash_password("!Qwertyuiop1")
+            if not admin_user:
+                admin_user = User(
+                    username=settings.bootstrap_admin_username,
+                    email=settings.bootstrap_admin_email or f"{settings.bootstrap_admin_username}@bootstrap.invalid",
+                    full_name="관리자 (Auran)",
+                    hashed_password=hash_password(settings.bootstrap_admin_password),
+                    is_active=True,
+                    is_verified=True,
+                    is_admin=True,
+                    admin_role="superadmin",
+                )
+                db.add(admin_user)
                 await db.commit()
-                print("[STARTUP] Updated admin user: auran")
+                print("[STARTUP] Created configured bootstrap superadmin")
+            elif not admin_user.is_admin or admin_user.admin_role != "superadmin" or not admin_user.hashed_password:
+                admin_user.is_admin = True
+                admin_user.admin_role = "superadmin"
+                if not admin_user.hashed_password:
+                    admin_user.hashed_password = hash_password(settings.bootstrap_admin_password)
+                await db.commit()
+                print("[STARTUP] Updated configured bootstrap superadmin role")
 
     yield
     # 앱 종료 시
@@ -183,6 +188,7 @@ from app.modules.notifications.router import router as notifications_router
 from app.modules.admin.router import router as admin_router
 from app.modules.community.router import router as community_router
 from app.modules.reports.router import router as reports_router
+from app.modules.governance.router import router as governance_router, admin_router as integration_admin_router
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
@@ -196,3 +202,5 @@ app.include_router(notifications_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 app.include_router(community_router, prefix="/api/v1")
 app.include_router(reports_router, prefix="/api/v1")
+app.include_router(governance_router, prefix="/api/v1")
+app.include_router(integration_admin_router, prefix="/api/v1")

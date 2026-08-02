@@ -14,7 +14,9 @@ from app.modules.uploads.router import (
     DETAIL_MAX_OUTPUT_SIZE,
     MAX_DIMENSION,
     MAX_FILE_SIZE,
-    MAX_OUTPUT_SIZE,
+    POST_DISPLAY_MAX_OUTPUT_SIZE,
+    THUMBNAIL_MAX_DIMENSION,
+    THUMBNAIL_MAX_OUTPUT_SIZE,
     process_and_resize_image,
     upload_image,
 )
@@ -34,13 +36,21 @@ class ImageUploadTests(unittest.TestCase):
                 return_value=(
                     b"display",
                     "processed_display.jpg",
+                    b"thumbnail",
+                    "processed_thumbnail.jpg",
                     b"detail",
                     "processed_detail.jpg",
                 ),
             ) as process_image,
             patch(
                 "app.modules.uploads.router.upload_to_supabase_storage",
-                new=AsyncMock(return_value="https://storage.example/processed.jpg"),
+                new=AsyncMock(
+                    side_effect=[
+                        "https://storage.example/display.jpg",
+                        "https://storage.example/thumbnail.jpg",
+                        "https://storage.example/detail.jpg",
+                    ]
+                ),
             ),
         ):
             response = asyncio.run(
@@ -55,11 +65,15 @@ class ImageUploadTests(unittest.TestCase):
         self.assertTrue(process_image.call_args.kwargs["include_detail"])
         self.assertEqual(
             response.data["url"],
-            "https://storage.example/processed.jpg",
+            "https://storage.example/display.jpg",
+        )
+        self.assertEqual(
+            response.data["thumbnail_url"],
+            "https://storage.example/thumbnail.jpg",
         )
         self.assertEqual(
             response.data["detail_url"],
-            "https://storage.example/processed.jpg",
+            "https://storage.example/detail.jpg",
         )
 
     def test_post_variants_respect_display_and_detail_limits(self) -> None:
@@ -71,7 +85,14 @@ class ImageUploadTests(unittest.TestCase):
             "app.modules.uploads.router.UPLOAD_DIR",
             upload_dir,
         ):
-            display_bytes, _, detail_bytes, detail_filename = (
+            (
+                display_bytes,
+                _,
+                thumbnail_bytes,
+                thumbnail_filename,
+                detail_bytes,
+                detail_filename,
+            ) = (
                 process_and_resize_image(
                     source_buffer.getvalue(),
                     "large-photo.jpg",
@@ -79,12 +100,20 @@ class ImageUploadTests(unittest.TestCase):
                 )
             )
 
-        self.assertLessEqual(len(display_bytes), MAX_OUTPUT_SIZE)
+        self.assertLessEqual(len(display_bytes), POST_DISPLAY_MAX_OUTPUT_SIZE)
+        self.assertIsNotNone(thumbnail_bytes)
+        self.assertIsNotNone(thumbnail_filename)
         self.assertIsNotNone(detail_bytes)
         self.assertIsNotNone(detail_filename)
         self.assertLessEqual(len(detail_bytes or b""), DETAIL_MAX_OUTPUT_SIZE)
         with Image.open(BytesIO(display_bytes)) as display_image:
             self.assertLessEqual(max(display_image.size), MAX_DIMENSION)
+        self.assertLessEqual(
+            len(thumbnail_bytes or b""),
+            THUMBNAIL_MAX_OUTPUT_SIZE,
+        )
+        with Image.open(BytesIO(thumbnail_bytes or b"")) as thumbnail_image:
+            self.assertLessEqual(max(thumbnail_image.size), THUMBNAIL_MAX_DIMENSION)
         with Image.open(BytesIO(detail_bytes or b"")) as detail_image:
             self.assertLessEqual(max(detail_image.size), DETAIL_MAX_DIMENSION)
 

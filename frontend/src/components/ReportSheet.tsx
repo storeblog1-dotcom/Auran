@@ -25,10 +25,17 @@ interface ReportSheetProps {
 }
 
 const REASONS = [
+  ["hate", "혐오·차별 표현"],
+  ["sexual_harassment", "성희롱"],
+  ["outing", "아웃팅·신상 노출"],
+  ["nonconsensual_sexual", "비동의 성적 이미지"],
+  ["child_safety", "아동·청소년 성착취 의심"],
   ["spam", "스팸"],
-  ["harassment", "욕설·괴롭힘"],
+  ["harassment", "괴롭힘·협박"],
   ["adult", "음란물"],
+  ["impersonation", "사칭"],
   ["scam", "사기"],
+  ["self_harm", "자해·긴급 위험"],
   ["illegal", "불법정보"],
   ["privacy", "개인정보 노출"],
   ["other", "기타"],
@@ -43,7 +50,7 @@ export const ReportSheet = ({
   onHidden,
 }: ReportSheetProps) => {
   const { colors } = useTheme();
-  const [reason, setReason] = useState<string | null>(null);
+  const [reasons, setReasons] = useState<string[]>([]);
   const [detail, setDetail] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -52,7 +59,7 @@ export const ReportSheet = ({
 
   useEffect(() => {
     if (visible) {
-      setReason(null);
+      setReasons([]);
       setDetail("");
       setConfirming(false);
       setSubmitting(false);
@@ -62,14 +69,14 @@ export const ReportSheet = ({
   }, [visible]);
 
   const submit = async () => {
-    if (!targetId || !reason) return;
+    if (!targetId || !reasons.length) return;
     setSubmitting(true);
     setError(null);
     try {
       const response = await api.post("/reports", {
         target_type: targetType,
         target_id: targetId,
-        reason_code: reason,
+        reason_codes: reasons,
         detail: detail.trim() || null,
       });
       setReportId(response.data?.data?.id);
@@ -124,7 +131,7 @@ export const ReportSheet = ({
               </View>
               <Text style={[styles.successTitle, { color: colors.textPrimary }]}>신고가 접수되었습니다</Text>
               <Text style={[styles.successText, { color: colors.textMuted }]}>
-                관리자 검토 후 결과를 알림으로 알려드립니다.
+                관리자가 안전하게 검토합니다. 신고자의 신원과 구체적인 제재 결과는 작성자에게 공개되지 않습니다.
               </Text>
               {targetType !== "profile" && (
                 <TouchableOpacity style={styles.primaryButton} onPress={hideTarget}>
@@ -162,32 +169,30 @@ export const ReportSheet = ({
                   <TouchableOpacity
                     key={code}
                     style={[styles.reasonRow, { borderBottomColor: colors.borderColor }]}
-                    onPress={() => setReason(code)}
+                    onPress={() => setReasons((current) => current.includes(code) ? current.filter((item) => item !== code) : [...current, code])}
                   >
                     <Text style={[styles.reasonText, { color: colors.textPrimary }]}>{label}</Text>
                     <Ionicons
-                      name={reason === code ? "radio-button-on" : "radio-button-off"}
+                      name={reasons.includes(code) ? "checkbox" : "square-outline"}
                       size={22}
-                      color={reason === code ? "#7c3aed" : colors.textMuted}
+                      color={reasons.includes(code) ? "#7c3aed" : colors.textMuted}
                     />
                   </TouchableOpacity>
                 ))}
-                {reason === "other" && (
-                  <TextInput
-                    value={detail}
-                    onChangeText={setDetail}
-                    maxLength={500}
-                    multiline
-                    placeholder="신고 사유를 자세히 적어 주세요."
-                    placeholderTextColor={colors.textMuted}
-                    style={[styles.input, { color: colors.textPrimary, borderColor: colors.borderColor }]}
-                  />
-                )}
+                <TextInput
+                  value={detail}
+                  onChangeText={setDetail}
+                  maxLength={500}
+                  multiline
+                  placeholder={reasons.includes("other") ? "기타 신고 사유를 적어 주세요. (필수)" : "상세 내용을 추가할 수 있습니다. (선택)"}
+                  placeholderTextColor={colors.textMuted}
+                  style={[styles.input, { color: colors.textPrimary, borderColor: colors.borderColor }]}
+                />
               </ScrollView>
               {error && <Text style={styles.error}>{error}</Text>}
               <TouchableOpacity
-                disabled={!reason || (reason === "other" && !detail.trim())}
-                style={[styles.primaryButton, (!reason || (reason === "other" && !detail.trim())) && styles.disabled]}
+                disabled={!reasons.length || (reasons.includes("other") && !detail.trim())}
+                style={[styles.primaryButton, (!reasons.length || (reasons.includes("other") && !detail.trim())) && styles.disabled]}
                 onPress={() => setConfirming(true)}
               >
                 <Text style={styles.primaryButtonText}>다음</Text>

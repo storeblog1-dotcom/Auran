@@ -52,6 +52,13 @@ class User(Base):
     is_private: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     allow_message_requests: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    admin_role: Mapped[str] = mapped_column(
+        String(20), default="member", server_default="member", nullable=False, index=True
+    )
+    suspended_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    permanently_suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    forced_deletion_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    installation_id_hmac: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
     # ─── 타임스탬프 ───────────────────────────────────────────
     created_at: Mapped[datetime] = mapped_column(

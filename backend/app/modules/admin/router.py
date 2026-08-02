@@ -597,6 +597,7 @@ async def get_admin_user_content(
         post_media_map.setdefault(str(pm.post_id), []).append({
             "id": str(pm.id),
             "media_url": pm.media_url,
+            "thumbnail_media_url": pm.thumbnail_media_url or pm.media_url,
             "detail_media_url": pm.detail_media_url or pm.media_url,
             "media_type": pm.media_type,
             "order": pm.order,
@@ -868,6 +869,10 @@ async def get_admin_users(
             "profile_image_url": u.profile_image_url,
             "is_active": u.is_active,
             "is_admin": u.is_admin,
+            "admin_role": u.admin_role,
+            "suspended_until": u.suspended_until.isoformat() if u.suspended_until else None,
+            "permanently_suspended_at": u.permanently_suspended_at.isoformat() if u.permanently_suspended_at else None,
+            "forced_deletion_due_at": u.forced_deletion_due_at.isoformat() if u.forced_deletion_due_at else None,
             "posts_count": post_counts.get(u.id, 0),
             "comments_count": comment_counts.get(u.id, 0),
             "created_at": u.created_at.isoformat() if u.created_at else None,
@@ -981,6 +986,7 @@ async def get_admin_posts(
                 {
                     "id": str(m.id),
                     "media_url": m.media_url,
+                    "thumbnail_media_url": m.thumbnail_media_url or m.media_url,
                     "detail_media_url": m.detail_media_url or m.media_url,
                     "media_type": m.media_type,
                     "order": m.order,

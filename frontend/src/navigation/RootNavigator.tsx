@@ -1,6 +1,5 @@
-import React, { useCallback, useRef } from "react";
-import { View, Text, TouchableOpacity } from "react-native";
-import { NavigationContainer, NavigationContainerRef } from "@react-navigation/native";
+import { View, Text } from "react-native";
+import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
@@ -30,12 +29,59 @@ import { CommunityAdminScreen } from "../screens/CommunityAdminScreen";
 import { CommunityAdminNoticeScreen } from "../screens/CommunityAdminNoticeScreen";
 import { DirectInboxScreen } from "../features/direct/screens/DirectInboxScreen";
 import { DirectChatScreen } from "../features/direct/screens/DirectChatScreen";
+import { SafetyCenterScreen } from "../screens/SafetyCenterScreen";
 
 import { Ionicons } from "@expo/vector-icons";
 
 const Stack = createNativeStackNavigator<any>();
 const Tab = createBottomTabNavigator<any>();
 const FeedStack = createNativeStackNavigator<any>();
+export const rootNavigationRef = createNavigationContainerRef<any>();
+
+let pendingNotificationData: Record<string, unknown> | null = null;
+
+export const navigateFromPushData = (data: Record<string, unknown>) => {
+  if (!rootNavigationRef.isReady()) {
+    pendingNotificationData = data;
+    return;
+  }
+  const type = String(data.type || "");
+  if (type === "DIRECT_MESSAGE" && data.room_id) {
+    rootNavigationRef.navigate("DirectChat", {
+      conversationId: String(data.room_id),
+      targetUser: data.sender_id
+        ? {
+            id: String(data.sender_id),
+            username: String(data.sender_username || ""),
+            nickname: data.sender_nickname || null,
+            full_name: String(data.sender_full_name || data.sender_username || ""),
+            profile_image_url: data.sender_profile_image_url || null,
+            is_admin: Boolean(data.sender_is_admin),
+          }
+        : null,
+    });
+  } else if (["LIKE", "COMMENT", "MENTION"].includes(type) && data.post_id) {
+    rootNavigationRef.navigate("Notification", {
+      openPostId: String(data.post_id),
+      autoOpenComments: type === "COMMENT",
+    });
+  } else if (type === "FOLLOW" && data.sender_username) {
+    rootNavigationRef.navigate("UserProfile", {
+      username: String(data.sender_username),
+    });
+  } else if (["CONTENT_MODERATION_RESULT", "SANCTION_NOTICE"].includes(type)) {
+    rootNavigationRef.navigate("SafetyCenter");
+  } else {
+    rootNavigationRef.navigate("Notification");
+  }
+};
+
+const flushPendingNotificationNavigation = () => {
+  if (!pendingNotificationData) return;
+  const data = pendingNotificationData;
+  pendingNotificationData = null;
+  navigateFromPushData(data);
+};
 
 const FeedStackNavigator = () => (
   <FeedStack.Navigator id="feed-stack" screenOptions={{ headerShown: false, animation: "none" }}>
@@ -47,6 +93,7 @@ const FeedStackNavigator = () => (
 const MainTabs = () => {
   const { colors } = useTheme();
   const { communityComposeDisabled } = useContextualCompose();
+  const { directUnreadCount } = useNotification();
 
   return (
     <Tab.Navigator
@@ -137,6 +184,8 @@ const MainTabs = () => {
         name="DirectInbox"
         component={DirectInboxScreen}
         options={{
+          tabBarBadge: directUnreadCount > 0 ? (directUnreadCount > 99 ? "99+" : directUnreadCount) : undefined,
+          tabBarBadgeStyle: { backgroundColor: colors.accentPink, color: "#ffffff", fontSize: 10 },
           tabBarIcon: ({ color, focused }) => (
             <View style={{ alignItems: "center", justifyContent: "center", width: 64, height: 52, borderRadius: 18, paddingTop: 4, backgroundColor: focused ? colors.accentPurple + "12" : "transparent" }}>
               <Ionicons name={focused ? "chatbubbles" : "chatbubbles-outline"} size={22} color={color} />
@@ -168,19 +217,20 @@ const MainTabs = () => {
 const AppContent = () => {
   const { token, isLoading, withdrawalPending } = useAuth();
   const { toastNotification, clearToast } = useNotification();
-  const navigationRef = useRef<NavigationContainerRef<any>>(null);
 
   const handlePressToast = async (toast: ToastData) => {
-    if (!navigationRef.current) return;
-    if (toast.type === "FOLLOW") {
-      openUserProfile(navigationRef.current, toast.sender);
+    if (!rootNavigationRef.isReady()) return;
+    if (["CONTENT_MODERATION_RESULT", "SANCTION_NOTICE"].includes(toast.type)) {
+      rootNavigationRef.navigate("SafetyCenter");
+    } else if (toast.type === "FOLLOW") {
+      openUserProfile(rootNavigationRef, toast.sender);
     } else if (toast.post_id) {
-      navigationRef.current.navigate("Notification", {
+      rootNavigationRef.navigate("Notification", {
         openPostId: toast.post_id,
         autoOpenComments: toast.type === "COMMENT",
       });
     } else {
-      navigationRef.current.navigate("Notification");
+      rootNavigationRef.navigate("Notification");
     }
   };
 
@@ -195,7 +245,7 @@ const AppContent = () => {
         onPressToast={handlePressToast}
         onDismiss={clearToast}
       />
-      <NavigationContainer ref={navigationRef}>
+      <NavigationContainer ref={rootNavigationRef} onReady={flushPendingNotificationNavigation}>
         <ContextualComposeProvider>
           <Stack.Navigator id="root-stack" screenOptions={{ headerShown: false }}>
             {withdrawalPending ? (
@@ -215,6 +265,7 @@ const AppContent = () => {
                 <Stack.Screen name="CommunityAdmin" component={CommunityAdminScreen} />
                 <Stack.Screen name="CommunityAdminNotice" component={CommunityAdminNoticeScreen} />
                 <Stack.Screen name="DirectChat" component={DirectChatScreen} />
+                <Stack.Screen name="SafetyCenter" component={SafetyCenterScreen} />
               </>
             ) : (
               <>
